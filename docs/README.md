@@ -1,22 +1,14 @@
-# Documentation
+# 文档
 
-## 核心
+当前面向使用者的文档只有一份：[用户手册](manual.md)。它说明本项目解决的问题、核心
+概念、运行方法、图的含义、如何定义协议或 VirtualDut，以及当前实现边界。
 
-- [架构](architecture.md)：为什么拆分 core、semantics、patterns、protocol、VirtualDut 和 Project；
-- [代码地图](code_map.md)：当前真实目录及依赖方向；
-- [形式语义](semantics.md)：事件、状态迁移、义务、偏序和三值判定；
-- [理论审计](theory_audit.md)：自动机、Petri 网、trace theory、逻辑和范畴论的真实使用程度；
-- [验证合同](verification_contract.md)：如何记录规则、mutation、未约束和证据。
+`images/` 存放 README 使用的稳定 SVG 示例。它们来自两个 Project 的已验证运行；日常
+仿真输出仍写入各 Project 自己的 `sims/` 目录，并可随时重新生成。
 
-## 工作流
+## 历史设计记录
 
-- [开发流程](development_workflow.md)：从协议研究到 Project 集成；
-- [验证 Projects](verification_projects.md)：生命周期、组件清单、项目内组网和当前 AXI bridge Project；
-- [VirtualDut 方法](virtual_dut.md)：source/sink/responder/transform、registry与FPU/C proxy；
-- [Roadmap](../ROADMAP.md)：后续实现顺序。
-
-## 协议
-
-- [AXI4 派生](axi4_derivation.md)；
-- [AXI4 约束来源审计](axi4_constraint_audit.md)；
-- [APB3/APB4 派生](apb_derivation.md)。
+[`archive/2026-07-design-notes/`](archive/2026-07-design-notes/) 保存项目早期的架构推导、
+AXI4/APB 派生、理论审计和开发工作流。这些材料解释了设计过程，但不是当前 API 或行为的
+规范；其中的计划性描述可能已经过时。需要了解当前能力时，以 README、用户手册和实际
+代码为准。

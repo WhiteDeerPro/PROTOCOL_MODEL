@@ -1,0 +1,7 @@
+{
+  "name": "protocol-model-evidence",
+  "private": true,
+  "devDependencies": {
+    "wavedrom": "3.6.2"
+  }
+}

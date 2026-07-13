@@ -34,10 +34,12 @@ class AxiReadInterleaveSimulation:
     project: AxiReadInterleaveProject
 
 
-def build_simulation(directory: str | Path | None = None) -> AxiReadInterleaveSimulation:
+def build_simulation(
+    directory: str | Path | None = None, *, beats_per_request: int = 2
+) -> AxiReadInterleaveSimulation:
     target = DEFAULT_SIM_DIR if directory is None else Path(directory)
     target.mkdir(parents=True, exist_ok=True)
-    project = AxiReadInterleaveProject()
+    project = AxiReadInterleaveProject(beats_per_request=beats_per_request)
     run = project.run()
     assert project.spec is not None and project.protocol is not None
     bundle = ArtifactBundle(project.name, target)
@@ -49,7 +51,10 @@ def build_simulation(directory: str | Path | None = None) -> AxiReadInterleaveSi
         "waveform",
         to_wavejson(
             waveform,
-            title="AXI4 cross-ID read interleaving",
+            title=(
+                "AXI4 cross-ID read interleaving "
+                f"({beats_per_request} beats per request)"
+            ),
             hide_inactive_channels=True,
         ),
         kind="waveform",

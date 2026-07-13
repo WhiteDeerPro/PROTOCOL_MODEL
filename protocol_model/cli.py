@@ -240,6 +240,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="run the two-VirtualDut AXI4 read-interleaving Project",
     )
     interleave.add_argument("--sim-dir", default=str(AXI_READ_INTERLEAVE_SIM_DIR))
+    interleave.add_argument(
+        "--beats",
+        type=int,
+        default=2,
+        help="read-data beats per request; the two distinct IDs use the same length",
+    )
     apb = subparsers.add_parser(
         "apb", help="generate APB3/APB4 two-phase waveforms and comparison report"
     )
@@ -294,7 +300,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(_constraint_witness(args.seed))
         return 0
     if args.command == "axi-read-interleave":
-        simulation = build_axi_read_interleave_simulation(args.sim_dir)
+        simulation = build_axi_read_interleave_simulation(
+            args.sim_dir, beats_per_request=args.beats
+        )
         print(format_axi_read_interleave_run(simulation.run))
         print(
             f"\nARTIFACTS\n  html={simulation.report}\n  text={simulation.text_report}"

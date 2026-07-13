@@ -121,6 +121,10 @@ sudo apt-get install graphviz
 .venv/bin/python -m protocol_model apb
 .venv/bin/python -m protocol_model axi-read-network
 .venv/bin/python -m protocol_model axi-read-interleave
+
+# 生成两笔 16-beat 读取交织的长 trace
+.venv/bin/python -m protocol_model axi-read-interleave --beats 16 \
+  --sim-dir out/prj_axi4_read_interleave/long
 ```
 
 默认输出位置：
@@ -150,6 +154,8 @@ out/prj_axi4_read_interleave/01/report.html
 .venv/bin/python -m protocol_model axi-read-interleave
 .venv/bin/python -m protocol_model apb --transactions 1
 ```
+
+四个 Project 的已确认图像和长 trace 示例见[可执行实验图册](experiments.md)。
 
 `axi-read-interleave` 的运行目录包含 HTML/Markdown 约束报告，以及 `waveform.svg`、
 `network.svg` 和 `causality.svg` 三份可视化证据。

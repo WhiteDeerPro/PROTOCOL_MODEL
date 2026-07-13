@@ -36,7 +36,7 @@ def topology_dot(snapshot) -> str:
   node [shape=box, style="rounded,filled", fontname="monospace"];
   protocol [fillcolor="#dbeafe", label="AXI read link\\nIDs 1/2 + quiet constraints"];
   input [fillcolor="#fef3c7", label="Input VirtualDut\\nScriptedSource\\nAR order 1,2"];
-  output [fillcolor="#dcfce7", label="Output VirtualDut\\nInterleavingReadResponder\\nR order 2,1,2,1"];
+  output [fillcolor="#dcfce7", label="Output VirtualDut\\nInterleavingReadResponder\\nalternating R beats by ID"];
   input -> protocol [label="AR_TRANSFER"];
   protocol -> output [label="accepted AR"];
   output -> protocol [label="R_TRANSFER"];

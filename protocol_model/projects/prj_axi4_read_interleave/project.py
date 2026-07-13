@@ -63,9 +63,14 @@ class AxiReadInterleaveProject(VerificationProject):
         self,
         config: Axi4Config | None = None,
         constraints: ReadInterleaveConstraints | None = None,
+        *,
+        beats_per_request: int = 2,
     ):
+        if not 1 <= beats_per_request <= 256:
+            raise ValueError("beats_per_request must be in the AXI4 range [1, 256]")
         self.config = config or Axi4Config()
         self.constraints = constraints or ReadInterleaveConstraints()
+        self.beats_per_request = beats_per_request
         self.base_spec = None
         self.spec = None
         self.protocol = None
@@ -110,7 +115,9 @@ class AxiReadInterleaveProject(VerificationProject):
             owner=self.name,
             constrained_spec=self.spec,
         )
-        self.source = build_read_initiator(self.spec)
+        self.source = build_read_initiator(
+            self.spec, beats_per_request=self.beats_per_request
+        )
         self.responder = InterleavingReadResponder(self.spec)
         self.state.update(
             {
@@ -123,6 +130,7 @@ class AxiReadInterleaveProject(VerificationProject):
                     "derivation_constraints"
                 ],
                 "virtual_duts": 2,
+                "beats_per_request": self.beats_per_request,
                 "protocol_instances": (self.protocol.qualified_name,),
             }
         )

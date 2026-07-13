@@ -21,8 +21,13 @@ from protocol_model.virtual_dut import (
 )
 
 
-def build_read_initiator(spec: ProtocolSpec) -> ScriptedSource[CanonicalEvent]:
-    """Virtual input DUT: issue two two-beat reads with distinct IDs."""
+def build_read_initiator(
+    spec: ProtocolSpec, *, beats_per_request: int = 2
+) -> ScriptedSource[CanonicalEvent]:
+    """Virtual input DUT: issue two equal-length reads with distinct IDs."""
+
+    if not 1 <= beats_per_request <= 256:
+        raise ValueError("beats_per_request must be in the AXI4 range [1, 256]")
 
     rng = Random(73)
     ids = tuple(spec.parameters["active_read_ids"])
@@ -32,7 +37,7 @@ def build_read_initiator(spec: ProtocolSpec) -> ScriptedSource[CanonicalEvent]:
             key=key,
             payload={
                 "addr": 0x1000 + key * 0x100,
-                "len": 1,
+                "len": beats_per_request - 1,
                 "size": 2,
                 "burst": "INCR",
             },

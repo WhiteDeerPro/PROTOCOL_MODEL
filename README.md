@@ -83,6 +83,9 @@ protocols/<name>/ base ProtocolSpec
 - `prj_axi4_read_bridge`：AXI-A/AXI-B 两个 AXI4 实例连接 bridge/responder；
 - `prj_axi4_read_interleave`：一个施加具体 ID/quiet 约束的派生 AXI4 实例。
 
+四个 Project 的网络图、波形图、因果图以及一条 34-event 长 trace 见
+[可执行实验图册](docs/experiments.md)。图册说明每张图对应的运行命令、验证结论和协议含义。
+
 ## AXI4 跨 ID 乱序读取
 
 当前主线 Project 从通用 AXI4 `ProtocolSpec` 派生 read-only profile。输入 VirtualDut 依次

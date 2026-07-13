@@ -85,7 +85,7 @@ protocols/<name>/ base ProtocolSpec
 - `prj_axi4_scenarios`：manager source 与 subordinate responder 直接连接的 37-case AXI4 批量实验。
 
 运行全部 Project 后，`out/index.html` 会生成按复杂度排列的本地功能导览；仓库同时跟踪一份
-[Project 功能导览](docs/project-guide.html)，内联全部图表，便于脱离 `out/` 阅读。
+[Project 功能导览](docs/project-guide.md)，并保存该导览引用的 SVG 图表。
 
 ## AXI4 跨 ID 乱序读取
 

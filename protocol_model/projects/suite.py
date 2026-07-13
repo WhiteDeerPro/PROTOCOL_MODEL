@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from base64 import b64encode
 from html import escape
 import json
 from pathlib import Path
+import shutil
 
 from .prj_apb_compare import build_simulation as build_apb
 from .prj_axi4_read_bridge import build_simulation as build_axi_bridge
@@ -46,12 +46,9 @@ def _label(kind: str, path: str) -> str:
     return labels.get(kind, kind.replace("_", " ")) + f" · {Path(path).name}"
 
 
-def _figure(root: Path, project_root: Path, artifact: dict, *, inline: bool) -> str:
+def _figure(root: Path, project_root: Path, artifact: dict) -> str:
     path = project_root / artifact["path"]
-    if inline:
-        source = "data:image/svg+xml;base64," + b64encode(path.read_bytes()).decode("ascii")
-    else:
-        source = path.relative_to(root).as_posix()
+    source = path.relative_to(root).as_posix()
     kind = str(artifact["kind"])
     causal = " causality" if kind == "causality" else ""
     return (
@@ -60,7 +57,7 @@ def _figure(root: Path, project_root: Path, artifact: dict, *, inline: bool) -> 
     )
 
 
-def _project_section(root: Path, entry: SuiteEntry, *, inline: bool) -> tuple[str, int]:
+def _project_section(root: Path, entry: SuiteEntry) -> tuple[str, int]:
     project_root = entry.report.parent
     manifest = json.loads((project_root / "manifest.json").read_text(encoding="utf-8"))
     artifacts = [
@@ -69,7 +66,7 @@ def _project_section(root: Path, entry: SuiteEntry, *, inline: bool) -> tuple[st
         if item["media_type"] == "image/svg+xml"
     ]
     root_figures = "".join(
-        _figure(root, project_root, item, inline=inline)
+        _figure(root, project_root, item)
         for item in artifacts
         if item.get("case") is None
     )
@@ -80,7 +77,7 @@ def _project_section(root: Path, entry: SuiteEntry, *, inline: bool) -> tuple[st
         observed = escape(str(case.get("observed", "-")))
         description = escape(str(case.get("description", case.get("detail", name))))
         figures = "".join(
-            _figure(root, project_root, item, inline=inline)
+            _figure(root, project_root, item)
             for item in artifacts
             if item.get("case") == name
         )
@@ -89,11 +86,7 @@ def _project_section(root: Path, entry: SuiteEntry, *, inline: bool) -> tuple[st
             f'<p>{description}</p><p class="result">Expected {expected} · Observed {observed}</p>'
             f'<div class="gallery">{figures}</div></section>'
         )
-    report_link = (
-        ""
-        if inline
-        else f' · <a href="{escape(entry.report.relative_to(root).as_posix())}">打开独立报告</a>'
-    )
+    report_link = f' · <a href="{escape(entry.report.relative_to(root).as_posix())}">打开独立报告</a>'
     return (
         f'<article id="{escape(entry.project)}"><h2>{escape(entry.project)}</h2>'
         f'<p>{escape(entry.summary)}</p><p><strong>{escape(entry.verdict)}</strong> · '
@@ -101,6 +94,66 @@ def _project_section(root: Path, entry: SuiteEntry, *, inline: bool) -> tuple[st
         f'<div class="gallery project-figures">{root_figures}</div>{"".join(case_sections)}</article>',
         len(manifest["cases"]),
     )
+
+
+def _markdown_figure(
+    docs_root: Path, assets_root: Path, project_root: Path, project: str, artifact: dict
+) -> str:
+    source = project_root / artifact["path"]
+    target = assets_root / project / artifact["path"]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+    label = _label(str(artifact["kind"]), artifact["path"])
+    relative = target.relative_to(docs_root).as_posix()
+    return f"#### {label}\n\n![{label}]({relative})\n"
+
+
+def _project_markdown(
+    docs_root: Path, assets_root: Path, entry: SuiteEntry
+) -> tuple[str, int]:
+    project_root = entry.report.parent
+    manifest = json.loads((project_root / "manifest.json").read_text(encoding="utf-8"))
+    artifacts = [
+        item
+        for item in manifest["artifacts"]
+        if item["media_type"] == "image/svg+xml"
+    ]
+    lines = [
+        f"## `{entry.project}`",
+        "",
+        entry.summary,
+        "",
+        f"结果：**{entry.verdict}**；{len(manifest['cases'])} 个 case。",
+        "",
+    ]
+    root_figures = [item for item in artifacts if item.get("case") is None]
+    if root_figures:
+        lines.extend(("### Project 图", ""))
+        lines.extend(
+            _markdown_figure(docs_root, assets_root, project_root, entry.project, item)
+            for item in root_figures
+        )
+    for case in manifest["cases"]:
+        name = str(case["name"])
+        description = str(case.get("description", case.get("detail", name)))
+        expected = str(case.get("expected", "-"))
+        observed = str(case.get("observed", "-"))
+        lines.extend(
+            (
+                f"### `{name}`",
+                "",
+                description,
+                "",
+                f"预期：`{expected}`；观察到：`{observed}`。",
+                "",
+            )
+        )
+        lines.extend(
+            _markdown_figure(docs_root, assets_root, project_root, entry.project, item)
+            for item in artifacts
+            if item.get("case") == name
+        )
+    return "\n".join(lines), len(manifest["cases"])
 
 
 def run_suite(
@@ -150,7 +203,7 @@ def run_suite(
     project_sections = []
     case_counts = {}
     for item in entries:
-        section, count = _project_section(root, item, inline=False)
+        section, count = _project_section(root, item)
         project_sections.append(section)
         case_counts[item.project] = count
     rows = "".join(
@@ -182,11 +235,33 @@ table{{border-collapse:collapse;width:100%;background:white}}td,th{{padding:10px
     index = root / "index.html"
     index.write_text(document("Protocol Model Project 功能导览", "".join(project_sections)), encoding="utf-8")
     repository = Path(__file__).resolve().parents[2]
-    tracked_sections = "".join(
-        _project_section(repository, item, inline=True)[0] for item in entries
+    docs_root = repository / "docs"
+    assets_root = docs_root / "project-guide-assets"
+    if assets_root.exists():
+        shutil.rmtree(assets_root)
+    assets_root.mkdir()
+    guide_sections = []
+    for item in entries:
+        section, _ = _project_markdown(docs_root, assets_root, item)
+        guide_sections.append(section)
+    guide_header = "\n".join(
+        (
+            "# Protocol Model Project 功能导览",
+            "",
+            "五个内建 Project 按简单到复杂排列。每个 case 的波形图与因果事件图均由同一次 `run-all` 生成。",
+            "负例的预期结果为 `FAIL`，表示对应约束被成功触发。",
+            "",
+            "| Project | 测试内容 | Cases | 结果 |",
+            "|---|---|---:|---|",
+            *(
+                f"| `{item.project}` | {item.summary} | {case_counts[item.project]} | {item.verdict} |"
+                for item in entries
+            ),
+            "",
+        )
     )
-    (repository / "docs" / "project-guide.html").write_text(
-        document("Protocol Model Project 功能导览（内联归档）", tracked_sections),
-        encoding="utf-8",
+    (docs_root / "project-guide.md").write_text(
+        guide_header + "\n\n".join(guide_sections), encoding="utf-8"
     )
+    (docs_root / "project-guide.html").unlink(missing_ok=True)
     return ExperimentSuite(root, index, entries)

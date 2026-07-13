@@ -10,6 +10,7 @@ from random import Random
 import subprocess
 from typing import Sequence
 
+from protocol_model import __version__
 from protocol_model.patterns import ReadyValidSample, ResetSample
 from protocol_model.evidence import (
     format_cardinality_run,
@@ -18,28 +19,25 @@ from protocol_model.evidence import (
     format_execution_dot,
     format_ready_valid_run,
     session_report_html,
-    synthesize_axi_network_timeline,
     synthesize_axi_waveform,
     to_wavejson,
 )
 from protocol_model.projects.prj_axi4_read_bridge import (
-    AxiReadCase,
-    AxiReadNetworkProject,
-    axi_read_chain_dot,
-    axi_read_chain_report_html,
     DEFAULT_SIM_DIR as AXI_READ_BRIDGE_SIM_DIR,
+    build_simulation as build_axi_read_bridge_simulation,
 )
 from protocol_model.projects.prj_ready_valid_sink import (
     DEFAULT_SIM_DIR as READY_VALID_SINK_SIM_DIR,
     build_simulation as build_ready_valid_sink_simulation,
 )
-from protocol_model.protocols.apb import (
-    ApbConfig,
-    apb_report_html,
-    apb_state_dot,
-    apb_to_wavejson,
-    build_apb4_spec,
-    generate_apb_trace,
+from protocol_model.projects.prj_axi4_read_interleave import (
+    DEFAULT_SIM_DIR as AXI_READ_INTERLEAVE_SIM_DIR,
+    build_simulation as build_axi_read_interleave_simulation,
+    format_run as format_axi_read_interleave_run,
+)
+from protocol_model.projects.prj_apb_compare import (
+    DEFAULT_SIM_DIR as APB_COMPARE_SIM_DIR,
+    build_simulation as build_apb_comparison_simulation,
 )
 from protocol_model.protocols.axi4 import (
     Axi4Cycle,
@@ -305,121 +303,11 @@ def _constraint_witness(seed: int) -> str:
     )
 
 
-def _render_wavedrom(source_path: Path, target_path: Path) -> None:
-    rendered = subprocess.run(
-        ("node_modules/.bin/wavedrom", "--input", str(source_path)),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    target_path.write_text(rendered.stdout, encoding="utf-8")
-
-
-def _write_axi_read_network(directory: str, *, crossing: bool = False):
-    target = Path(directory)
-    target.mkdir(parents=True, exist_ok=True)
-    project = AxiReadNetworkProject()
-    run = project.run_case(
-        AxiReadCase(
-            name="crossing_4kb" if crossing else "legal_4kb_edge",
-            address=0xFF4 if crossing else 0xFF0,
-            expect_violation=crossing,
-        )
-    )
-    if crossing:
-        return run, None, project.snapshot()
-    dot_path = target / "axi_read_chain.dot"
-    svg_path = target / "axi_read_chain.svg"
-    report_path = target / "index.html"
-    dot_path.write_text(axi_read_chain_dot(run), encoding="utf-8")
-    subprocess.run(("dot", "-Tsvg", str(dot_path), "-o", str(svg_path)), check=True)
-    for stem, location, spec in (
-        ("axi_a", "AXI-A", project.spec_a),
-        ("axi_b", "AXI-B", project.spec_b),
-    ):
-        waveform = synthesize_axi_network_timeline(
-            spec, run.trace.events, location=location
-        )
-        json_path = target / f"{stem}.wave.json"
-        wave_svg = target / f"{stem}.wave.svg"
-        json_path.write_text(
-            json.dumps(
-                to_wavejson(
-                    waveform,
-                    title=f"{location} shared network timeline",
-                    hide_inactive_channels=True,
-                ),
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        _render_wavedrom(json_path, wave_svg)
-    project.publish(
-        str(dot_path),
-        str(svg_path),
-        str(target / "axi_a.wave.svg"),
-        str(target / "axi_b.wave.svg"),
-        str(report_path),
-    )
-    report_path.write_text(
-        axi_read_chain_report_html(run, project.snapshot()), encoding="utf-8"
-    )
-    return run, report_path, project.snapshot()
-
-
-def _write_apb_artifacts(directory: str, *, transactions: int, seed: int):
-    target = Path(directory)
-    target.mkdir(parents=True, exist_ok=True)
-    traces = {}
-    for version in (3, 4):
-        config = ApbConfig(version)
-        trace = generate_apb_trace(
-            config, transactions=transactions, seed=seed + version
-        )
-        traces[version] = trace
-        json_path = target / f"apb{version}.wave.json"
-        svg_path = target / f"apb{version}.wave.svg"
-        json_path.write_text(
-            json.dumps(apb_to_wavejson(config, trace), indent=2), encoding="utf-8"
-        )
-        _render_wavedrom(json_path, svg_path)
-
-    spec4 = build_apb4_spec()
-    mutated = list(traces[4].samples)
-    setup_index = next(
-        index
-        for index, sample in enumerate(mutated)
-        if sample.psel and not sample.penable
-    )
-    access = mutated[setup_index + 1]
-    mutated[setup_index + 1] = replace(
-        access, paddr=access.paddr ^ 1
-    )
-    violation_result = spec4.channel("APB").observation_model.run(mutated)
-    violation = (
-        violation_result.violations[0].rule
-        if violation_result.violations
-        else "NO VIOLATION"
-    )
-
-    dot_path = target / "apb.state.dot"
-    state_svg = target / "apb.state.svg"
-    dot_path.write_text(apb_state_dot(), encoding="utf-8")
-    subprocess.run(("dot", "-Tsvg", str(dot_path), "-o", str(state_svg)), check=True)
-    report = target / "index.html"
-    report.write_text(
-        apb_report_html(
-            apb3_cycles=len(traces[3].samples),
-            apb4_cycles=len(traces[4].samples),
-            transactions=transactions,
-            violation=violation,
-        ),
-        encoding="utf-8",
-    )
-    return traces, violation, report
-
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="protocol_model")
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
     waveform = subparsers.add_parser(
         "waveform", help="print a virtual AXI4 ready/valid waveform and validation"
@@ -462,12 +350,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         "constraint-witness", help="show minimal witnesses for newly modeled AXI rules"
     )
     constraints.add_argument("--seed", type=int, default=31)
+    interleave = subparsers.add_parser(
+        "axi-read-interleave",
+        help="run the two-VirtualDut AXI4 read-interleaving Project",
+    )
+    interleave.add_argument("--sim-dir", default=str(AXI_READ_INTERLEAVE_SIM_DIR))
     apb = subparsers.add_parser(
         "apb", help="generate APB3/APB4 two-phase waveforms and comparison report"
     )
     apb.add_argument("--transactions", type=int, default=4)
     apb.add_argument("--seed", type=int, default=41)
-    apb.add_argument("--artifacts-dir", default="artifacts/apb")
+    apb.add_argument(
+        "--sim-dir",
+        "--artifacts-dir",
+        dest="sim_dir",
+        default=str(APB_COMPARE_SIM_DIR),
+        help="run bundle directory (--artifacts-dir is a compatibility alias)",
+    )
     network = subparsers.add_parser(
         "axi-read-network", help="run the two-link AXI read bridge experiment"
     )
@@ -537,27 +436,37 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "constraint-witness":
         print(_constraint_witness(args.seed))
         return 0
+    if args.command == "axi-read-interleave":
+        simulation = build_axi_read_interleave_simulation(args.sim_dir)
+        print(format_axi_read_interleave_run(simulation.run))
+        print(
+            f"\nARTIFACTS\n  html={simulation.report}\n  text={simulation.text_report}"
+            f"\n  waveform={simulation.waveform}\n  network={simulation.network}"
+            f"\n  causality={simulation.causality}"
+        )
+        return 0 if simulation.run.verdict.value == "PASS" else 1
     if args.command == "apb":
-        traces, violation, report = _write_apb_artifacts(
-            args.artifacts_dir,
+        simulation = build_apb_comparison_simulation(
+            args.sim_dir,
             transactions=args.transactions,
             seed=args.seed,
         )
-        print("APB3 / APB4 SEMANTIC WITNESS")
+        run = simulation.run
+        print("APB3 / APB4 PROTOCOL-INSTANCE PROJECT")
         for version in (3, 4):
             print(
-                f"  APB{version}: cycles={len(traces[version].samples)} "
-                f"transfers={len(traces[version].transfers)}"
+                f"  APB{version}: cycles={len(run.traces[version].samples)} "
+                f"transfers={len(run.traces[version].transfers)}"
             )
         print(f"  mutation=request address changes in ACCESS")
-        print(f"  observed={violation}")
-        print(f"  report={report}")
-        return 0 if violation.endswith("request_stability") else 1
+        print(f"  observed={run.mutation_rule}")
+        print(f"  network={simulation.network}")
+        print(f"  report={simulation.report}")
+        return 0 if run.verdict.value == "PASS" else 1
     if args.command == "axi-read-network":
-        run, report, project = _write_axi_read_network(args.sim_dir)
-        rejected, _, rejected_project = _write_axi_read_network(
-            args.sim_dir, crossing=True
-        )
+        simulation = build_axi_read_bridge_simulation(args.sim_dir)
+        run = simulation.legal
+        rejected = simulation.rejected
         print("TWO-LINK AXI READ NETWORK")
         print(f"  legal_verdict={run.verdict.value} events={len(run.trace.events)}")
         for item in run.milestones:
@@ -569,9 +478,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             "  crossing_4k="
             f"{rejected.fault.rule if rejected.fault else rejected.verdict.value}"
         )
-        print(f"  report={report}")
-        print(f"  project_phase={project.phase.value}")
-        print(f"  rejected_case_phase={rejected_project.phase.value}")
+        print(f"  report={simulation.report}")
+        print(f"  project_phase={simulation.legal_project.phase.value}")
+        print(f"  rejected_case_phase={simulation.rejected_project.phase.value}")
         return 0 if run.verdict.value == "PASS" and rejected.fault else 1
     if args.command == "ready-valid-sink":
         simulation = build_ready_valid_sink_simulation(args.sim_dir)

@@ -198,7 +198,7 @@ def build_axi4_spec(config: Axi4Config | None = None) -> ProtocolSpec:
         ProtocolRequirement("write_beats", "AWLEN supplies the exact W beat count and final WLAST", "CorrelatedCardinalityObligation", "implemented"),
         ProtocolRequirement("read_beats", "AR creates ARLEN+1 R beat obligations with final RLAST", "CardinalityObligation", "implemented"),
         ProtocolRequirement("id_ordering", "responses with the same ID consume the oldest pending token", "KeyedFifoToken", "implemented"),
-        ProtocolRequirement("cross_id_interleave", "commuting events may share one concurrent step", "DynamicCommutation", "implemented"),
+        ProtocolRequirement("cross_id_interleave", "R beats from different IDs may interleave while each ID consumes its oldest pending burst", "CardinalityObligation", "implemented"),
         ProtocolRequirement("structural_no_comb_path", "no combinational input-to-output path", "StructuralEvidence", "missing"),
     )
     read_transactions = CardinalityObligation(

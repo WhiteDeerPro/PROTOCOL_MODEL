@@ -8,8 +8,9 @@ from random import Random
 from protocol_model.core import SemanticFault, Verdict
 from protocol_model.engine import ExecutionTrace
 from protocol_model.protocols.axi4 import Axi4Config, build_axi4_spec
+from protocol_model.protocols.spec import ProtocolInstance
 
-from ..base import ComponentUse, ProjectPhase, VerificationProject
+from ..lifecycle import ComponentUse, ProjectPhase, VerificationProject
 from .network import LinkRuntime, LocatedEvent, NetworkRecorder
 from .virtual_dut_bridge import AxiReadBridge, BridgeInput
 from .virtual_dut_responder import DumbAxiReadResponder
@@ -59,11 +60,31 @@ class AxiReadNetworkProject(VerificationProject):
         )
         self.spec_a = None
         self.spec_b = None
+        self.link_a_protocol = None
+        self.link_b_protocol = None
 
     def elaborate(self) -> None:
-        self.spec_a = build_axi4_spec(self.config)
-        self.spec_b = build_axi4_spec(self.config)
-        self.state.update({"links": 2, "dut_count": 2, "case": None})
+        base = build_axi4_spec(self.config)
+        self.link_a_protocol = ProtocolInstance.bind(
+            "AXI-A", base, owner=self.name
+        )
+        self.link_b_protocol = ProtocolInstance.bind(
+            "AXI-B", base, owner=self.name
+        )
+        self.spec_a = self.link_a_protocol.spec
+        self.spec_b = self.link_b_protocol.spec
+        self.state.update(
+            {
+                "links": 2,
+                "dut_count": 2,
+                "case": None,
+                "base_protocol": base.name,
+                "protocol_instances": (
+                    self.link_a_protocol.qualified_name,
+                    self.link_b_protocol.qualified_name,
+                ),
+            }
+        )
         self.transition(ProjectPhase.ELABORATED, "created two independent AXI4 sessions and DUT definitions")
 
     @staticmethod
@@ -75,11 +96,20 @@ class AxiReadNetworkProject(VerificationProject):
             self.elaborate()
         if self.phase is not ProjectPhase.ELABORATED:
             raise RuntimeError(f"project must be ELABORATED, got {self.phase.value}")
-        assert self.spec_a is not None and self.spec_b is not None
+        assert (
+            self.spec_a is not None
+            and self.spec_b is not None
+            and self.link_a_protocol is not None
+            and self.link_b_protocol is not None
+        )
         self.state["case"] = case.name
         recorder = NetworkRecorder()
-        link_a = LinkRuntime("AXI-A", self.spec_a.open_session(), recorder)
-        link_b = LinkRuntime("AXI-B", self.spec_b.open_session(), recorder)
+        link_a = LinkRuntime(
+            "AXI-A", self.link_a_protocol.open_session(), recorder
+        )
+        link_b = LinkRuntime(
+            "AXI-B", self.link_b_protocol.open_session(), recorder
+        )
         bridge = AxiReadBridge(downstream_id_width=self.config.id_width)
         bridge_state = bridge.initial_state()
         responder = DumbAxiReadResponder(self.spec_b)

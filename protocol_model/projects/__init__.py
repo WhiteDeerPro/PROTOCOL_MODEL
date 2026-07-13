@@ -1,6 +1,6 @@
 """Verification-project lifecycle and individually named project packages."""
 
-from .base import (
+from .lifecycle import (
     ComponentUse,
     LifecycleEntry,
     ProjectPhase,

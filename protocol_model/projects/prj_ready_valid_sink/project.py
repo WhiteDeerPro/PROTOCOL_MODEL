@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from protocol_model.core import CanonicalEvent, SemanticFault, Verdict
 from protocol_model.patterns import ReadyValidSample, ResetSample
+from protocol_model.protocols.spec import ProtocolInstance
 from protocol_model.protocols.ready_valid import (
     ReadyValidConfig,
     build_ready_valid_spec,
@@ -18,7 +19,7 @@ from protocol_model.virtual_dut import (
     VirtualDutRegistry,
 )
 
-from ..base import ComponentUse, ProjectPhase, VerificationProject
+from ..lifecycle import ComponentUse, ProjectPhase, VerificationProject
 
 
 @dataclass(frozen=True)
@@ -68,10 +69,23 @@ class ReadyValidSinkProject(VerificationProject):
             ),
         )
         self.spec = None
+        self.protocol_instance = None
 
     def elaborate(self) -> None:
-        self.spec = build_ready_valid_spec(self.config)
-        self.state.update({"case": None, "samples": 0, "transfers": 0})
+        base = build_ready_valid_spec(self.config)
+        self.protocol_instance = ProtocolInstance.bind(
+            "DATA", base, owner=self.name
+        )
+        self.spec = self.protocol_instance.spec
+        self.state.update(
+            {
+                "case": None,
+                "samples": 0,
+                "transfers": 0,
+                "base_protocol": base.name,
+                "protocol_instances": (self.protocol_instance.qualified_name,),
+            }
+        )
         self.transition(
             ProjectPhase.ELABORATED,
             "instantiated source, ready-valid protocol, and capturing sink",

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Generic, TypeVar
 
-from protocol_model.relations import CausalGraph
+from .relations import CausalGraph
 
 
 EventT = TypeVar("EventT")

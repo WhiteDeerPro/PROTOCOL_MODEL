@@ -1,4 +1,4 @@
-"""Lifecycle and inventory model for user-facing verification projects."""
+"""Lifecycle and inventory model for executable verification Projects."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ class ProjectSnapshot:
 
 
 class VerificationProject:
-    """A test case owner from creation through evidence publication."""
+    """A verification case owner from creation through evidence publication."""
 
     name: str
 
@@ -69,13 +69,17 @@ class VerificationProject:
             ProjectPhase.CLOSED: set(),
         }
         if phase not in allowed[self.phase]:
-            raise RuntimeError(f"invalid project transition {self.phase.value} -> {phase.value}")
+            raise RuntimeError(
+                f"invalid project transition {self.phase.value} -> {phase.value}"
+            )
         self.phase = phase
         self.history.append(LifecycleEntry(phase, summary))
 
     def publish(self, *artifacts: str) -> None:
         self.artifacts.extend(artifacts)
-        self.transition(ProjectPhase.REPORTED, f"published {len(artifacts)} artifacts")
+        self.transition(
+            ProjectPhase.REPORTED, f"published {len(artifacts)} artifacts"
+        )
 
     def close(self) -> None:
         self.transition(ProjectPhase.CLOSED, "project closed")

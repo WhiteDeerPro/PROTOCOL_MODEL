@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from protocol_model.core import CanonicalEvent, SemanticFault
 from protocol_model.engine import ExecutionTrace
 from protocol_model.protocols.session import ProtocolSession
-from protocol_model.relations import CausalGraph
+from protocol_model.engine.relations import CausalGraph
 
 
 @dataclass(frozen=True)

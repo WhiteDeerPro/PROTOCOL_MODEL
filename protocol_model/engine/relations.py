@@ -1,4 +1,4 @@
-"""Reusable strict partial-order representation for protocol executions."""
+"""Strict partial-order representation for protocol execution traces."""
 
 from __future__ import annotations
 
@@ -11,17 +11,12 @@ Node = Hashable
 
 
 class PartialOrderViolation(ValueError):
-    """Raised when an edge would violate strict partial-order properties."""
+    """Raised when an edge violates strict partial-order properties."""
 
 
 @dataclass
 class CausalGraph:
-    """A finite DAG whose reachability relation is strict happens-before.
-
-    Stored edges are direct observations/constraints. The semantic relation
-    ``precedes(a, b)`` is their transitive closure. Two known nodes are
-    concurrent when neither reaches the other.
-    """
+    """A finite DAG whose reachability relation is strict happens-before."""
 
     _successors: dict[Node, set[Node]] = field(default_factory=dict)
     _predecessors: dict[Node, set[Node]] = field(default_factory=dict)
@@ -65,7 +60,9 @@ class CausalGraph:
         if before == after:
             raise PartialOrderViolation("strict partial order is irreflexive")
         if self.precedes(after, before):
-            raise PartialOrderViolation(f"edge {before!r}->{after!r} creates a causal cycle")
+            raise PartialOrderViolation(
+                f"edge {before!r}->{after!r} creates a causal cycle"
+            )
         self._successors[before].add(after)
         self._predecessors[after].add(before)
 
@@ -108,7 +105,10 @@ class CausalGraph:
     def topological_order(self) -> tuple[Node, ...]:
         """Return one deterministic linear extension of the partial order."""
 
-        indegree = {node: len(predecessors) for node, predecessors in self._predecessors.items()}
+        indegree = {
+            node: len(predecessors)
+            for node, predecessors in self._predecessors.items()
+        }
         ready: list[tuple[str, Node]] = []
         for node, degree in indegree.items():
             if degree == 0:

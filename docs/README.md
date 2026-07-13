@@ -1,10 +1,14 @@
 # 文档
 
-当前面向使用者的文档只有一份：[用户手册](manual.md)。它说明本项目解决的问题、核心
-概念、运行方法、图的含义、如何定义协议或 VirtualDut，以及当前实现边界。
+当前面向使用者的文档包括：
 
-`images/` 存放 README 使用的稳定 SVG 示例。它们来自两个 Project 的已验证运行；日常
-仿真输出仍写入各 Project 自己的 `sims/` 目录，并可随时重新生成。
+- [用户手册](manual.md)：项目目标、核心概念、运行方法与实现边界；
+- [AXI4 读交织约束报告](axi4_read_interleaving_report.md)：当前约束、quiet profile、ID 规则与缺口。
+- [ProtocolInstance 管理](architecture/protocol-instance-management.md)：Project 如何引用协议并管理私域实例；
+- [运行证据管理](architecture/evidence-management.md)：源码、手写文档与可再生报告的边界。
+
+`images/` 只存放需要版本化引用的稳定 SVG 快照。日常运行证据统一写入仓库根目录的
+`out/<project>/<run-id>/`，不放入 Project 源码目录，也不由 Git 跟踪。
 
 ## 历史设计记录
 

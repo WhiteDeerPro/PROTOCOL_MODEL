@@ -14,7 +14,7 @@ from protocol_model.core import (
     SemanticStep,
 )
 from protocol_model.engine import ExecutionTrace
-from protocol_model.relations import CausalGraph
+from protocol_model.engine.relations import CausalGraph
 
 from .spec import ProtocolSpec
 

@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import json
 from pathlib import Path
-import subprocess
+
+from protocol_model.evidence import (
+    ArtifactBundle,
+    ConstraintEvidence,
+    constraints_from_instances,
+    default_run_directory,
+)
 
 from .evidence import (
     ready_valid_event_dot,
@@ -16,7 +21,7 @@ from .evidence import (
 from .project import ReadyValidSinkCase, ReadyValidSinkProject, ReadyValidSinkRun
 
 
-DEFAULT_SIM_DIR = Path(__file__).resolve().parent / "sims" / "01"
+DEFAULT_SIM_DIR = default_run_directory("prj_ready_valid_sink")
 
 
 @dataclass(frozen=True)
@@ -30,24 +35,12 @@ class ReadyValidSinkSimulation:
     files: tuple[Path, ...]
 
 
-def _render_wavedrom(source: Path, target: Path) -> None:
-    rendered = subprocess.run(
-        ("node_modules/.bin/wavedrom", "--input", str(source)),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    target.write_text(rendered.stdout, encoding="utf-8")
-
-
 def build_simulation(
     directory: str | Path | None = None,
 ) -> ReadyValidSinkSimulation:
     """Run the Project's default plan and publish every simulation artifact."""
 
     target = DEFAULT_SIM_DIR if directory is None else Path(directory)
-    target.mkdir(parents=True, exist_ok=True)
-
     legal_project = ReadyValidSinkProject()
     legal = legal_project.run_case(
         ReadyValidSinkCase("legal_stall", (0x12, 0x34))
@@ -62,50 +55,122 @@ def build_simulation(
         )
     )
 
-    generated = []
+    bundle = ArtifactBundle(legal_project.name, target)
     for stem, run, title in (
         ("legal", legal, "Legal ready-valid stall and transfers"),
         ("mutation", mutation, "Payload mutation while stalled"),
     ):
-        wave_json = target / f"{stem}.wave.json"
-        wave_svg = target / f"{stem}.wave.svg"
-        events_dot = target / f"{stem}.events.dot"
-        events_svg = target / f"{stem}.events.svg"
-        wave_json.write_text(
-            json.dumps(ready_valid_wavejson(run, title=title), indent=2),
-            encoding="utf-8",
+        bundle.render_wave(
+            f"waveform.{stem}",
+            ready_valid_wavejson(run, title=title),
+            kind=f"waveform_{stem}",
         )
-        _render_wavedrom(wave_json, wave_svg)
-        events_dot.write_text(
-            ready_valid_event_dot(run, title=title), encoding="utf-8"
+        bundle.render_dot(
+            f"causality.{stem}",
+            ready_valid_event_dot(run, title=title),
+            kind=f"causality_{stem}",
         )
-        subprocess.run(
-            ("dot", "-Tsvg", str(events_dot), "-o", str(events_svg)),
-            check=True,
-        )
-        generated.extend((wave_json, wave_svg, events_dot, events_svg))
-
-    topology_dot = target / "topology.dot"
-    topology_svg = target / "topology.svg"
-    report = target / "index.html"
-    topology_dot.write_text(
-        ready_valid_topology_dot(legal_project.snapshot()), encoding="utf-8"
+    bundle.render_dot(
+        "network",
+        ready_valid_topology_dot(legal_project.snapshot()),
+        kind="network",
     )
-    subprocess.run(
-        ("dot", "-Tsvg", str(topology_dot), "-o", str(topology_svg)),
-        check=True,
+    bundle.write_json(
+        "trace.json",
+        {
+            name: {
+                "verdict": run.verdict.value,
+                "samples": [
+                    {
+                        "reset": item.asserted,
+                        "cycle": item.observation.cycle,
+                        "valid": item.observation.valid,
+                        "ready": item.observation.ready,
+                        "event": (
+                            None
+                            if item.observation.event is None
+                            else {
+                                "kind": item.observation.event.kind,
+                                "key": item.observation.event.key,
+                                "payload": dict(item.observation.event.payload),
+                            }
+                        ),
+                    }
+                    for item in run.observations
+                ],
+                "transfers": [
+                    {
+                        "kind": event.kind,
+                        "key": event.key,
+                        "payload": dict(event.payload),
+                    }
+                    for event in run.transfers
+                ],
+                "fault": run.fault.rule if run.fault else None,
+            }
+            for name, run in (("legal", legal), ("mutation", mutation))
+        },
+        kind="trace",
     )
-    generated.extend((topology_dot, topology_svg, report))
-
-    legal_project.publish(*(str(path) for path in generated))
-    report.write_text(
+    assert legal_project.protocol_instance is not None
+    constraints = constraints_from_instances(
+        (legal_project.protocol_instance,),
+        extra=(
+            ConstraintEvidence(
+                id="legal_handshake_witness",
+                source="TEST",
+                target="DATA.VALID, DATA.READY",
+                rule="a transfer occurs only when VALID and READY are both asserted",
+                foundation="legal_stall",
+                status="verified" if legal.verdict.value == "PASS" else "mismatch",
+                instances=(legal_project.protocol_instance.qualified_name,),
+                witness=f"accepted_transfers={len(legal.transfers)}",
+            ),
+            ConstraintEvidence(
+                id="stall_payload_mutation",
+                source="TEST",
+                target="DATA.payload",
+                rule="change payload while VALID=1 and READY=0",
+                foundation="negative mutation",
+                status="verified" if mutation.fault is not None else "mismatch",
+                instances=(legal_project.protocol_instance.qualified_name,),
+                witness=mutation.fault.rule if mutation.fault else "NO FAULT",
+            ),
+        ),
+    )
+    bundle.write_constraints(constraints)
+    report = bundle.write_text(
+        "report.html",
         ready_valid_sink_report_html(
             legal,
             legal_project.snapshot(),
             mutation,
             mutation_project.snapshot(),
         ),
-        encoding="utf-8",
+        kind="html_report",
+        media_type="text/html",
+    )
+    legal_project.publish(*(str(path) for path in bundle.artifact_paths))
+    bundle.finalize(
+        verdict=(
+            "PASS"
+            if legal.verdict.value == "PASS" and mutation.fault is not None
+            else "FAIL"
+        ),
+        protocol_instances=(legal_project.protocol_instance,),
+        cases=(
+            {
+                "name": "legal_stall",
+                "expected": "PASS",
+                "observed": legal.verdict.value,
+            },
+            {
+                "name": "changed_while_stalled",
+                "expected": "FAIL",
+                "observed": mutation.verdict.value,
+            },
+        ),
+        state=legal_project.snapshot().state,
     )
     return ReadyValidSinkSimulation(
         target,
@@ -114,5 +179,5 @@ def build_simulation(
         mutation,
         legal_project.phase.value,
         mutation_project.phase.value,
-        tuple(generated),
+        bundle.artifact_paths,
     )

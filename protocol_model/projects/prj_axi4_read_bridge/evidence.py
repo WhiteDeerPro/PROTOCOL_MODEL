@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from html import escape
 
-from ..base import ProjectSnapshot
+from ..lifecycle import ProjectSnapshot
 from .project import AxiReadNetworkRun
 
 
@@ -46,8 +46,27 @@ def axi_read_chain_dot(run: AxiReadNetworkRun) -> str:
     return "\n".join(lines)
 
 
+def axi_read_network_dot(project: ProjectSnapshot) -> str:
+    """Show named protocol instances separately from VirtualDut behavior."""
+
+    return f"""digraph axi_read_bridge_network {{
+  rankdir=LR;
+  graph [bgcolor="white", labelloc=t, label="{project.name} instance network"];
+  node [shape=box, style="rounded,filled", fontname="monospace"];
+  source [fillcolor="#fef3c7", label="Read stimulus"];
+  axia [fillcolor="#dbeafe", label="AXI-A link"];
+  bridge [fillcolor="#fce7f3", label="VirtualDut AxiReadBridge"];
+  axib [fillcolor="#dbeafe", label="AXI-B link"];
+  responder [fillcolor="#dcfce7", label="VirtualDut ReadResponder"];
+  source -> axia -> bridge -> axib -> responder [label="AR"];
+  responder -> axib -> bridge -> axia [label="R"];
+}}"""
+
+
 def axi_read_chain_report_html(
-    run: AxiReadNetworkRun, project: ProjectSnapshot
+    run: AxiReadNetworkRun,
+    project: ProjectSnapshot,
+    rejected: AxiReadNetworkRun | None = None,
 ) -> str:
     rows = "".join(
         "<tr>"
@@ -85,6 +104,7 @@ table{{border-collapse:collapse;background:white}}td,th{{padding:8px 14px;border
 <h1>Two-link AXI read network</h1>
 <p>Project: <strong>{escape(project.name)}</strong> · phase: <strong>{project.phase.value}</strong>
 · verdict: <strong>{run.verdict.value}</strong>.</p>
+<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a> · <a href="trace.json">Trace data</a></p>
 <h2>Project components</h2>
 <table><tr><th>Name</th><th>Category</th><th>Implementation</th><th>Role</th></tr>{component_rows}</table>
 <h2>Lifecycle</h2>
@@ -94,13 +114,17 @@ table{{border-collapse:collapse;background:white}}td,th{{padding:8px 14px;border
 <h2>End-to-end causality</h2>
 <p>Blue nodes are AXI-A, green nodes are AXI-B;
 red edges cross the bridge.</p>
-<object class="causal" data="axi_read_chain.svg" type="image/svg+xml"></object>
+<object class="causal" data="causality.svg" type="image/svg+xml"></object>
+<h2>Protocol-instance network</h2>
+<object class="causal" data="network.svg" type="image/svg+xml"></object>
 <h2>AXI-A signals</h2>
 <p>AW/W/B are quiet for this read-only experiment and are omitted.</p>
-<div class="scroll"><object class="wave" data="axi_a.wave.svg" type="image/svg+xml"></object></div>
+<div class="scroll"><object class="wave" data="waveform.axi-a.svg" type="image/svg+xml"></object></div>
 <h2>AXI-B signals</h2>
 <p>AW/W/B are quiet for this read-only experiment and are omitted.</p>
-<div class="scroll"><object class="wave" data="axi_b.wave.svg" type="image/svg+xml"></object></div>
+<div class="scroll"><object class="wave" data="waveform.axi-b.svg" type="image/svg+xml"></object></div>
+<h2>Negative constraint witness</h2>
+<p>4KB-crossing case: <code>{escape(rejected.fault.rule if rejected and rejected.fault else 'NO FAULT')}</code>.</p>
 <h2>Obligation state</h2>
 <table><tr><th>Milestone</th><th>Link A pending</th><th>Bridge tokens</th><th>Link B pending</th></tr>{rows}</table>
 </body></html>"""

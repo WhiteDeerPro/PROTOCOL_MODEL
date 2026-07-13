@@ -8,6 +8,7 @@ from random import Random
 from protocol_model.core import CanonicalEvent, Verdict
 
 from .spec import ApbConfig, ApbPinSample, build_apb_spec
+from protocol_model.protocols.spec import ProtocolSpec
 
 
 @dataclass(frozen=True)
@@ -21,11 +22,14 @@ def generate_apb_trace(
     *,
     transactions: int = 4,
     seed: int = 0,
+    spec: ProtocolSpec | None = None,
 ) -> ApbGeneratedTrace:
     if transactions < 0:
         raise ValueError("transactions must be non-negative")
     rng = Random(seed)
-    spec = build_apb_spec(config)
+    spec = spec or build_apb_spec(config)
+    if spec.parameters.get("version") != config.version:
+        raise ValueError("APB generator config does not match bound protocol instance")
     monitor = spec.channel("APB").observation_model
     samples = []
     cycle = 0

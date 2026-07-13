@@ -66,8 +66,17 @@ class Axi4SignalSession(
             for name, local_state in state.channel_states.items()
         )
 
-    def _fault(self, state: Axi4SignalState, rule: str, reason: str) -> SemanticStep:
-        return SemanticStep(state, fault=SemanticFault(f"{self.name}.{rule}", reason))
+    def _fault(
+        self,
+        state: Axi4SignalState,
+        rule: str,
+        reason: str,
+        *,
+        scope: str = "SPEC",
+    ) -> SemanticStep:
+        return SemanticStep(
+            state, fault=SemanticFault(f"{self.name}.{rule}", reason, scope=scope)
+        )
 
     def step(
         self, state: Axi4SignalState, cycle: Axi4Cycle
@@ -88,6 +97,16 @@ class Axi4SignalSession(
         if len(reset_levels) != 1:
             return self._fault(state, "reset_consistency", "ARESETn differs by channel")
         reset_asserted = next(iter(reset_levels))
+
+        quiet_channels = tuple(self.spec.parameters.get("quiet_channels", ()))
+        for name in quiet_channels:
+            if cycle.channels[name].observation.valid:
+                return self._fault(
+                    state,
+                    "quiet_channel",
+                    f"{name}VALID must remain low in the read-only profile",
+                    scope="PROFILE",
+                )
 
         if not reset_asserted:
             write_state = state.protocol_state.state_of("write")

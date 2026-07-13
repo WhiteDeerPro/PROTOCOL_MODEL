@@ -13,9 +13,19 @@ from .wavedrom import (
     to_wavejson,
 )
 from .report import session_report_html
+from .bundle import (
+    ArtifactBundle,
+    ConstraintEvidence,
+    constraints_from_instances,
+    default_run_directory,
+)
 
 __all__ = [
     "format_cardinality_run",
+    "ArtifactBundle",
+    "ConstraintEvidence",
+    "constraints_from_instances",
+    "default_run_directory",
     "format_correlated_dot",
     "format_correlated_run",
     "format_execution_dot",

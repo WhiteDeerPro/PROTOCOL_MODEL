@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from base64 import b64encode
 from html import escape
 import json
 from pathlib import Path
@@ -45,8 +46,12 @@ def _label(kind: str, path: str) -> str:
     return labels.get(kind, kind.replace("_", " ")) + f" · {Path(path).name}"
 
 
-def _figure(root: Path, project_root: Path, artifact: dict) -> str:
-    source = (project_root / artifact["path"]).relative_to(root).as_posix()
+def _figure(root: Path, project_root: Path, artifact: dict, *, inline: bool) -> str:
+    path = project_root / artifact["path"]
+    if inline:
+        source = "data:image/svg+xml;base64," + b64encode(path.read_bytes()).decode("ascii")
+    else:
+        source = path.relative_to(root).as_posix()
     kind = str(artifact["kind"])
     causal = " causality" if kind == "causality" else ""
     return (
@@ -55,7 +60,7 @@ def _figure(root: Path, project_root: Path, artifact: dict) -> str:
     )
 
 
-def _project_section(root: Path, entry: SuiteEntry) -> tuple[str, int]:
+def _project_section(root: Path, entry: SuiteEntry, *, inline: bool) -> tuple[str, int]:
     project_root = entry.report.parent
     manifest = json.loads((project_root / "manifest.json").read_text(encoding="utf-8"))
     artifacts = [
@@ -64,7 +69,7 @@ def _project_section(root: Path, entry: SuiteEntry) -> tuple[str, int]:
         if item["media_type"] == "image/svg+xml"
     ]
     root_figures = "".join(
-        _figure(root, project_root, item)
+        _figure(root, project_root, item, inline=inline)
         for item in artifacts
         if item.get("case") is None
     )
@@ -75,7 +80,7 @@ def _project_section(root: Path, entry: SuiteEntry) -> tuple[str, int]:
         observed = escape(str(case.get("observed", "-")))
         description = escape(str(case.get("description", case.get("detail", name))))
         figures = "".join(
-            _figure(root, project_root, item)
+            _figure(root, project_root, item, inline=inline)
             for item in artifacts
             if item.get("case") == name
         )
@@ -84,11 +89,15 @@ def _project_section(root: Path, entry: SuiteEntry) -> tuple[str, int]:
             f'<p>{description}</p><p class="result">Expected {expected} · Observed {observed}</p>'
             f'<div class="gallery">{figures}</div></section>'
         )
-    report_link = entry.report.relative_to(root).as_posix()
+    report_link = (
+        ""
+        if inline
+        else f' · <a href="{escape(entry.report.relative_to(root).as_posix())}">打开独立报告</a>'
+    )
     return (
         f'<article id="{escape(entry.project)}"><h2>{escape(entry.project)}</h2>'
         f'<p>{escape(entry.summary)}</p><p><strong>{escape(entry.verdict)}</strong> · '
-        f'{len(manifest["cases"])} cases · <a href="{escape(report_link)}">打开独立报告</a></p>'
+        f'{len(manifest["cases"])} cases{report_link}</p>'
         f'<div class="gallery project-figures">{root_figures}</div>{"".join(case_sections)}</article>',
         len(manifest["cases"]),
     )
@@ -141,7 +150,7 @@ def run_suite(
     project_sections = []
     case_counts = {}
     for item in entries:
-        section, count = _project_section(root, item)
+        section, count = _project_section(root, item, inline=False)
         project_sections.append(section)
         case_counts[item.project] = count
     rows = "".join(
@@ -154,10 +163,9 @@ def run_suite(
         "</tr>"
         for item in entries
     )
-    index = root / "index.html"
-    index.write_text(
-        f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
-<title>Protocol Model Project 功能导览</title><style>
+    def document(title: str, sections: str) -> str:
+        return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<title>{title}</title><style>
 :root{{color-scheme:light}}*{{box-sizing:border-box}}body{{font-family:system-ui;max-width:1500px;margin:36px auto;padding:0 24px;background:#f8fafc;color:#0f172a;line-height:1.55}}
 h1,h2,h3{{scroll-margin-top:18px}}article{{margin:52px 0;padding-top:12px;border-top:3px solid #334155}}.case{{margin:32px 0;padding:18px;background:#fff;border:1px solid #cbd5e1;border-radius:10px}}
 table{{border-collapse:collapse;width:100%;background:white}}td,th{{padding:10px;border:1px solid #cbd5e1;text-align:left}}code{{color:#7c3aed}}a{{color:#0369a1}}
@@ -168,8 +176,17 @@ table{{border-collapse:collapse;width:100%;background:white}}td,th{{padding:10px
 </style></head><body><h1>Protocol Model Project 功能导览</h1>
 <p>五个内建 Project 由简单到复杂排列。每个 case 同时展示采样层波形与事务层因果事件图；负例的预期结果为 FAIL，表示相应约束被成功触发。</p>
 <table><tr><th>Project</th><th>测试内容</th><th>Cases</th><th>结果</th><th>图表</th></tr>{rows}</table>
-{"".join(project_sections)}
-</body></html>""",
+{sections}
+</body></html>"""
+
+    index = root / "index.html"
+    index.write_text(document("Protocol Model Project 功能导览", "".join(project_sections)), encoding="utf-8")
+    repository = Path(__file__).resolve().parents[2]
+    tracked_sections = "".join(
+        _project_section(repository, item, inline=True)[0] for item in entries
+    )
+    (repository / "docs" / "project-guide.html").write_text(
+        document("Protocol Model Project 功能导览（内联归档）", tracked_sections),
         encoding="utf-8",
     )
     return ExperimentSuite(root, index, entries)

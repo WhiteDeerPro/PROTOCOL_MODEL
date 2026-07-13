@@ -84,8 +84,8 @@ protocols/<name>/ base ProtocolSpec
 - `prj_axi4_read_interleave`：一个施加具体 ID/quiet 约束的派生 AXI4 实例。
 - `prj_axi4_scenarios`：manager source 与 subordinate responder 直接连接的 37-case AXI4 批量实验。
 
-运行全部 Project 后，`out/index.html` 会生成按复杂度排列的 Project 功能导览，集中展示每个
-case 的波形图与因果事件图。
+运行全部 Project 后，`out/index.html` 会生成按复杂度排列的本地功能导览；仓库同时跟踪一份
+[Project 功能导览](docs/project-guide.html)，内联全部图表，便于脱离 `out/` 阅读。
 
 ## AXI4 跨 ID 乱序读取
 

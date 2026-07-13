@@ -50,11 +50,11 @@ protocol monitor ──► canonical event ──► obligation + causal relatio
 
 建模从协议要求出发：先用类型化值域和 `EventSpace` 定义可观察事件，再将逐周期行为写成
 状态迁移系统，并用 cardinality、correlation、obligation 与因果偏序表达跨事务约束；这些
-元素最终 elaboration 为不可变 `ProtocolSpec`，供 Project 派生 profile、实例化并生成证据。
+元素最终 elaboration 为不可变 `ProtocolSpec`，供 Project 派生 profile、实例化并生成运行结果。
 
 ```text
 domain/schema → observation automaton → transaction relation → ProtocolSpec
-      → Project profile/instance → legal & negative trace → evidence
+      → Project profile/instance → legal & negative trace → report
 ```
 
 因此 AXI4、APB 等只是这条通用建模流程在具体协议上的末端演示，而不是框架的起点。
@@ -64,7 +64,7 @@ domain/schema → observation automaton → transaction relation → ProtocolSpe
 所有验证例子遵循同一条路径：Project 从 `protocols/` 引用基础协议，通过
 `ProtocolInstance` 给每条网络 link 命名；需要收窄能力时，先用 `ProtocolDerivation` 和
 `ConstraintRecord` 生成带 provenance 的派生 spec。随后才连接 VirtualDut、运行 trace 并
-发布可视化证据。
+生成可视化结果。
 
 ```text
 protocols/<name>/ base ProtocolSpec
@@ -84,8 +84,8 @@ protocols/<name>/ base ProtocolSpec
 - `prj_axi4_read_interleave`：一个施加具体 ID/quiet 约束的派生 AXI4 实例。
 - `prj_axi4_scenarios`：manager source 与 subordinate responder 直接连接的 37-case AXI4 批量实验。
 
-已有 Project 的网络图、波形图、因果图以及一条 34-event 长 trace 见
-[可执行实验图册](docs/experiments.md)。图册说明每张图对应的运行命令、验证结论和协议含义。
+运行全部 Project 后，`out/index.html` 会生成按复杂度排列的 Project 功能导览，集中展示每个
+case 的波形图与因果事件图。
 
 ## AXI4 跨 ID 乱序读取
 
@@ -106,19 +106,22 @@ immutable derived ProtocolSpec
 cases/<case>/{waveform,causality,trace} + network.svg + HTML report
 ```
 
-运行后可查看 `out/prj_axi4_read_interleave/01/` 下的 `cases/`、`network.svg`、
-`constraints.md` 和 `report.html`。该目录是可再生运行证据，不进入源码树。
+从单 Project 入口运行后，可查看
+`protocol_model/projects/prj_axi4_read_interleave/out/01/` 下的 `cases/`、`network.svg`、
+`constraints.md` 和 `report.html`。这些是可重新生成的运行结果，不进入 Git。
 
 ## 快速开始
 
 Python 模型本身只使用标准库；WaveDrom 用于生成 SVG 波形，Graphviz 用于生成关系图。
 
 ```bash
-./scripts/quickstart.sh
+python3 -m venv .venv
+npm ci
+.venv/bin/python -m protocol_model run-all
 ```
 
-这会运行全部维护中的 Project，并生成统一入口 `out/index.html`。脚本创建本地 venv、在需要时
-安装 WaveDrom，检查 Graphviz，然后调用正式的 Python CLI。若依赖已经准备好，也可以直接运行：
+WaveDrom 由 `npm ci` 安装；关系图还需要系统中存在 Graphviz `dot`。运行完成后打开统一入口
+`out/index.html`。单个 Project 也可以通过自身目录内的 `run.sh` 启动：
 
 ```bash
 .venv/bin/python -m protocol_model run-all
@@ -141,26 +144,20 @@ Python 模型本身只使用标准库；WaveDrom 用于生成 SVG 波形，Graph
 
 每个 Project 是一个 run bundle，legal 与 negative 是 bundle 内的独立 case；各自的 trace、
 波形和因果图写入 `cases/<case>/`，共享的拓扑、约束、manifest 和总报告保留在 run 根目录。
-报告统一写入 `out/<project>/01/report.html`，可在浏览器中打开。完整命令说明见
+单独运行时，报告默认写入对应 Project 的 `out/01/report.html`；`run-all` 则汇总到
+仓库根 `out/<project>/01/report.html`。完整命令说明见
 [用户手册：运行实验](docs/manual.md#运行实验)。
 
-## 当前边界与下一步
+## 后续工作
 
-这个版本是 `v0.1.1` 实验版本，接口和文件组织尚未承诺稳定兼容性。
-
-- AXI4 尚未覆盖 exclusive、全部 USER/capability 语义和完整的跨 ID ordering；
-- Project 还没有通用拓扑路由、仲裁、公平性、死锁搜索或可配置 latency/backpressure policy；
-- VirtualDut responder 目前可产生确定性 payload，但还不是具有读写历史的 memory model；
-- 尚未提供 VCD/FSDB/UVM adapter；因此不能直接检查真实 DUT 的波形文件；
-- 下一阶段会先补强事件 JSON、外部 trace adapter、VirtualDut 的 memory/register state，
-  再评估可复用的网络 elaboration 抽象。
+- Project 尚未提供通用拓扑路由、仲裁、公平性、死锁搜索或可配置 latency/backpressure policy；
+- 尚未提供 VCD/FSDB/UVM adapter，因此当前不能直接检查真实 DUT 的波形文件。
 
 ## 文档与贡献
 
 - [用户手册](docs/manual.md)：术语、架构、运行、读图方式、扩展方法和当前边界；
-- [AXI4 读交织约束报告](docs/axi4_read_interleaving_report.md)：ID、quiet 与约束缺口；
 - [ProtocolInstance 管理](docs/architecture/protocol-instance-management.md)：基础协议引用、私域 profile 与实例所有权；
-- [运行证据管理](docs/architecture/evidence-management.md)：输出目录、manifest、约束和文档纪律；
+- [Project 与运行结果管理](docs/architecture/run-output-management.md)：Project、输出目录与文档素材的边界；
 - [文档入口](docs/README.md)：当前有效文档的索引；
 - [CHANGELOG](CHANGELOG.md)：版本变更；
 - [MIT License](LICENSE)：使用许可。

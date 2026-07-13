@@ -27,18 +27,22 @@ def ready_valid_wavejson(run: ReadyValidSinkRun, *, title: str):
     data_wave = []
     data = []
     previous = object()
+    was_active = False
     for item in observations:
         sample = item.observation
         if not sample.valid:
-            data_wave.append("." if data_wave else "0")
+            data_wave.append("x" if was_active or not data_wave else ".")
+            previous = object()
+            was_active = False
             continue
         value = int(sample.event.payload["data"])
-        if value == previous:
+        if was_active and value == previous:
             data_wave.append(".")
         else:
             data_wave.append("=")
             data.append(f"0x{value:02x}")
         previous = value
+        was_active = True
     return {
         "signal": [
             {"name": "CLK", "wave": "p" + "." * max(0, len(observations) - 1)},

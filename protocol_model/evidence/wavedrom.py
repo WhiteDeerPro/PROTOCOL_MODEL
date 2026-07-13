@@ -262,18 +262,22 @@ def _field_lane(
     data = []
     unset = object()
     previous = unset
+    was_active = False
     for wrapped in channel_samples:
         sample = wrapped.observation
         if not sample.valid:
-            wave.append("." if wave else "0")
+            wave.append("x" if was_active or not wave else ".")
+            previous = unset
+            was_active = False
             continue
         value = sample.event.key if key else sample.event.payload[name]
-        if previous is not unset and value == previous:
+        if was_active and previous is not unset and value == previous:
             wave.append(".")
         else:
             wave.append("=")
             data.append(_format_field(name, value, width))
         previous = value
+        was_active = True
     return "".join(wave), data
 
 

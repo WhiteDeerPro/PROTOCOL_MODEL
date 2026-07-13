@@ -6,8 +6,8 @@ from protocol_model.protocols.apb import apb_report_html
 def trace_dot(trace, *, title: str, fault_rule: str | None = None) -> str:
     lines = [
         "digraph apb_trace {",
-        '  rankdir="LR";',
-        f'  graph [bgcolor="white", labelloc="t", label="{title}"];',
+        '  rankdir="TB";',
+        f'  graph [bgcolor="white", labelloc="t", newrank=true, nodesep=0.35, ranksep=0.55, splines=polyline, label="{title}"];',
         '  node [shape=box, style="rounded,filled", fontname="monospace"];',
     ]
     previous_addr = None
@@ -22,7 +22,10 @@ def trace_dot(trace, *, title: str, fault_rule: str | None = None) -> str:
         label = f"cycle {index}\\n{phase}\\nPADDR=0x{sample.paddr:x}"
         lines.append(f'  s{index} [fillcolor="#e2e8f0", label="{label}"];')
         if index:
-            lines.append(f'  s{index - 1} -> s{index} [color="#94a3b8"];')
+            constraint = "false" if index % 4 else "true"
+            lines.append(
+                f'  s{index - 1} -> s{index} [color="#94a3b8", constraint={constraint}];'
+            )
         if sample.psel:
             if (
                 fault_index is None
@@ -33,6 +36,15 @@ def trace_dot(trace, *, title: str, fault_rule: str | None = None) -> str:
             previous_addr = sample.paddr
         else:
             previous_addr = None
+    for row_index, start in enumerate(range(0, len(trace.samples), 4)):
+        indices = list(range(start, min(start + 4, len(trace.samples))))
+        lines.append("  { rank=same; " + "; ".join(f"s{index}" for index in indices) + "; }")
+        order = indices if row_index % 2 == 0 else list(reversed(indices))
+        if len(order) > 1:
+            lines.append(
+                "  " + " -> ".join(f"s{index}" for index in order)
+                + " [style=invis, weight=100];"
+            )
     if fault_rule is not None:
         index = fault_index if fault_index is not None else len(trace.samples) - 1
         rule = fault_rule.replace('"', '\\"')

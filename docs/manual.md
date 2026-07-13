@@ -25,7 +25,7 @@ raw pin samples
 protocol monitor
     │  successful handshakes and phase transitions
     ▼
-canonical events ──► obligations and causal edges ──► verdict + evidence
+canonical events ──► obligations and causal edges ──► verdict + report
     ▲                                                    │
     │                                                    ▼
 VirtualDut ◄──────────── verification Project ─── waveform / graph / HTML
@@ -129,22 +129,24 @@ sudo apt-get install graphviz
   --sim-dir out/prj_axi4_read_interleave/long
 ```
 
-首次运行也可以使用仓库根目录的 `./scripts/quickstart.sh`。它准备缺失的本地依赖、运行完整
-实验集并生成 `out/index.html`。单个 Project 的一次运行仍只有一个 bundle；合法流和负例是
+`run-all` 会运行完整 Project 集并生成 `out/index.html`。单个 Project 的一次运行仍只有一个 bundle；合法流和负例是
 bundle 内的多个 case，输出在 `cases/<case>/`，由根目录的 `report.html` 和 `manifest.json`
 统一索引。
 
-默认输出位置：
+单独运行命令的默认输出位置：
 
 ```text
-out/prj_ready_valid_sink/01/report.html
-out/prj_apb_compare/01/report.html
-out/prj_axi4_read_bridge/01/report.html
-out/prj_axi4_read_interleave/01/report.html
-out/prj_axi4_scenarios/01/report.html
+protocol_model/projects/prj_ready_valid_sink/out/01/report.html
+protocol_model/projects/prj_apb_compare/out/01/report.html
+protocol_model/projects/prj_axi4_read_bridge/out/01/report.html
+protocol_model/projects/prj_axi4_read_interleave/out/01/report.html
+protocol_model/projects/prj_axi4_scenarios/out/01/report.html
 ```
 
-`out/` 是运行产物，未被 Git 跟踪，可删除后重新生成。每次运行至少生成 `manifest.json`、
+每个 Project 也提供本地 `run.sh`，例如 `./protocol_model/projects/prj_axi4_scenarios/run.sh`。
+`run-all` 的结果汇总在仓库根 `out/<project>/01/`，并由 `out/index.html` 索引。
+
+这些 `out/` 都是运行结果，未被 Git 跟踪，可删除后重新生成。每次运行至少生成 `manifest.json`、
 `constraints.json`、`constraints.md` 和 `report.html`；各 case 的 `trace.json` 与 SVG 放在
 `cases/<case>/`，可视化源文件放在 `sources/cases/<case>/`。需要保存到别处时：
 
@@ -163,12 +165,12 @@ out/prj_axi4_scenarios/01/report.html
 .venv/bin/python -m protocol_model apb --transactions 1
 ```
 
-已有 Project 的已确认图像和长 trace 示例见[可执行实验图册](experiments.md)。
+全部 Project 的图表由 `run-all` 汇总到 `out/index.html`。
 
 `axi-read-interleave` 的运行目录包含 HTML/Markdown 约束报告和共享 `network.svg`；legal 与
 四个 negative case 分别在 `cases/<case>/` 中保存 `waveform.svg`、`causality.svg` 和 trace。
 
-## 5. 如何读取证据
+## 5. 如何阅读运行结果
 
 ### 5.1 波形图
 
@@ -190,7 +192,7 @@ out/prj_axi4_scenarios/01/report.html
 
 因果边不是单纯的屏幕先后顺序，也不是总线信号的物理布线。
 
-### 5.4 违规证据
+### 5.4 违规详情
 
 一个有效的负例只破坏一条目标规则。例如 ready-valid 负例保持 `VALID`，但在 `READY=0`
 期间改变 payload；报告应能指向 payload-stability 规则，而不是产生模糊的总失败。
@@ -225,8 +227,7 @@ write response obligation、部分 per-ID ordering、`WLAST`/`RLAST`、burst 地
 读交织实验位于独立的 `prj_axi4_read_interleave` Project。它从基础 AXI4 `ProtocolSpec`
 派生 read-only 约束，只开放 ID 1/2，将 `ARLOCK/ARCACHE/ARPROT/ARQOS/ARREGION` 绑零，
 并要求 `AW/W/B` 保持 quiet。输入 VirtualDut 发出两个 AR，输出 VirtualDut 交织生成 R beat；
-不同 ID 可以交织，相同 ID 必须完成最老的 pending burst。详细规则与缺口见
-[AXI4 读交织约束报告](axi4_read_interleaving_report.md)。
+不同 ID 可以交织，相同 ID 必须完成最老的 pending burst。
 
 `prj_axi4_scenarios` 不经过 bridge，只连接 manager source、AXI4 ProtocolInstance 和
 subordinate responder。它批量覆盖普通 full-width、aligned 事务的 read/write、ID ordering、
@@ -234,26 +235,16 @@ subordinate responder。它批量覆盖普通 full-width、aligned 事务的 rea
 `AxLOCK=0`、`AxCACHE=0`，并暂不测试 atomic/exclusive、cache 属性语义及 narrow/unaligned
 传输。
 
-它尚未涵盖 AXI exclusive、完整 USER/capability 语义、完整跨 ID ordering、真实 arbitration
-和外部 trace 文件解析。模型验证通过只表示这段 trace 符合已实现的规则，不表示已覆盖整份
-AXI 规范。
+当前场景集没有安排 exclusive、cache 属性和 narrow transfer 的专门测试例。这不表示建模方法
+无法表达它们：Project 可以用 event domain、profile 与事务语义组件继续添加相应约束。模型验证
+通过只表示这段 trace 符合已实现并启用的规则，不表示已覆盖整份 AXI 规范。
 
-## 7. VirtualDut 方法
+## 7. VirtualDut 当前定位
 
-`virtual_dut/` 提供三种最小构造块：
-
-| 构造块 | 行为 |
-|---|---|
-| `ScriptedSource` | 按设定顺序发射输入动作。 |
-| `Sink` | 消费已被协议接受的动作，可保留记录用于诊断。 |
-| `FunctionResponder` | 用 Python 函数将一个输入动作映射为零个或多个输出动作。 |
-
-一个 VirtualDut 可以是简单终端，也可以是具有功能状态的 reference model。例如测试 FPU 时，
-可将 SoftFloat、C/C++ 模型或 Python 位精确模型包装成 responder；Project 负责把协议事件
-转换为 FPU 请求，并把 DUT 响应与参考结果按 tag 或因果关系对齐。
-
-不要把 handshake、burst 或 port ownership 规则藏进 reference function；这些属于 Protocol。
-也不要把具体 Project 的临时 bridge 立即放进公共库；只有确实复用后才提升。
+现有 Project 中的 source、sink、bridge 和 responder 是构造协议网络场景所需的本地节点，并不
+构成一套已经约定好的 VirtualDut 构造方法。这个项目关注网络与总线协议建模，不要求 VirtualDut
+发展为完整功能模型或完整形式验证对象。只有多个 Project 出现相同端点需求后，才考虑提炼公共
+接口；handshake、burst 和端口所有权等通信规则仍属于 Protocol。
 
 ## 8. 新增协议或 Project 的建议流程
 
@@ -267,18 +258,13 @@ AXI 规范。
 
 Project 的规范组网顺序是：引用 `protocols/` 中的基础 `ProtocolSpec`；创建一个或多个具名
 `ProtocolInstance`；可选地用 `ProtocolDerivation` 添加本例约束；连接 VirtualDut；最后运行
-trace 并发布证据。Project 不应在自身或 CLI 中重新定义 AXI/APB/ready-valid 语义。
+trace 并生成报告。Project 不应在自身或 CLI 中重新定义 AXI/APB/ready-valid 语义。
 
 Project 私域 profile 和 `ProtocolInstance` 的所有权、命名与禁止共享规则见
 [ProtocolInstance 管理](architecture/protocol-instance-management.md)；运行报告的目录契约见
-[运行证据管理](architecture/evidence-management.md)。
+[Project 与运行结果管理](architecture/run-output-management.md)。
 
-## 9. 已知限制与路线
+## 9. 后续工作
 
-当前没有 VCD/FSDB/UVM adapter，因此还不能直接读取真实 DUT 仿真数据库。也没有通用网络
-elaboration、动态仲裁、公平性/死锁分析、可配置延迟/backpressure 以及具有读写历史的
-memory VirtualDut。
-
-下一步优先级是：定义 canonical event JSON 与外部 trace adapter；为 VirtualDut 增加
-memory/register state 与明确合同；在多个 Project 出现相同需要后，再提炼通用 topology、
-arbitration 和资源分析机制。
+- 增加通用网络 elaboration、拓扑路由、动态仲裁、公平性/死锁分析和可配置 latency/backpressure；
+- 增加 VCD/FSDB/UVM adapter，使模型能够接收真实 DUT 的仿真结果。

@@ -1,5 +1,5 @@
 {
-  "name": "protocol-model-evidence",
+  "name": "protocol-model-visualization",
   "private": true,
   "devDependencies": {
     "wavedrom": "3.6.2"

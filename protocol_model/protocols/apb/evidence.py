@@ -29,18 +29,39 @@ def _bus_lane(samples, getter, active, formatter):
     data = []
     unset = object()
     previous = unset
+    was_active = False
     for sample in samples:
         if not active(sample):
-            wave.append("." if wave else "0")
+            wave.append("x" if was_active or not wave else ".")
+            previous = unset
+            was_active = False
             continue
         value = getter(sample)
-        if previous is not unset and value == previous:
+        if was_active and previous is not unset and value == previous:
             wave.append(".")
         else:
             wave.append("=")
             data.append(formatter(value))
         previous = value
+        was_active = True
     return {"wave": "".join(wave), "data": data}
+
+
+def _qualified_bit_wave(samples, getter, active) -> str:
+    result = []
+    previous = None
+    was_active = False
+    for sample in samples:
+        if not active(sample):
+            result.append("x" if was_active or not result else ".")
+            previous = None
+            was_active = False
+            continue
+        symbol = "1" if getter(sample) else "0"
+        result.append("." if was_active and symbol == previous else symbol)
+        previous = symbol
+        was_active = True
+    return "".join(result)
 
 
 def _phase(sample: ApbPinSample) -> str:
@@ -90,11 +111,23 @@ def apb_to_wavejson(
         {"name": "PSEL", "wave": _bit_wave(sample.psel for sample in samples)},
         {"name": "PENABLE", "wave": _bit_wave(sample.penable for sample in samples)},
         {"name": "PREADY", "wave": _bit_wave(sample.pready for sample in samples)},
-        {"name": "PWRITE", "wave": _bit_wave(sample.pwrite for sample in samples)},
+        {
+            "name": "PWRITE",
+            "wave": _qualified_bit_wave(
+                samples, lambda sample: sample.pwrite, active_request
+            ),
+        },
         {"name": "PADDR", **addr},
         {"name": "PWDATA", **wdata},
         {"name": "PRDATA", **rdata},
-        {"name": "PSLVERR", "wave": _bit_wave(sample.pslverr for sample in samples)},
+        {
+            "name": "PSLVERR",
+            "wave": _qualified_bit_wave(
+                samples,
+                lambda sample: sample.pslverr,
+                lambda sample: sample.psel and sample.penable and sample.pready,
+            ),
+        },
     ]
     if config.version == 4:
         strb = _bus_lane(

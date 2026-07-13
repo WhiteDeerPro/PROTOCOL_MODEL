@@ -42,7 +42,7 @@ class ArtifactRecord:
 
 def default_run_directory(project: str, run_id: str = "01") -> Path:
     repository = Path(__file__).resolve().parents[2]
-    return repository / "out" / project / run_id
+    return repository / "protocol_model" / "projects" / project / "out" / run_id
 
 
 def _json_value(value):
@@ -165,9 +165,9 @@ class ArtifactBundle:
         self.register(
             f"{kind}_source", source, "text/vnd.graphviz", case=case
         )
-        subprocess.run(
-            ("dot", "-Tsvg", str(source), "-o", str(target)), check=True
-        )
+        command = ["dot", "-Tsvg"]
+        command.extend((str(source), "-o", str(target)))
+        subprocess.run(command, check=True)
         return self.register(kind, target, "image/svg+xml", case=case)
 
     def render_wave(

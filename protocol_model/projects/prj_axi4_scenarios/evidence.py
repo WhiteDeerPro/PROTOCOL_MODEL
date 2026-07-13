@@ -24,8 +24,8 @@ def topology_dot(snapshot) -> str:
 def scenario_dot(result) -> str:
     lines = [
         "digraph axi_scenario {",
-        '  rankdir="LR";',
-        f'  graph [bgcolor="white", labelloc="t", label="{result.case.name}"];',
+        '  rankdir="TB";',
+        f'  graph [bgcolor="white", labelloc="t", newrank=true, nodesep=0.35, ranksep=0.55, splines=polyline, label="{result.case.name}"];',
         '  node [shape=box, style="rounded,filled", fontname="monospace"];',
     ]
     attempts = [
@@ -45,10 +45,24 @@ def scenario_dot(result) -> str:
             f'  n{index} [fillcolor="{color}", label="cycle {cycle} {channel}\\n{event.kind} id={event.key}\\n{payload}"];'
         )
         if index:
-            lines.append(f'  n{index - 1} -> n{index} [color="#94a3b8"];')
+            constraint = "false" if index % 4 else "true"
+            lines.append(
+                f'  n{index - 1} -> n{index} [color="#94a3b8", constraint={constraint}];'
+            )
+    for row_index, start in enumerate(range(0, len(attempts), 4)):
+        indices = list(range(start, min(start + 4, len(attempts))))
+        lines.append("  { rank=same; " + "; ".join(f"n{index}" for index in indices) + "; }")
+        order = indices if row_index % 2 == 0 else list(reversed(indices))
+        if len(order) > 1:
+            lines.append(
+                "  " + " -> ".join(f"n{index}" for index in order)
+                + " [style=invis, weight=100];"
+            )
     for before, after in result.causal_edges:
         if before < len(attempts) and after < len(attempts):
-            lines.append(f'  n{before} -> n{after} [color="#2563eb", penwidth=2];')
+            lines.append(
+                f'  n{before} -> n{after} [color="#2563eb", penwidth=2, constraint=false];'
+            )
     if not attempts:
         lines.append('  cycle [fillcolor="#e2e8f0", label="signal-level attempt"];')
         source = "cycle"

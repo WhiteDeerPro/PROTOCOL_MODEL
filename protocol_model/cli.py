@@ -4,23 +4,15 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
-import json
-from pathlib import Path
 from random import Random
-import subprocess
 from typing import Sequence
 
 from protocol_model import __version__
 from protocol_model.patterns import ReadyValidSample, ResetSample
 from protocol_model.evidence import (
     format_cardinality_run,
-    format_correlated_dot,
     format_correlated_run,
-    format_execution_dot,
     format_ready_valid_run,
-    session_report_html,
-    synthesize_axi_waveform,
-    to_wavejson,
 )
 from protocol_model.projects.prj_axi4_read_bridge import (
     DEFAULT_SIM_DIR as AXI_READ_BRIDGE_SIM_DIR,
@@ -41,7 +33,6 @@ from protocol_model.projects.prj_apb_compare import (
 )
 from protocol_model.protocols.axi4 import (
     Axi4Cycle,
-    Axi4RandomScheduler,
     Axi4SignalSession,
     byte_lane_mask,
     build_axi4_spec,
@@ -137,99 +128,6 @@ def _write_transaction(violation: str, seed: int):
     elif violation == "b-before-data":
         events = [events[0], events[-1], *events[1:-1]]
     return events, monitor.run(events), monitor
-
-
-def _write_graph(directory: str, events, monitor) -> tuple[Path, Path]:
-    target = Path(directory)
-    target.mkdir(parents=True, exist_ok=True)
-    dot_path = target / "axi4_write.dot"
-    svg_path = target / "axi4_write.svg"
-    dot_path.write_text(
-        format_correlated_dot(
-            events,
-            descriptor_kind=monitor.descriptor.kind,
-            data_kind=monitor.data.kind,
-            completion_kind=monitor.completion.kind,
-            title="AXI4 write causality",
-        ),
-        encoding="utf-8",
-    )
-    subprocess.run(
-        ("dot", "-Tsvg", str(dot_path), "-o", str(svg_path)), check=True
-    )
-    return dot_path, svg_path
-
-
-def _session_summary(trace, verdict: str, cycles: int) -> str:
-    incoming = {index: [] for index in range(len(trace.events))}
-    for before, after in trace.causal_graph.edges:
-        incoming[after].append(before)
-    step_of = {
-        event_index: step_index
-        for step_index, step in enumerate(trace.steps)
-        for event_index in step
-    }
-    lines = [
-        "UNIFIED AXI4 SESSION",
-        f"  events={len(trace.events)} steps={len(trace.steps)} "
-        f"max_parallel={max(map(len, trace.steps), default=0)} "
-        f"causal_edges={len(trace.causal_graph.edges)} cycles={cycles}",
-        f"  waveform_replay={verdict}",
-        "",
-        "EVENT / DIRECT PREDECESSORS",
-    ]
-    for index, event in enumerate(trace.events):
-        predecessors = ",".join(str(item) for item in sorted(incoming[index])) or "-"
-        lines.append(
-            f"  [{index:02d}] step={step_of[index]:02d} pred={predecessors:<7} {event.short()}"
-        )
-    return "\n".join(lines)
-
-
-def _write_session_artifacts(
-    directory: str, trace, wavejson, spec, replay_verdict: str, cycle_count: int
-) -> tuple[Path, ...]:
-    target = Path(directory)
-    target.mkdir(parents=True, exist_ok=True)
-    wavejson_path = target / "axi4_session.wave.json"
-    wave_svg_path = target / "axi4_session.wave.svg"
-    graph_dot_path = target / "axi4_session.causality.dot"
-    graph_svg_path = target / "axi4_session.causality.svg"
-    report_path = target / "index.html"
-    wavejson_path.write_text(json.dumps(wavejson, indent=2), encoding="utf-8")
-    rendered = subprocess.run(
-        ("node_modules/.bin/wavedrom", "--input", str(wavejson_path)),
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    wave_svg_path.write_text(rendered.stdout, encoding="utf-8")
-    graph_dot_path.write_text(
-        format_execution_dot(
-            trace,
-            title="AXI4 unified session causality",
-            address_width=int(spec.parameters["address_width"]),
-            data_width=int(spec.parameters["data_width"]),
-        ),
-        encoding="utf-8",
-    )
-    subprocess.run(
-        ("dot", "-Tsvg", str(graph_dot_path), "-o", str(graph_svg_path)),
-        check=True,
-    )
-    report_path.write_text(
-        session_report_html(
-            spec,
-            event_count=len(trace.events),
-            edge_count=len(trace.causal_graph.edges),
-            cycle_count=cycle_count,
-            step_count=len(trace.steps),
-            max_parallel=max(map(len, trace.steps), default=0),
-            replay_verdict=replay_verdict,
-        ),
-        encoding="utf-8",
-    )
-    return wavejson_path, wave_svg_path, graph_dot_path, graph_svg_path, report_path
 
 
 def _axi_cycle(spec, cycle, *, active=None, reset=False):
@@ -333,19 +231,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--violation", choices=("none", "early-wlast", "b-before-data"), default="none"
     )
     write.add_argument("--seed", type=int, default=7)
-    write.add_argument(
-        "--graph-dir", help="write an organized Graphviz DOT and SVG pair"
-    )
-    session = subparsers.add_parser(
-        "session", help="generate, lower, replay, and visualize one unified AXI4 session"
-    )
-    session.add_argument("--reads", type=int, default=2)
-    session.add_argument("--writes", type=int, default=2)
-    session.add_argument("--max-beats", type=int, default=4)
-    session.add_argument("--seed", type=int, default=19)
-    session.add_argument(
-        "--artifacts-dir", default="artifacts/axi4_session"
-    )
     constraints = subparsers.add_parser(
         "constraint-witness", help="show minimal witnesses for newly modeled AXI rules"
     )
@@ -362,10 +247,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     apb.add_argument("--seed", type=int, default=41)
     apb.add_argument(
         "--sim-dir",
-        "--artifacts-dir",
-        dest="sim_dir",
         default=str(APB_COMPARE_SIM_DIR),
-        help="run bundle directory (--artifacts-dir is a compatibility alias)",
+        help="run bundle directory",
     )
     network = subparsers.add_parser(
         "axi-read-network", help="run the two-link AXI read bridge experiment"
@@ -406,33 +289,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 completion_kind=monitor.completion.kind,
             )
         )
-        if args.graph_dir:
-            dot_path, svg_path = _write_graph(args.graph_dir, events, monitor)
-            print(f"\nGRAPHVIZ\n  dot={dot_path}\n  svg={svg_path}")
         return 1 if result.violations else 0
-    if args.command == "session":
-        scheduler = Axi4RandomScheduler(
-            seed=args.seed, max_beats=args.max_beats
-        )
-        trace = scheduler.generate(reads=args.reads, writes=args.writes)
-        waveform = synthesize_axi_waveform(
-            scheduler.spec, trace, seed=args.seed + 1
-        )
-        replay = scheduler.spec.open_session().run(waveform.transfers)
-        cycles = len(next(iter(waveform.samples.values())))
-        print(_session_summary(trace, replay.verdict.value, cycles))
-        paths = _write_session_artifacts(
-            args.artifacts_dir,
-            trace,
-            to_wavejson(waveform, title="AXI4 unified random session"),
-            scheduler.spec,
-            replay.verdict.value,
-            cycles,
-        )
-        print("\nARTIFACTS")
-        for path in paths:
-            print(f"  {path}")
-        return 0 if replay.verdict.value == "PASS" else 1
     if args.command == "constraint-witness":
         print(_constraint_witness(args.seed))
         return 0

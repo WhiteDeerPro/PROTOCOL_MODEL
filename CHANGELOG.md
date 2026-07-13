@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased — repository hygiene
+
+- 删除旧的 `docs/images/` 手工 SVG 快照、早期设计草稿和 Project 内遗留运行目录。
+- 删除绕过 `ArtifactBundle` 的 CLI 文件输出；运行证据只允许进入带 manifest 的 `out/` bundle。
+
 ## 0.1.1 — project workflow and evidence management (2026-07-13)
 
 本版本把协议定义、Project 私域约束、网络实例和运行证据整理为一条可审计流程。

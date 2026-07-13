@@ -1,8 +1,6 @@
 .venv/
 node_modules/
-artifacts/
 out/
-sims/
 __pycache__/
 *.py[cod]
 .agents/

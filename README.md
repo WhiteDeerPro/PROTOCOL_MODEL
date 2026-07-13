@@ -59,68 +59,6 @@ domain/schema → observation automaton → transaction relation → ProtocolSpe
 
 因此 AXI4、APB 等只是这条通用建模流程在具体协议上的末端演示，而不是框架的起点。
 
-## 演示例子：从一次运行看懂模型
-
-下面的 ready-valid、AXI4 和 APB 不是建模框架本身，而是上述流程实行到末端后形成的
-可执行演示。图片是 Project 生成的稳定 SVG 快照，不是 RTL 波形证明；它们帮助快速理解
-“采样如何变成协议事件、事件如何形成因果关系、约束如何给出 verdict”。
-
-### 演示一：ready-valid Source → Protocol → Sink
-
-运行 `.venv/bin/python -m protocol_model ready-valid-sink`。合法场景先经历 backpressure，
-payload 保持稳定后完成握手；负例只改变 stall 期间的 payload，因此能够精确归因到
-`payload_stability` 规则。
-
-<table>
-  <tr>
-    <td width="42%" valign="top">
-      <strong>验证网络</strong><br>
-      <img src="docs/images/ready-valid-topology.svg" alt="Ready-valid Source Protocol Sink network">
-    </td>
-    <td width="58%" valign="top">
-      <strong>合法波形：stall 后完成传输</strong><br>
-      <img src="docs/images/ready-valid-legal-wave.svg" alt="Legal ready-valid waveform">
-    </td>
-  </tr>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>负例波形：stall 期间 payload 改变</strong><br>
-      <img src="docs/images/ready-valid-mutation-wave.svg" alt="Ready-valid payload mutation waveform">
-    </td>
-    <td width="50%" valign="top">
-      <strong>违规因果链：规则定位</strong><br>
-      <img src="docs/images/ready-valid-mutation-events.svg" alt="Ready-valid mutation causal graph">
-    </td>
-  </tr>
-</table>
-
-### 演示二：双链路 AXI4 read bridge
-
-运行 `.venv/bin/python -m protocol_model axi-read-network`。请求先被 AXI-A 接受，经 bridge
-转发到 AXI-B；响应沿相反方向返回。因果图保留上下游事件的对应关系，两张波形则分别展示
-两条协议实例的采样视角。
-
-<p align="center">
-  <strong>端到端请求/响应因果链</strong><br>
-  <img src="docs/images/axi4-read-bridge-causality.svg" alt="AXI4 read bridge causal chain" width="820">
-</p>
-
-<table>
-  <tr>
-    <td width="50%" valign="top">
-      <strong>上游 AXI-A</strong><br>
-      <img src="docs/images/axi4-read-bridge-upstream-wave.svg" alt="AXI4 upstream waveform">
-    </td>
-    <td width="50%" valign="top">
-      <strong>下游 AXI-B</strong><br>
-      <img src="docs/images/axi4-read-bridge-downstream-wave.svg" alt="AXI4 downstream waveform">
-    </td>
-  </tr>
-</table>
-
-APB3/APB4 对比和 AXI4 跨 ID 读交织也是同样的演示 Project；运行后可从
-`out/<project>/01/report.html` 进入完整报告，并查看约束表、网络图、波形和因果图。
-
 ## 统一的 Project 组网方式
 
 所有验证例子遵循同一条路径：Project 从 `protocols/` 引用基础协议，通过
@@ -209,7 +147,7 @@ npm ci
 - [AXI4 读交织约束报告](docs/axi4_read_interleaving_report.md)：ID、quiet 与约束缺口；
 - [ProtocolInstance 管理](docs/architecture/protocol-instance-management.md)：基础协议引用、私域 profile 与实例所有权；
 - [运行证据管理](docs/architecture/evidence-management.md)：输出目录、manifest、约束和文档纪律；
-- [文档入口](docs/README.md)：当前文档与历史设计记录的索引；
+- [文档入口](docs/README.md)：当前有效文档的索引；
 - [CHANGELOG](CHANGELOG.md)：版本变更；
 - [MIT License](LICENSE)：使用许可。
 

@@ -12,7 +12,6 @@ from .wavedrom import (
     synthesize_axi_waveform,
     to_wavejson,
 )
-from .report import session_report_html
 from .bundle import (
     ArtifactBundle,
     ConstraintEvidence,
@@ -34,5 +33,4 @@ __all__ = [
     "synthesize_axi_network_timeline",
     "to_wavejson",
     "VirtualWaveform",
-    "session_report_html",
 ]

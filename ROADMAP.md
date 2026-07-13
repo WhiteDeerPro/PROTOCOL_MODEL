@@ -26,7 +26,8 @@
 - [x] 两个独立 AXI link state；
 - [x] Project 内 global provenance 和因果图；
 - [x] expected violation 被判为 CHECKED，而非 FAILED；
-- [ ] 多 case plan、case selection、project summary；
+- [x] 多 case plan、case artifact 与 project summary；
+- [ ] case selection；
 - [ ] 通用但不过早抽象的 topology elaboration。
 
 ## M3：VirtualDut

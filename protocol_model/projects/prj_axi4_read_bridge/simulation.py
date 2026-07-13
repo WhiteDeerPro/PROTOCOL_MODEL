@@ -11,11 +11,13 @@ from protocol_model.evidence import (
     constraints_from_instances,
     default_run_directory,
     synthesize_axi_network_timeline,
+    synthesize_axi_attempt_waveform,
     to_wavejson,
 )
 
 from .evidence import (
     axi_read_chain_dot,
+    axi_fault_dot,
     axi_read_chain_report_html,
     axi_read_network_dot,
 )
@@ -52,7 +54,10 @@ def build_simulation(
 
     bundle = ArtifactBundle(project.name, target)
     bundle.render_dot(
-        "causality", axi_read_chain_dot(legal), kind="causality"
+        "causality",
+        axi_read_chain_dot(legal),
+        kind="causality",
+        case="legal_4kb_edge",
     )
     bundle.render_dot(
         "network", axi_read_network_dot(project.snapshot()), kind="network"
@@ -73,7 +78,29 @@ def build_simulation(
                 hide_inactive_channels=True,
             ),
             kind=f"waveform_{stem}",
+            case="legal_4kb_edge",
         )
+    if rejected.attempted_event is None or rejected.fault is None:
+        raise RuntimeError("crossing_4kb did not retain its rejected input")
+    rejected_waveform = synthesize_axi_attempt_waveform(
+        project.spec_a, rejected.attempted_event
+    )
+    bundle.render_wave(
+        "waveform",
+        to_wavejson(
+            rejected_waveform,
+            title="Negative AXI4 AR burst crossing 4KB",
+            hide_inactive_channels=True,
+        ),
+        kind="waveform",
+        case="crossing_4kb",
+    )
+    bundle.render_dot(
+        "causality",
+        axi_fault_dot(rejected, title="4KB boundary violation"),
+        kind="causality",
+        case="crossing_4kb",
+    )
     bundle.write_json(
         "trace.json",
         {
@@ -99,6 +126,17 @@ def build_simulation(
             ],
         },
         kind="trace",
+        case="legal_4kb_edge",
+    )
+    bundle.write_json(
+        "trace.json",
+        {
+            "attempted_event": rejected.attempted_event,
+            "fault": rejected.fault,
+            "milestones": rejected.milestones,
+        },
+        kind="trace",
+        case="crossing_4kb",
     )
     assert project.link_a_protocol is not None
     assert project.link_b_protocol is not None

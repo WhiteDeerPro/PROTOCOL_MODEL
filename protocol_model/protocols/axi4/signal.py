@@ -141,7 +141,10 @@ class Axi4SignalSession(
             )
 
         protocol_state = state.protocol_state
-        if transfers and not self.protocol.can_cooccur(protocol_state, tuple(transfers)):
+        if (
+            len(transfers) > 1
+            and not self.protocol.can_cooccur(protocol_state, tuple(transfers))
+        ):
             return self._fault(
                 state,
                 "cycle_conflict",

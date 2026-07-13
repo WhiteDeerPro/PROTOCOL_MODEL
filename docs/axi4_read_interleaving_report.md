@@ -10,9 +10,9 @@
 python3 -m protocol_model axi-read-interleave
 ```
 
-报告输出到 `out/prj_axi4_read_interleave/01/report.html`。同目录还会
-生成 `waveform.svg`（AXI 波形）、`network.svg`（两 VirtualDut 网络）和
-`causality.svg`（两条 per-ID 因果链）。Project
+报告输出到 `out/prj_axi4_read_interleave/01/report.html`。run 根目录生成
+`network.svg`（两 VirtualDut 网络）；legal 与四个 negative case 各自在 `cases/<case>/`
+生成 `waveform.svg`、`causality.svg` 和 `trace.json`。Project
 先提取基础 AXI4 `ProtocolSpec`，再派生一份实验专用 spec；不会把场景约束写回通用协议。
 协议层负责 ID 位宽、请求/响应匹配、同 ID 顺序和 burst 拍序；Project profile 负责本次
 实验只使用 ID 1/2、无关 sideband 绑零、写通道 quiet。

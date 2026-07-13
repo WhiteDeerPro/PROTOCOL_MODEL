@@ -4,6 +4,13 @@
 
 - 删除旧的 `docs/images/` 手工 SVG 快照、早期设计草稿和 Project 内遗留运行目录。
 - 删除绕过 `ArtifactBundle` 的 CLI 文件输出；运行证据只允许进入带 manifest 的 `out/` bundle。
+- 将 legal/negative evidence 明确组织为同一 run bundle 下的 case；每个 case 生成 trace、WaveDrom
+  波形和 Graphviz 因果图，并由 manifest v2 与 Project 总报告关联。
+- 新增 `run-all`、`scripts/quickstart.sh` 和 `out/index.html` 统一实验入口。
+- 新增无 bridge 的 `prj_axi4_scenarios`，由 manager source 与 subordinate responder 两个
+  VirtualDut 批量执行 37 个 full-width AXI4 read/write/ordering/concurrency/reset case。
+- 单 transfer 信号检查现在保留底层精确 fault；`cycle_conflict` 仅用于同周期多 transfer
+  的非交换组合。
 
 ## 0.1.1 — project workflow and evidence management (2026-07-13)
 

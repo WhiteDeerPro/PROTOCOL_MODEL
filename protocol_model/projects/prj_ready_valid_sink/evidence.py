@@ -142,12 +142,14 @@ table{{border-collapse:collapse;background:white}}td,th{{padding:8px 12px;border
 <h1>{escape(legal_project.name)}</h1>
 <h2>Components</h2><table><tr><th>Name</th><th>Category</th><th>Implementation</th><th>Role</th></tr>{component_rows}</table>
 <h2>Lifecycle</h2><table><tr><th>Phase</th><th>Summary</th></tr>{lifecycle_rows}</table>
-<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a> · <a href="trace.json">Trace data</a></p>
+<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a></p>
 <h2>Verification plan</h2><object data="network.svg" type="image/svg+xml"></object>
-<h2>Legal waveform</h2><object data="waveform.legal.svg" type="image/svg+xml"></object>
-<h2>Legal event causality</h2><object data="causality.legal.svg" type="image/svg+xml"></object>
+<h2>Legal case</h2><p><a href="cases/legal_stall/trace.json">Trace data</a></p>
+<object data="cases/legal_stall/waveform.svg" type="image/svg+xml"></object>
+<object data="cases/legal_stall/causality.svg" type="image/svg+xml"></object>
 <h2>Negative waveform</h2><p>Expected: <code>{escape(mutation.fault.rule if mutation.fault else 'NO FAULT')}</code>;
 Sink received {mutation.sink_state.received} transfers; Project phase {mutation_project.phase.value}.</p>
-<object data="waveform.mutation.svg" type="image/svg+xml"></object>
-<h2>Negative event causality</h2><object data="causality.mutation.svg" type="image/svg+xml"></object>
+<p><a href="cases/changed_while_stalled/trace.json">Trace data</a></p>
+<object data="cases/changed_while_stalled/waveform.svg" type="image/svg+xml"></object>
+<h2>Negative event causality</h2><object data="cases/changed_while_stalled/causality.svg" type="image/svg+xml"></object>
 </body></html>"""

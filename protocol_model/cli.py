@@ -31,6 +31,11 @@ from protocol_model.projects.prj_apb_compare import (
     DEFAULT_SIM_DIR as APB_COMPARE_SIM_DIR,
     build_simulation as build_apb_comparison_simulation,
 )
+from protocol_model.projects.prj_axi4_scenarios import (
+    DEFAULT_SIM_DIR as AXI_SCENARIOS_SIM_DIR,
+    build_simulation as build_axi_scenarios_simulation,
+)
+from protocol_model.projects.suite import run_suite
 from protocol_model.protocols.axi4 import (
     Axi4Cycle,
     Axi4SignalSession,
@@ -267,6 +272,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     ready_valid_sink.add_argument(
         "--sim-dir", default=str(READY_VALID_SINK_SIM_DIR)
     )
+    axi_scenarios = subparsers.add_parser(
+        "axi-scenarios",
+        help="run the full-width AXI4 source/responder scenario batch",
+    )
+    axi_scenarios.add_argument("--sim-dir", default=str(AXI_SCENARIOS_SIM_DIR))
+    run_all = subparsers.add_parser(
+        "run-all", help="run every maintained Project and write out/index.html"
+    )
+    run_all.add_argument("--out-dir", default="out")
+    run_all.add_argument("--run-id", default="01")
     args = parser.parse_args(argv)
 
     if args.command == "waveform":
@@ -370,4 +385,30 @@ def main(argv: Sequence[str] | None = None) -> int:
             and mutation.fault is not None
             and mutation.sink_state.received == 0
         ) else 1
+    if args.command == "axi-scenarios":
+        simulation = build_axi_scenarios_simulation(args.sim_dir)
+        print("AXI4 SOURCE / RESPONDER SCENARIO BATCH")
+        print(
+            f"  verdict={simulation.run.verdict.value} "
+            f"cases={len(simulation.run.results)}"
+        )
+        for category in ("read", "write", "ordering", "concurrency", "reset"):
+            results = [
+                item
+                for item in simulation.run.results
+                if item.case.category == category
+            ]
+            print(
+                f"  {category}: cases={len(results)} "
+                f"matched={sum(item.matched for item in results)}"
+            )
+        print(f"  report={simulation.report}")
+        return 0 if simulation.run.verdict.value == "PASS" else 1
+    if args.command == "run-all":
+        suite = run_suite(args.out_dir, run_id=args.run_id)
+        print("PROTOCOL MODEL EXPERIMENT SUITE")
+        for item in suite.entries:
+            print(f"  {item.project}: {item.verdict} report={item.report}")
+        print(f"  index={suite.index}")
+        return 0 if all(item.verdict == "PASS" for item in suite.entries) else 1
     return 2

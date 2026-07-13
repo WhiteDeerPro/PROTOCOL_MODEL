@@ -9,6 +9,9 @@ from .text import (
 from .wavedrom import (
     VirtualWaveform,
     synthesize_axi_network_timeline,
+    synthesize_axi_attempt_waveform,
+    synthesize_axi_event_sequence_waveform,
+    axi_cycles_to_waveform,
     synthesize_axi_waveform,
     to_wavejson,
 )
@@ -31,6 +34,9 @@ __all__ = [
     "format_ready_valid_run",
     "synthesize_axi_waveform",
     "synthesize_axi_network_timeline",
+    "synthesize_axi_attempt_waveform",
+    "synthesize_axi_event_sequence_waveform",
+    "axi_cycles_to_waveform",
     "to_wavejson",
     "VirtualWaveform",
 ]

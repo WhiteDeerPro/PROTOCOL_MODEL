@@ -18,6 +18,7 @@ from ..lifecycle import ComponentUse, ProjectPhase, VerificationProject
 class ApbComparisonRun:
     verdict: Verdict
     traces: Mapping[int, ApbGeneratedTrace]
+    mutation_trace: ApbGeneratedTrace
     mutation_rule: str
 
     def __post_init__(self) -> None:
@@ -162,4 +163,9 @@ class ApbComparisonProject(VerificationProject):
             if verdict is Verdict.PASS
             else "APB4 mutation was not detected",
         )
-        return ApbComparisonRun(verdict, traces, mutation_rule)
+        return ApbComparisonRun(
+            verdict,
+            traces,
+            ApbGeneratedTrace(tuple(mutated), tuple(mutation.emissions)),
+            mutation_rule,
+        )

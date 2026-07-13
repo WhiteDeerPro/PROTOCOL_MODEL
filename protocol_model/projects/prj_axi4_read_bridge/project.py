@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from random import Random
 
-from protocol_model.core import SemanticFault, Verdict
+from protocol_model.core import CanonicalEvent, SemanticFault, Verdict
 from protocol_model.engine import ExecutionTrace
 from protocol_model.protocols.axi4 import Axi4Config, build_axi4_spec
 from protocol_model.protocols.spec import ProtocolInstance
@@ -30,6 +30,7 @@ class AxiReadNetworkRun:
     trace: ExecutionTrace[LocatedEvent]
     milestones: tuple[NetworkMilestone, ...]
     fault: SemanticFault | None = None
+    attempted_event: CanonicalEvent | None = None
 
 
 @dataclass(frozen=True)
@@ -131,7 +132,13 @@ class AxiReadNetworkProject(VerificationProject):
         accepted_a, ar_a_index, fault = link_a.accept(request)
         if fault is not None:
             milestones.append(NetworkMilestone("rejected_at_link_a", 0, 0, 0))
-            run = AxiReadNetworkRun(Verdict.FAIL, recorder.trace(), tuple(milestones), fault)
+            run = AxiReadNetworkRun(
+                Verdict.FAIL,
+                recorder.trace(),
+                tuple(milestones),
+                fault,
+                request,
+            )
             return self._finish_case(case, run)
         assert accepted_a is not None and ar_a_index is not None
         milestones.append(

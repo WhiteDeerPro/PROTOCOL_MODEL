@@ -155,6 +155,80 @@ def synthesize_axi_network_timeline(
     return VirtualWaveform(frozen, tuple(transfers), _field_widths(spec))
 
 
+def synthesize_axi_attempt_waveform(
+    spec: ProtocolSpec, event: CanonicalEvent
+) -> VirtualWaveform:
+    """Project one attempted transfer, including an event rejected by the spec."""
+
+    return synthesize_axi_event_sequence_waveform(spec, (event,))
+
+
+def synthesize_axi_event_sequence_waveform(
+    spec: ProtocolSpec, events
+) -> VirtualWaveform:
+    """Project canonical attempts without requiring the sequence to be legal."""
+
+    channel_by_kind = {
+        channel.transfer.kind: channel.name for channel in spec.channels.values()
+    }
+    events = tuple(events)
+    unknown = [event.kind for event in events if event.kind not in channel_by_kind]
+    if unknown:
+        raise ValueError(f"event kind {unknown[0]!r} is not an AXI channel transfer")
+    samples = {name: [] for name in spec.channels}
+    for name in spec.channels:
+        samples[name].append(
+            ResetSample(
+                True,
+                ReadyValidSample(0, False, False, clock="aclk", source="attempt"),
+            )
+        )
+    for cycle, event in enumerate(events, start=1):
+        active_name = channel_by_kind[event.kind]
+        for name in spec.channels:
+            active = name == active_name
+            samples[name].append(
+                ResetSample(
+                    False,
+                    ReadyValidSample(
+                        cycle,
+                        active,
+                        active,
+                        event if active else None,
+                        "aclk",
+                        "attempt",
+                    ),
+                )
+            )
+    frozen = {name: tuple(items) for name, items in samples.items()}
+    return VirtualWaveform(frozen, events, _field_widths(spec))
+
+
+def axi_cycles_to_waveform(
+    spec: ProtocolSpec, cycles: tuple[Axi4Cycle, ...]
+) -> VirtualWaveform:
+    """Retain raw signal attempts, including cycles rejected by a profile."""
+
+    samples = {}
+    has_reset_prefix = bool(cycles) and all(
+        wrapped.asserted for wrapped in cycles[0].channels.values()
+    )
+    for name in spec.channels:
+        reset = ResetSample(
+            True,
+            ReadyValidSample(0, False, False, clock="aclk", source="attempt"),
+        )
+        prefix = () if has_reset_prefix else (reset,)
+        samples[name] = (*prefix, *(cycle.channels[name] for cycle in cycles))
+    transfers = tuple(
+        wrapped.observation.event
+        for cycle in cycles
+        for wrapped in cycle.channels.values()
+        if wrapped.observation.valid and wrapped.observation.event is not None
+    )
+    return VirtualWaveform(samples, transfers, _field_widths(spec))
+
+
 def _bit_wave(values) -> str:
     wave = []
     previous = None
@@ -216,6 +290,20 @@ def to_wavejson(
         {"name": "ACLK", "wave": "p" + "." * max(0, length - 1)},
         {"name": "ARESETn", "wave": _bit_wave(not item.asserted for item in first)},
     ]
+    reset_waves = {
+        name: _bit_wave(not item.asserted for item in waveform.samples[name])
+        for name in names
+    }
+    if len(set(reset_waves.values())) > 1:
+        signals.append(
+            [
+                "RESET BY CHANNEL",
+                *(
+                    {"name": f"{name}RESETn", "wave": reset_waves[name]}
+                    for name in names
+                ),
+            ]
+        )
     for name in names:
         channel_samples = waveform.samples[name]
         valid = [item.observation.valid for item in channel_samples]

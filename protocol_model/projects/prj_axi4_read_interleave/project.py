@@ -29,6 +29,8 @@ class ConstraintCheck:
     observed: Verdict
     rule: str
     detail: str
+    events: tuple[CanonicalEvent, ...] = ()
+    cycles: tuple[Axi4Cycle, ...] = ()
 
     @property
     def matched(self) -> bool:
@@ -45,7 +47,14 @@ class AxiReadInterleaveRun:
     fault: SemanticFault | None = None
 
 
-def _check(name: str, expected: Verdict, run) -> ConstraintCheck:
+def _check(
+    name: str,
+    expected: Verdict,
+    run,
+    *,
+    events: tuple[CanonicalEvent, ...] = (),
+    cycles: tuple[Axi4Cycle, ...] = (),
+) -> ConstraintCheck:
     violation = run.violations[0] if run.violations else None
     return ConstraintCheck(
         name,
@@ -53,6 +62,8 @@ def _check(name: str, expected: Verdict, run) -> ConstraintCheck:
         run.verdict,
         "-" if violation is None else str(violation.rule),
         "legal trace completed" if violation is None else violation.reason,
+        events,
+        cycles,
     )
 
 
@@ -165,9 +176,8 @@ class AxiReadInterleaveProject(VerificationProject):
                 payload={"data": 0, "resp": "OKAY", "last": last},
             )
 
-        same_id = self.protocol.open_session().run(
-            (ar(ids[0], 2), ar(ids[0], 1), r(ids[0], True))
-        )
+        same_id_events = (ar(ids[0], 2), ar(ids[0], 1), r(ids[0], True))
+        same_id = self.protocol.open_session().run(same_id_events)
         unused_id = next(
             (
                 item
@@ -177,12 +187,15 @@ class AxiReadInterleaveProject(VerificationProject):
             1 << self.config.id_width,
         )
         valid_ar = ar(ids[0], 2)
-        undeclared_rid = self.protocol.open_session().run(
-            (valid_ar, replace(r(ids[0], False), key=unused_id))
+        undeclared_rid_events = (
+            valid_ar,
+            replace(r(ids[0], False), key=unused_id),
         )
-        cache_active = self.protocol.open_session().run(
-            (replace(valid_ar, payload={**valid_ar.payload, "cache": 1}),)
+        undeclared_rid = self.protocol.open_session().run(undeclared_rid_events)
+        cache_active_events = (
+            replace(valid_ar, payload={**valid_ar.payload, "cache": 1}),
         )
+        cache_active = self.protocol.open_session().run(cache_active_events)
         aw = self.spec.channel("AW").transfer.sample_constrained(
             rng, payload={"len": 0, "size": 2, "burst": "INCR"}
         )
@@ -204,10 +217,30 @@ class AxiReadInterleaveProject(VerificationProject):
         )
         write_active = Axi4SignalSession(spec=self.spec).run((quiet_cycle,))
         return (
-            _check("same_id_cannot_overtake", Verdict.FAIL, same_id),
-            _check("rid_must_be_active", Verdict.FAIL, undeclared_rid),
-            _check("arcache_tied_zero", Verdict.FAIL, cache_active),
-            _check("write_valid_tied_low", Verdict.FAIL, write_active),
+            _check(
+                "same_id_cannot_overtake",
+                Verdict.FAIL,
+                same_id,
+                events=same_id_events,
+            ),
+            _check(
+                "rid_must_be_active",
+                Verdict.FAIL,
+                undeclared_rid,
+                events=undeclared_rid_events,
+            ),
+            _check(
+                "arcache_tied_zero",
+                Verdict.FAIL,
+                cache_active,
+                events=cache_active_events,
+            ),
+            _check(
+                "write_valid_tied_low",
+                Verdict.FAIL,
+                write_active,
+                cycles=(quiet_cycle,),
+            ),
         )
 
     def run(self) -> AxiReadInterleaveRun:

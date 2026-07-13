@@ -76,14 +76,15 @@ protocols/<name>/ base ProtocolSpec
        trace + waveform + network + causality + report
 ```
 
-当前四个 Project 都保留并迁移到该流程：
+当前维护中的 Project 都使用该流程：
 
 - `prj_ready_valid_sink`：一个 ready-valid 协议实例连接 Source/Sink；
 - `prj_apb_compare`：APB3/APB4 两个基础协议实例及版本对比；
 - `prj_axi4_read_bridge`：AXI-A/AXI-B 两个 AXI4 实例连接 bridge/responder；
 - `prj_axi4_read_interleave`：一个施加具体 ID/quiet 约束的派生 AXI4 实例。
+- `prj_axi4_scenarios`：manager source 与 subordinate responder 直接连接的 37-case AXI4 批量实验。
 
-四个 Project 的网络图、波形图、因果图以及一条 34-event 长 trace 见
+已有 Project 的网络图、波形图、因果图以及一条 34-event 长 trace 见
 [可执行实验图册](docs/experiments.md)。图册说明每张图对应的运行命令、验证结论和协议含义。
 
 ## AXI4 跨 ID 乱序读取
@@ -102,20 +103,25 @@ base ProtocolSpec
 immutable derived ProtocolSpec
       + two VirtualDuts
       ↓
-waveform.svg + network.svg + causality.svg + HTML report
+cases/<case>/{waveform,causality,trace} + network.svg + HTML report
 ```
 
-运行后可查看 `out/prj_axi4_read_interleave/01/` 下的 `waveform.svg`、`network.svg`、
-`causality.svg`、`constraints.md` 和 `report.html`。该目录是可再生运行证据，不进入源码树。
+运行后可查看 `out/prj_axi4_read_interleave/01/` 下的 `cases/`、`network.svg`、
+`constraints.md` 和 `report.html`。该目录是可再生运行证据，不进入源码树。
 
 ## 快速开始
 
 Python 模型本身只使用标准库；WaveDrom 用于生成 SVG 波形，Graphviz 用于生成关系图。
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
-npm ci
+./scripts/quickstart.sh
+```
+
+这会运行全部维护中的 Project，并生成统一入口 `out/index.html`。脚本创建本地 venv、在需要时
+安装 WaveDrom，检查 Graphviz，然后调用正式的 Python CLI。若依赖已经准备好，也可以直接运行：
+
+```bash
+.venv/bin/python -m protocol_model run-all
 
 # ready-valid Project
 .venv/bin/python -m protocol_model ready-valid-sink
@@ -128,8 +134,13 @@ npm ci
 
 # 带具体约束的 AXI4 乱序读取 Project
 .venv/bin/python -m protocol_model axi-read-interleave
+
+# 无 bridge 的 AXI4 source/responder 批量场景
+.venv/bin/python -m protocol_model axi-scenarios
 ```
 
+每个 Project 是一个 run bundle，legal 与 negative 是 bundle 内的独立 case；各自的 trace、
+波形和因果图写入 `cases/<case>/`，共享的拓扑、约束、manifest 和总报告保留在 run 根目录。
 报告统一写入 `out/<project>/01/report.html`，可在浏览器中打开。完整命令说明见
 [用户手册：运行实验](docs/manual.md#运行实验)。
 

@@ -56,29 +56,25 @@ def build_simulation(
     )
 
     bundle = ArtifactBundle(legal_project.name, target)
-    for stem, run, title in (
-        ("legal", legal, "Legal ready-valid stall and transfers"),
-        ("mutation", mutation, "Payload mutation while stalled"),
+    for case_name, run, title in (
+        ("legal_stall", legal, "Legal ready-valid stall and transfers"),
+        ("changed_while_stalled", mutation, "Payload mutation while stalled"),
     ):
         bundle.render_wave(
-            f"waveform.{stem}",
+            "waveform",
             ready_valid_wavejson(run, title=title),
-            kind=f"waveform_{stem}",
+            kind="waveform",
+            case=case_name,
         )
         bundle.render_dot(
-            f"causality.{stem}",
+            "causality",
             ready_valid_event_dot(run, title=title),
-            kind=f"causality_{stem}",
+            kind="causality",
+            case=case_name,
         )
-    bundle.render_dot(
-        "network",
-        ready_valid_topology_dot(legal_project.snapshot()),
-        kind="network",
-    )
-    bundle.write_json(
-        "trace.json",
-        {
-            name: {
+        bundle.write_json(
+            "trace.json",
+            {
                 "verdict": run.verdict.value,
                 "samples": [
                     {
@@ -107,10 +103,14 @@ def build_simulation(
                     for event in run.transfers
                 ],
                 "fault": run.fault.rule if run.fault else None,
-            }
-            for name, run in (("legal", legal), ("mutation", mutation))
-        },
-        kind="trace",
+            },
+            kind="trace",
+            case=case_name,
+        )
+    bundle.render_dot(
+        "network",
+        ready_valid_topology_dot(legal_project.snapshot()),
+        kind="network",
     )
     assert legal_project.protocol_instance is not None
     constraints = constraints_from_instances(

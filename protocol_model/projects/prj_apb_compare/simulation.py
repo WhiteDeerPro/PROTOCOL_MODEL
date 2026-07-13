@@ -13,7 +13,7 @@ from protocol_model.evidence import (
 )
 from protocol_model.protocols.apb import apb_state_dot, apb_to_wavejson
 
-from .evidence import report_html, topology_dot
+from .evidence import report_html, topology_dot, trace_dot
 from .project import ApbComparisonProject, ApbComparisonRun
 
 
@@ -41,32 +41,64 @@ def build_simulation(
     run = project.run(transactions=transactions, seed=seed)
     bundle = ArtifactBundle(project.name, target)
     for version, trace in run.traces.items():
+        case_name = f"legal_apb{version}"
         bundle.render_wave(
-            f"waveform.apb{version}",
+            "waveform",
             apb_to_wavejson(project.configs[version], trace),
-            kind=f"waveform_apb{version}",
+            kind="waveform",
+            case=case_name,
         )
-    bundle.render_dot("state", apb_state_dot(), kind="state")
-    network_svg = bundle.render_dot(
-        "network", topology_dot(project.snapshot()), kind="network"
+        bundle.render_dot(
+            "causality",
+            trace_dot(trace, title=f"APB{version} legal sample flow"),
+            kind="causality",
+            case=case_name,
+        )
+        bundle.write_json(
+            "trace.json",
+            {
+                "cycles": len(trace.samples),
+                "samples": trace.samples,
+                "transfers": trace.transfers,
+            },
+            kind="trace",
+            case=case_name,
+        )
+    negative_case = "request_stability_mutation"
+    bundle.render_wave(
+        "waveform",
+        apb_to_wavejson(
+            project.configs[4],
+            run.mutation_trace,
+            title="APB4 negative: PADDR changes during ACCESS",
+        ),
+        kind="waveform",
+        case=negative_case,
+    )
+    bundle.render_dot(
+        "causality",
+        trace_dot(
+            run.mutation_trace,
+            title="APB4 request-stability violation",
+            fault_rule=run.mutation_rule,
+        ),
+        kind="causality",
+        case=negative_case,
     )
     bundle.write_json(
         "trace.json",
         {
-            f"apb{version}": {
-                "cycles": len(trace.samples),
-                "transfers": [
-                    {
-                        "kind": event.kind,
-                        "key": event.key,
-                        "payload": dict(event.payload),
-                    }
-                    for event in trace.transfers
-                ],
-            }
-            for version, trace in run.traces.items()
+            "cycles": len(run.mutation_trace.samples),
+            "samples": run.mutation_trace.samples,
+            "transfers": run.mutation_trace.transfers,
+            "fault": run.mutation_rule,
         },
         kind="trace",
+        case=negative_case,
+    )
+    bundle.render_dot("state", apb_state_dot(), kind="state")
+    network_svg = bundle.render_dot(
+        "network", topology_dot(project.snapshot()), kind="network"
     )
     mutation = ConstraintEvidence(
         id="mutation_request_stability",
@@ -93,7 +125,8 @@ def build_simulation(
         verdict=run.verdict.value,
         protocol_instances=tuple(project.protocols.values()),
         cases=(
-            {"name": "generated_legal", "expected": "PASS", "observed": "PASS"},
+            {"name": "legal_apb3", "expected": "PASS", "observed": "PASS"},
+            {"name": "legal_apb4", "expected": "PASS", "observed": "PASS"},
             {
                 "name": "request_stability_mutation",
                 "expected": "FAIL",

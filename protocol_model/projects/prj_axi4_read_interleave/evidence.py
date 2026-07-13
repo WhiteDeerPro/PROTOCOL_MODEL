@@ -43,6 +43,40 @@ def topology_dot(snapshot) -> str:
 }}"""
 
 
+def negative_check_dot(check) -> str:
+    lines = [
+        "digraph constraint_mutation {",
+        '  rankdir="LR";',
+        f'  graph [bgcolor="white", labelloc="t", label="{check.name}"];',
+        '  node [shape=box, style="rounded,filled", fontname="monospace"];',
+    ]
+    if check.events:
+        for index, event in enumerate(check.events):
+            payload = " ".join(
+                f"{name}={value}" for name, value in event.payload.items()
+                if name in {"addr", "len", "size", "cache", "last"}
+            )
+            lines.append(
+                f'  n{index} [fillcolor="#e2e8f0", '
+                f'label="{event.kind} id={event.key}\\n{payload}"];'
+            )
+            if index:
+                lines.append(f"  n{index - 1} -> n{index};")
+        source = f"n{len(check.events) - 1}"
+    else:
+        lines.append(
+            '  n0 [fillcolor="#e2e8f0", label="signal attempt\\nAWVALID=1"];'
+        )
+        source = "n0"
+    rule = check.rule.replace('"', '\\"')
+    lines.append(
+        f'  fault [shape=octagon, fillcolor="#fecaca", label="FAULT\\n{rule}"];'
+    )
+    lines.append(f"  {source} -> fault [color=\"#dc2626\", penwidth=2];")
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def report_html(run: AxiReadInterleaveRun, snapshot) -> str:
     components = "".join(
         f"<tr><td>{escape(item.name)}</td><td>{escape(item.category)}</td>"
@@ -55,9 +89,14 @@ def report_html(run: AxiReadInterleaveRun, snapshot) -> str:
         for index, event in enumerate(run.trace.events)
     )
     checks = "".join(
-        f"<tr><td>{escape(item.name)}</td><td>{item.expected.value}</td>"
+        f'<tr><td><a href="cases/{escape(item.name)}/trace.json">{escape(item.name)}</a></td><td>{item.expected.value}</td>'
         f"<td>{item.observed.value}</td><td>{item.matched}</td>"
         f"<td><code>{escape(item.rule)}</code></td><td>{escape(item.detail)}</td></tr>"
+        for item in run.checks
+    )
+    negative_views = "".join(
+        f'<h3>{escape(item.name)}</h3><object class="wave" data="cases/{escape(item.name)}/waveform.svg" type="image/svg+xml"></object>'
+        f'<object class="causal" data="cases/{escape(item.name)}/causality.svg" type="image/svg+xml"></object>'
         for item in run.checks
     )
     records = snapshot.state.get("derivation_constraints", ())
@@ -77,7 +116,7 @@ code{{white-space:pre-wrap}}object{{width:100%;background:white;border:1px solid
 .network{{height:300px}}.wave{{height:620px}}.causal{{height:560px}}</style></head><body>
 <h1>AXI4 cross-ID read interleaving</h1>
 <p>Project <strong>{escape(snapshot.name)}</strong> · verdict <strong>{run.verdict.value}</strong>.</p>
-<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a> · <a href="trace.json">Trace data</a> · <a href="run.txt">Text report</a></p>
+<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a> · <a href="cases/cross_id_out_of_order/trace.json">Legal trace data</a> · <a href="run.txt">Text report</a></p>
 <p>The base AXI4 ProtocolSpec is derived into a project-owned read-only profile. Two VirtualDuts
 drive two AR requests and alternating R responses; protocol state decides legality.</p>
 <h2>Components</h2><table><tr><th>Name</th><th>Category</th><th>Implementation</th><th>Role</th></tr>{components}</table>
@@ -87,12 +126,13 @@ drive two AR requests and alternating R responses; protocol state decides legali
 <table><tr><th>Constraint record</th><th>Scope</th><th>Targets</th><th>Rule</th><th>Foundation</th></tr>{constraint_rows}</table>
 <h2>AXI4 waveform</h2>
 <p>Quiet AW/W/B channels are omitted. AR1 is issued before AR2, while R2 responds and completes first.</p>
-<object class="wave" data="waveform.svg" type="image/svg+xml"></object>
+<object class="wave" data="cases/cross_id_out_of_order/waveform.svg" type="image/svg+xml"></object>
 <h2>Causal chain</h2>
 <p>Each AR creates its same-ID R-beat obligation; there is no ordering edge between different IDs.</p>
-<object class="causal" data="causality.svg" type="image/svg+xml"></object>
+<object class="causal" data="cases/cross_id_out_of_order/causality.svg" type="image/svg+xml"></object>
 <h2>Legal two-DUT flow</h2><table><tr><th>#</th><th>Event</th><th>ID</th><th>Payload</th></tr>{events}</table>
 <h2>Constraint mutations</h2><table><tr><th>Check</th><th>Expected</th><th>Observed</th><th>Matched</th><th>Rule</th><th>Detail</th></tr>{checks}</table>
+{negative_views}
 <h2>Constraint boundary</h2>
 <p>Active IDs are 1/2. ARLOCK, ARCACHE, ARPROT, ARQOS and ARREGION are tied low. AW/W/B are quiet.
 Same-ID responses consume the oldest burst; different IDs may interleave. AXI4 has no AXI5 AWATOP atomic signal.</p>

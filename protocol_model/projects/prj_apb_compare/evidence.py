@@ -3,6 +3,47 @@
 from protocol_model.protocols.apb import apb_report_html
 
 
+def trace_dot(trace, *, title: str, fault_rule: str | None = None) -> str:
+    lines = [
+        "digraph apb_trace {",
+        '  rankdir="LR";',
+        f'  graph [bgcolor="white", labelloc="t", label="{title}"];',
+        '  node [shape=box, style="rounded,filled", fontname="monospace"];',
+    ]
+    previous_addr = None
+    fault_index = None
+    for index, sample in enumerate(trace.samples):
+        phase = (
+            "RESET" if not sample.presetn else
+            "IDLE" if not sample.psel else
+            "SETUP" if not sample.penable else
+            "WAIT" if not sample.pready else "COMPLETE"
+        )
+        label = f"cycle {index}\\n{phase}\\nPADDR=0x{sample.paddr:x}"
+        lines.append(f'  s{index} [fillcolor="#e2e8f0", label="{label}"];')
+        if index:
+            lines.append(f'  s{index - 1} -> s{index} [color="#94a3b8"];')
+        if sample.psel:
+            if (
+                fault_index is None
+                and previous_addr is not None
+                and sample.paddr != previous_addr
+            ):
+                fault_index = index
+            previous_addr = sample.paddr
+        else:
+            previous_addr = None
+    if fault_rule is not None:
+        index = fault_index if fault_index is not None else len(trace.samples) - 1
+        rule = fault_rule.replace('"', '\\"')
+        lines.append(
+            f'  fault [shape=octagon, fillcolor="#fecaca", label="FAULT\\n{rule}"];'
+        )
+        lines.append(f'  s{index} -> fault [color="#dc2626", penwidth=2];')
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def topology_dot(snapshot) -> str:
     return f"""digraph apb_compare_network {{
   rankdir=LR;
@@ -26,6 +67,6 @@ def report_html(run, project, transactions: int) -> str:
     )
     network = """<section><h2>Project network</h2>
 <p>Two independent protocol links receive the same class of pin stimulus.</p>
-<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a> · <a href="trace.json">Trace data</a></p>
+<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a> · <a href="cases/request_stability_mutation/trace.json">Negative trace</a></p>
 <object data="network.svg" type="image/svg+xml"></object></section>"""
     return base.replace("<h1>", network + "<h1>", 1)

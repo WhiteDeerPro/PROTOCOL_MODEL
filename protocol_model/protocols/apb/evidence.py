@@ -55,7 +55,9 @@ def _phase(sample: ApbPinSample) -> str:
     return "COMPLETE"
 
 
-def apb_to_wavejson(config: ApbConfig, trace: ApbGeneratedTrace):
+def apb_to_wavejson(
+    config: ApbConfig, trace: ApbGeneratedTrace, *, title: str | None = None
+):
     samples = trace.samples
     active_request = lambda sample: sample.psel
     active_read_data = lambda sample: (
@@ -115,7 +117,10 @@ def apb_to_wavejson(config: ApbConfig, trace: ApbGeneratedTrace):
         )
     return {
         "signal": signals,
-        "head": {"text": f"APB{config.version} two-phase transfers", "tick": 0},
+        "head": {
+            "text": title or f"APB{config.version} two-phase transfers",
+            "tick": 0,
+        },
         "config": {"hscale": 3},
     }
 
@@ -158,9 +163,13 @@ code{{color:#f5c2e7}} .ok{{color:#9be9bd}}
 <tr><td>L2</td><td>PSEL &amp;&amp; PENABLE &amp;&amp; PREADY产生canonical transfer</td><td>完成事件投影</td></tr>
 <tr><td>L3</td><td>外设响应延迟上限、timeout、公平性</td><td>系统策略，当前不约束</td></tr>
 </table></section>
-<section><h2>APB3 WaveDrom</h2><object data="waveform.apb3.svg" type="image/svg+xml"></object></section>
-<section><h2>APB4 WaveDrom</h2><object data="waveform.apb4.svg" type="image/svg+xml"></object></section>
+<section><h2>APB3 legal case</h2><object data="cases/legal_apb3/waveform.svg" type="image/svg+xml"></object>
+<object data="cases/legal_apb3/causality.svg" type="image/svg+xml"></object></section>
+<section><h2>APB4 legal case</h2><object data="cases/legal_apb4/waveform.svg" type="image/svg+xml"></object>
+<object data="cases/legal_apb4/causality.svg" type="image/svg+xml"></object></section>
 <section class="state"><h2>共享自动机</h2><object data="state.svg" type="image/svg+xml"></object></section>
 <section><h2>最小 violation witness</h2><p>要求：SETUP 到完成之间请求字段保持。</p>
-<p>Mutation：ACCESS 周期修改 PADDR。</p><p class="ok">Observed: <code>{escape(violation)}</code></p></section>
+<p>Mutation：ACCESS 周期修改 PADDR。</p><p class="ok">Observed: <code>{escape(violation)}</code></p>
+<object data="cases/request_stability_mutation/waveform.svg" type="image/svg+xml"></object>
+<object data="cases/request_stability_mutation/causality.svg" type="image/svg+xml"></object></section>
 </body></html>"""

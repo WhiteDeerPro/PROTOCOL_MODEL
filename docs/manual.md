@@ -117,15 +117,22 @@ sudo apt-get install graphviz
 ### 4.2 运行 Project
 
 ```bash
+.venv/bin/python -m protocol_model run-all
 .venv/bin/python -m protocol_model ready-valid-sink
 .venv/bin/python -m protocol_model apb
 .venv/bin/python -m protocol_model axi-read-network
 .venv/bin/python -m protocol_model axi-read-interleave
+.venv/bin/python -m protocol_model axi-scenarios
 
 # 生成两笔 16-beat 读取交织的长 trace
 .venv/bin/python -m protocol_model axi-read-interleave --beats 16 \
   --sim-dir out/prj_axi4_read_interleave/long
 ```
+
+首次运行也可以使用仓库根目录的 `./scripts/quickstart.sh`。它准备缺失的本地依赖、运行完整
+实验集并生成 `out/index.html`。单个 Project 的一次运行仍只有一个 bundle；合法流和负例是
+bundle 内的多个 case，输出在 `cases/<case>/`，由根目录的 `report.html` 和 `manifest.json`
+统一索引。
 
 默认输出位置：
 
@@ -134,11 +141,12 @@ out/prj_ready_valid_sink/01/report.html
 out/prj_apb_compare/01/report.html
 out/prj_axi4_read_bridge/01/report.html
 out/prj_axi4_read_interleave/01/report.html
+out/prj_axi4_scenarios/01/report.html
 ```
 
 `out/` 是运行产物，未被 Git 跟踪，可删除后重新生成。每次运行至少生成 `manifest.json`、
-`constraints.json`、`constraints.md`、`trace.json` 和 `report.html`；可视化源文件放在
-`sources/`，SVG 放在 run 根目录。需要保存到别处时：
+`constraints.json`、`constraints.md` 和 `report.html`；各 case 的 `trace.json` 与 SVG 放在
+`cases/<case>/`，可视化源文件放在 `sources/cases/<case>/`。需要保存到别处时：
 
 ```bash
 .venv/bin/python -m protocol_model axi-read-interleave --sim-dir /tmp/axi-read-run
@@ -155,10 +163,10 @@ out/prj_axi4_read_interleave/01/report.html
 .venv/bin/python -m protocol_model apb --transactions 1
 ```
 
-四个 Project 的已确认图像和长 trace 示例见[可执行实验图册](experiments.md)。
+已有 Project 的已确认图像和长 trace 示例见[可执行实验图册](experiments.md)。
 
-`axi-read-interleave` 的运行目录包含 HTML/Markdown 约束报告，以及 `waveform.svg`、
-`network.svg` 和 `causality.svg` 三份可视化证据。
+`axi-read-interleave` 的运行目录包含 HTML/Markdown 约束报告和共享 `network.svg`；legal 与
+四个 negative case 分别在 `cases/<case>/` 中保存 `waveform.svg`、`causality.svg` 和 trace。
 
 ## 5. 如何读取证据
 
@@ -219,6 +227,12 @@ write response obligation、部分 per-ID ordering、`WLAST`/`RLAST`、burst 地
 并要求 `AW/W/B` 保持 quiet。输入 VirtualDut 发出两个 AR，输出 VirtualDut 交织生成 R beat；
 不同 ID 可以交织，相同 ID 必须完成最老的 pending burst。详细规则与缺口见
 [AXI4 读交织约束报告](axi4_read_interleaving_report.md)。
+
+`prj_axi4_scenarios` 不经过 bridge，只连接 manager source、AXI4 ProtocolInstance 和
+subordinate responder。它批量覆盖普通 full-width、aligned 事务的 read/write、ID ordering、
+五通道并发、stall 和 reset；每个 case 都生成独立 trace、波形与因果图。该 Project 明确将
+`AxLOCK=0`、`AxCACHE=0`，并暂不测试 atomic/exclusive、cache 属性语义及 narrow/unaligned
+传输。
 
 它尚未涵盖 AXI exclusive、完整 USER/capability 语义、完整跨 ID ordering、真实 arbitration
 和外部 trace 文件解析。模型验证通过只表示这段 trace 符合已实现的规则，不表示已覆盖整份

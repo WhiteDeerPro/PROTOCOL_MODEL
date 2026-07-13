@@ -7,15 +7,17 @@ from pathlib import Path
 
 from protocol_model.evidence import (
     ArtifactBundle,
+    axi_cycles_to_waveform,
     ConstraintEvidence,
     constraints_from_instances,
     default_run_directory,
     format_execution_dot,
     synthesize_axi_waveform,
+    synthesize_axi_event_sequence_waveform,
     to_wavejson,
 )
 
-from .evidence import format_run, report_html, topology_dot
+from .evidence import format_run, negative_check_dot, report_html, topology_dot
 from .project import AxiReadInterleaveProject, AxiReadInterleaveRun
 
 
@@ -58,6 +60,7 @@ def build_simulation(
             hide_inactive_channels=True,
         ),
         kind="waveform",
+        case="cross_id_out_of_order",
     )
     network_svg_path = bundle.render_dot(
         "network", topology_dot(project.snapshot()), kind="network"
@@ -71,6 +74,7 @@ def build_simulation(
             data_width=int(project.spec.parameters["data_width"]),
         ),
         kind="causality",
+        case="cross_id_out_of_order",
     )
     bundle.write_json(
         "trace.json",
@@ -87,7 +91,75 @@ def build_simulation(
             "causal_edges": sorted(run.trace.causal_graph.edges),
         },
         kind="trace",
+        case="cross_id_out_of_order",
     )
+    for check in run.checks:
+        if check.events:
+            negative_waveform = synthesize_axi_event_sequence_waveform(
+                project.spec, check.events
+            )
+        elif check.cycles:
+            negative_waveform = axi_cycles_to_waveform(project.spec, check.cycles)
+        else:
+            raise RuntimeError(f"constraint check {check.name} has no evidence")
+        bundle.render_wave(
+            "waveform",
+            to_wavejson(
+                negative_waveform,
+                title=f"Negative: {check.name}",
+                hide_inactive_channels=True,
+            ),
+            kind="waveform",
+            case=check.name,
+        )
+        bundle.render_dot(
+            "causality",
+            negative_check_dot(check),
+            kind="causality",
+            case=check.name,
+        )
+        bundle.write_json(
+            "trace.json",
+            {
+                "expected": check.expected.value,
+                "observed": check.observed.value,
+                "rule": check.rule,
+                "detail": check.detail,
+                "events": [
+                    {
+                        "kind": event.kind,
+                        "key": event.key,
+                        "payload": dict(event.payload),
+                    }
+                    for event in check.events
+                ],
+                "cycles": [
+                    {
+                        name: {
+                            "reset": wrapped.asserted,
+                            "cycle": wrapped.observation.cycle,
+                            "valid": wrapped.observation.valid,
+                            "ready": wrapped.observation.ready,
+                            "event": (
+                                None
+                                if wrapped.observation.event is None
+                                else {
+                                    "kind": wrapped.observation.event.kind,
+                                    "key": wrapped.observation.event.key,
+                                    "payload": dict(
+                                        wrapped.observation.event.payload
+                                    ),
+                                }
+                            ),
+                        }
+                        for name, wrapped in cycle.channels.items()
+                    }
+                    for cycle in check.cycles
+                ],
+            },
+            kind="trace",
+            case=check.name,
+        )
     extra = tuple(
         ConstraintEvidence(
             id=item.name,

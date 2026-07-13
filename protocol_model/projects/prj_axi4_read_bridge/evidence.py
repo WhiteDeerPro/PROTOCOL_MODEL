@@ -46,6 +46,27 @@ def axi_read_chain_dot(run: AxiReadNetworkRun) -> str:
     return "\n".join(lines)
 
 
+def axi_fault_dot(run: AxiReadNetworkRun, *, title: str) -> str:
+    event = run.attempted_event
+    if event is None or run.fault is None:
+        raise ValueError("negative causality requires an attempted event and fault")
+    fields = " ".join(
+        f"{name}={f'0x{int(value):x}' if name == 'addr' else value}"
+        for name, value in event.payload.items()
+        if name in {"addr", "len", "size", "burst"}
+    )
+    rule = str(run.fault.rule).replace('"', '\\"')
+    return f"""digraph axi_fault {{
+  rankdir=LR;
+  graph [bgcolor="white", labelloc="t", label="{title}"];
+  node [shape=box, style="rounded,filled", fontname="monospace"];
+  stimulus [fillcolor="#fef3c7", label="attempted {event.kind} id={event.key}\\n{fields}"];
+  link [fillcolor="#dbeafe", label="AXI-A constraint check"];
+  fault [shape=octagon, fillcolor="#fecaca", label="FAULT\\n{rule}"];
+  stimulus -> link -> fault [color="#dc2626", penwidth=2];
+}}"""
+
+
 def axi_read_network_dot(project: ProjectSnapshot) -> str:
     """Show named protocol instances separately from VirtualDut behavior."""
 
@@ -104,7 +125,7 @@ table{{border-collapse:collapse;background:white}}td,th{{padding:8px 14px;border
 <h1>Two-link AXI read network</h1>
 <p>Project: <strong>{escape(project.name)}</strong> · phase: <strong>{project.phase.value}</strong>
 · verdict: <strong>{run.verdict.value}</strong>.</p>
-<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a> · <a href="trace.json">Trace data</a></p>
+<p><a href="constraints.md">Constraint report</a> · <a href="manifest.json">Run manifest</a> · <a href="cases/legal_4kb_edge/trace.json">Legal trace</a> · <a href="cases/crossing_4kb/trace.json">Negative trace</a></p>
 <h2>Project components</h2>
 <table><tr><th>Name</th><th>Category</th><th>Implementation</th><th>Role</th></tr>{component_rows}</table>
 <h2>Lifecycle</h2>
@@ -114,17 +135,19 @@ table{{border-collapse:collapse;background:white}}td,th{{padding:8px 14px;border
 <h2>End-to-end causality</h2>
 <p>Blue nodes are AXI-A, green nodes are AXI-B;
 red edges cross the bridge.</p>
-<object class="causal" data="causality.svg" type="image/svg+xml"></object>
+<object class="causal" data="cases/legal_4kb_edge/causality.svg" type="image/svg+xml"></object>
 <h2>Protocol-instance network</h2>
 <object class="causal" data="network.svg" type="image/svg+xml"></object>
 <h2>AXI-A signals</h2>
 <p>AW/W/B are quiet for this read-only experiment and are omitted.</p>
-<div class="scroll"><object class="wave" data="waveform.axi-a.svg" type="image/svg+xml"></object></div>
+<div class="scroll"><object class="wave" data="cases/legal_4kb_edge/waveform.axi-a.svg" type="image/svg+xml"></object></div>
 <h2>AXI-B signals</h2>
 <p>AW/W/B are quiet for this read-only experiment and are omitted.</p>
-<div class="scroll"><object class="wave" data="waveform.axi-b.svg" type="image/svg+xml"></object></div>
+<div class="scroll"><object class="wave" data="cases/legal_4kb_edge/waveform.axi-b.svg" type="image/svg+xml"></object></div>
 <h2>Negative constraint witness</h2>
 <p>4KB-crossing case: <code>{escape(rejected.fault.rule if rejected and rejected.fault else 'NO FAULT')}</code>.</p>
+<div class="scroll"><object class="wave" data="cases/crossing_4kb/waveform.svg" type="image/svg+xml"></object></div>
+<object class="causal" data="cases/crossing_4kb/causality.svg" type="image/svg+xml"></object>
 <h2>Obligation state</h2>
 <table><tr><th>Milestone</th><th>Link A pending</th><th>Bridge tokens</th><th>Link B pending</th></tr>{rows}</table>
 </body></html>"""

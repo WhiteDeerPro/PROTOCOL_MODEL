@@ -6,7 +6,7 @@
 - [AXI4 读交织约束报告](axi4_read_interleaving_report.md)：当前约束、quiet profile、ID 规则与缺口。
 - [ProtocolInstance 管理](architecture/protocol-instance-management.md)：Project 如何引用协议并管理私域实例；
 - [运行证据管理](architecture/evidence-management.md)：源码、手写文档与可再生报告的边界。
-- [可执行实验图册](experiments.md)：四个 Project 的稳定图像快照、运行命令与结果解读。
+- [可执行实验图册](experiments.md)：各 Project 的稳定图像快照、运行命令与结果解读，包括 37-case AXI4 source/responder 场景集。
 
 完整运行图片、报告和中间文件写入仓库根目录的 `out/<project>/<run-id>/`，由
 `manifest.json` 管理且不进入 Git。`docs/images/experiments/` 仅保存图册引用的稳定 SVG

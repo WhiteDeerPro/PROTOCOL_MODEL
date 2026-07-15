@@ -1,0 +1,17 @@
+digraph axi4_case {
+  rankdir=LR;
+  label="A four-transfer WRAP burst rotates inside its wrap window / 四拍 WRAP burst 在自身窗口内回绕";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.4, ranksep=0.65, splines=polyline, pad=0.2];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
+  edge [color="#3169a8", fontname="sans-serif", fontsize=9];
+  event0 [label="[0] ID8 A=0x2c N=4 S=4B WRAP"];
+  event1 [label="[1] ID8 D=0x81 OKAY L=0"];
+  event2 [label="[2] ID8 D=0x82 OKAY L=0"];
+  event3 [label="[3] ID8 D=0x83 OKAY L=0"];
+  event4 [label="[4] ID8 D=0x84 OKAY L=1"];
+  event0 -> event1 [label="causes / 因果"];
+  event1 -> event2 [label="causes / 因果"];
+  event2 -> event3 [label="causes / 因果"];
+  event3 -> event4 [label="causes / 因果"];
+}

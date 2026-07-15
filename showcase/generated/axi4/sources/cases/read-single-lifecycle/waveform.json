@@ -1,0 +1,45 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "==",
+      "data": [
+        "0",
+        "1"
+      ]
+    },
+    [
+      "AR",
+      {
+        "name": "CanonicalEvent",
+        "wave": "=x",
+        "data": [
+          "1@0x100:1x4I"
+        ]
+      }
+    ],
+    [
+      "R",
+      {
+        "name": "CanonicalEvent",
+        "wave": "x=",
+        "data": [
+          "1:D0x11223344/OK/L1"
+        ]
+      }
+    ],
+    {
+      "name": "COMMITTED",
+      "wave": "1."
+    }
+  ],
+  "head": {
+    "text": "Single read opens and discharges one obligation / 单拍读事务打开并解除一个义务"
+  },
+  "foot": {
+    "text": "1 column = 1 CanonicalEvent · MODEL ORDER ONLY · NOT PINS/CYCLES/RTL / 非引脚时序"
+  },
+  "config": {
+    "hscale": 9
+  }
+}

@@ -1,0 +1,14 @@
+digraph demo_network {
+  rankdir=LR;
+  label="axi4-point-to-point: structural context / 结构上下文";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.55, ranksep=0.75, splines=polyline];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", margin="0.18,0.12", penwidth=1.5];
+  requester [label="requester\nVirtualDut · initiating / 主动发起\nport m_axi", fillcolor="#eef5ff", color="#3169a8"];
+  link [label="axi4-link\nAXI4 LinkProtocol\nAW · W · B · AR · R", fillcolor="#eaf8ef", color="#2d8650"];
+  endpoint [label="memory_endpoint\nVirtualDut · addressable / 可寻址\nport s_axi", fillcolor="#fff4e7", color="#b56b21"];
+  requester -> link [dir=both, color="#3169a8", penwidth=1.6];
+  link -> endpoint [dir=both, color="#b56b21", penwidth=1.6];
+  note [shape=note, label="Structural context only: examples execute protocol semantics, not endpoint backends.\n仅表示结构上下文：示例执行协议语义，不执行端点 backend。", fillcolor="#ffffff", color="#777777", fontsize=10];
+  note -> link [style=dashed, arrowhead=none, color="#777777", constraint=false];
+}

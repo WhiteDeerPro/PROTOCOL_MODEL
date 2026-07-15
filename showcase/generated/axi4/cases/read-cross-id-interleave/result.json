@@ -1,0 +1,259 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "read-cross-id-interleave",
+  "theme": "ordering/interleave",
+  "title": {
+    "en": "Responses for different IDs may interleave",
+    "zh-CN": "不同 ID 的读响应可以交织"
+  },
+  "claim": {
+    "en": "Each ID keeps its own beat count while the link alternates IDs.",
+    "zh-CN": "链路交替返回不同 ID，同时分别维护各自的拍数。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "PASS",
+    "rule": null,
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "PASS",
+    "rule": null,
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 1,
+      "payload": {
+        "addr": 1024,
+        "len": 1,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 2,
+      "payload": {
+        "addr": 1280,
+        "len": 1,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 1,
+      "payload": {
+        "data": 17,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 2,
+      "payload": {
+        "data": 33,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 1,
+      "payload": {
+        "data": 18,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 2,
+      "payload": {
+        "data": 34,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AR",
+      "key": 1,
+      "payload": {
+        "addr": 1024,
+        "len": 1,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    },
+    {
+      "kind": "AR",
+      "key": 2,
+      "payload": {
+        "addr": 1280,
+        "len": 1,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 1
+    },
+    {
+      "kind": "R",
+      "key": 1,
+      "payload": {
+        "data": 17,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 2
+    },
+    {
+      "kind": "R",
+      "key": 2,
+      "payload": {
+        "data": 33,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 3
+    },
+    {
+      "kind": "R",
+      "key": 1,
+      "payload": {
+        "data": 18,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 4
+    },
+    {
+      "kind": "R",
+      "key": 2,
+      "payload": {
+        "data": 34,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 5
+    }
+  ],
+  "causal_edges": [
+    [
+      0,
+      2
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      3,
+      5
+    ]
+  ],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 2,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": null
+}

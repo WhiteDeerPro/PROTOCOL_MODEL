@@ -1,0 +1,80 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "read-wrap-three-illegal",
+  "theme": "geometry",
+  "title": {
+    "en": "WRAP uses one of the protocol's permitted transfer counts",
+    "zh-CN": "WRAP 必须使用协议允许的传输拍数"
+  },
+  "claim": {
+    "en": "Three transfers are not a legal AXI4 WRAP length.",
+    "zh-CN": "三拍不是 AXI4 允许的 WRAP 长度。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.link_session.AR.event_schema",
+    "reason_contains": "WRAP burst length"
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.link_session.AR.event_schema",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 9,
+      "payload": {
+        "addr": 64,
+        "len": 2,
+        "size": 2,
+        "burst": "WRAP",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.link_session.AR.event_schema",
+    "reason": "WRAP burst length must be 2, 4, 8, or 16 transfers",
+    "scope": "event",
+    "location": ""
+  }
+}

@@ -1,0 +1,13 @@
+digraph axi4_case {
+  rankdir=LR;
+  label="A complete W burst may precede its AW descriptor / 完整 W burst 可以先于 AW 描述符到达";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.4, ranksep=0.65, splines=polyline, pad=0.2];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
+  edge [color="#3169a8", fontname="sans-serif", fontsize=9];
+  event0 [label="[0] D=0x55 S=0xf L=1"];
+  event1 [label="[1] ID3 A=0x208 N=1 S=4B INCR"];
+  event2 [label="[2] ID3 OKAY"];
+  event1 -> event2 [label="causes / 因果"];
+  event0 -> event2 [label="causes / 因果"];
+}

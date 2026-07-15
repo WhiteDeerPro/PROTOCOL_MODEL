@@ -1,0 +1,80 @@
+{
+  "signal": [
+    {
+      "name": "ACLK",
+      "wave": "p.."
+    },
+    {
+      "name": "ARESETn",
+      "wave": "01."
+    },
+    [
+      "AR",
+      {
+        "name": "VALID",
+        "wave": "01."
+      },
+      {
+        "name": "READY",
+        "wave": "10."
+      },
+      {
+        "name": "FIRE",
+        "wave": "0.."
+      },
+      {
+        "name": "ID",
+        "wave": "x==",
+        "data": [
+          "3",
+          "3"
+        ]
+      },
+      {
+        "name": "ADDR",
+        "wave": "x==",
+        "data": [
+          "0x00000a00",
+          "0x00000a08"
+        ]
+      },
+      {
+        "name": "LEN",
+        "wave": "x==",
+        "data": [
+          "0 (1 beats)",
+          "0 (1 beats)"
+        ]
+      },
+      {
+        "name": "SIZE",
+        "wave": "x==",
+        "data": [
+          "2 (4B)",
+          "2 (4B)"
+        ]
+      },
+      {
+        "name": "BURST",
+        "wave": "x==",
+        "data": [
+          "INCR",
+          "INCR"
+        ]
+      }
+    ],
+    {
+      "name": "MODEL FAULT",
+      "wave": "0.1"
+    }
+  ],
+  "head": {
+    "text": "Payload remains stable while VALID is stalled / VALID 阻塞期间 payload 保持稳定"
+  },
+  "foot": {
+    "text": "ARESETn = !reset · FIRE = VALID & READY · protocol-model observation, not RTL/VCD"
+  },
+  "config": {
+    "hscale": 8
+  }
+}

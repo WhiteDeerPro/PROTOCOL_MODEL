@@ -1,92 +1,113 @@
-# Project 与运行结果管理
+# 运行产物、可视化与文档发布架构
 
-这套约定只解决两个实际问题：生成文件不要散落在源码各处，读者能够从固定入口找到结果。
-它不是提交前检查制度，也不要求每次修改都重新运行全部实验。
+本模块管理的是模型运行之后的可观察结果，不参与协议判定。核心原则是：语义、视图、渲染、
+存储和文档发布分别拥有清晰边界，任何一种图形工具都不能反向塑造协议模型。
 
-## 目录角色
-
-| 内容 | 位置 | Git | 说明 |
-|---|---|---|---|
-| 模型实现 | `protocol_model/` | 跟踪 | 协议模型、公共运行设施和 CLI |
-| 随软件维护的 Project | `protocol_model/projects/prj_*/` | 跟踪 | 一个可独立运行的实验或场景集 |
-| 单 Project 运行结果 | `protocol_model/projects/prj_*/out/<run-id>/` | 忽略 | 从该 Project 的 `run.sh` 产生 |
-| 全部 Project 汇总结果 | `out/<project>/<run-id>/` | 忽略 | 由 `run-all` 产生 |
-| 说明文档 | `README.md`、`docs/` | 跟踪 | 稳定概念和使用方式 |
-
-这里统一使用“运行结果”或“生成产物”，不把仿真结果泛称为 evidence。`out/` 只是可删除、可重新
-生成的工作目录；manifest 是报告导航和程序读取入口，不承担代码合规审计的含义。
-
-## 为什么 Project 目前位于 `protocol_model` 中
-
-`protocol_model` 是本仓库的软件实现包，角色接近一个 Python library 加命令行程序。当前 Project
-直接调用这个包的协议类型、运行设施和渲染代码，并由同一个 CLI 发现和批量运行。把这些随软件
-共同维护的小型 Project 放在包内，有三个现实好处：
-
-- import 路径和单元边界明确；
-- 不需要另一套插件发现或环境配置；
-- `python -m protocol_model run-all` 能直接运行维护中的完整集合。
-
-代价是 library 与具体实验在目录视觉上靠得较近。因此这里把 `protocol_model/projects/` 定义为
-“随软件发布的内建 Project”，而不是所有未来工程的永久容器。若某个 Project 有独立依赖、独立
-版本或大量自有文件，更自然的位置是仓库根 `projects/<name>/`，通过公开 API 使用
-`protocol_model`。当前规模下不为目录纯度做一次大搬迁。
-
-## 单 Project 的工作入口
-
-每个 `prj_*` 目录可以放一个很薄的 `run.sh`。它只选择对应 CLI 命令，并把默认结果写到本目录的
-`out/01/`；协议行为仍由 Python Project 定义，shell 脚本不复制实验逻辑。
+## 数据流
 
 ```text
-protocol_model/projects/prj_axi4_scenarios/
-├── project.py
-├── simulation.py
-├── virtual_dut.py
-├── run.sh
-└── out/
-    └── 01/
-        ├── report.html
-        ├── manifest.json
-        └── cases/...
+SemanticRun / SystemTrace / SystemProtocol
+                 │
+                 ▼
+       semantic projection
+       text / DOT / WaveJSON
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+  source artifact      renderer
+  (可检查、可复现)    Graphviz / WaveDrom
+        │                 │
+        └────────┬────────┘
+                 ▼
+          RunArtifactStore
+   caller-selected path / atomic write / index
+                 │
+                 ▼
+           run manifest v3
+                 │ explicit publish
+                 ▼
+        DocumentationStore
+        docs / showcase assets
 ```
 
-这种入口适合只处理一个 Project。`run-all` 面向全量运行，将所有 Project 汇总到根 `out/`，并生成
-`out/index.html`。两种目录不是两份必须同时保存的结果，
-而是单项目工作与全仓汇总两个使用场景。
+推荐依赖方向向下：协议对象不承担图表职责；投影函数不承担文件系统职责；渲染器不承担
+manifest 职责；存储层保持对 AXI、TileLink 或 ready-valid 的无关性。
 
-## 一次运行包含什么
+## 四个职责边界
 
-一次运行通常生成：
+### `protocol_model.artifacts`
+
+- `RunArtifactStore` 拥有一次运行目录、路径约束、原子写入、文件注册和 manifest。调用方可以显式提供目录；
+  `out/` 只是省略目录参数时的临时默认。
+- `RunBundle` 是供一次验证运行使用的薄门面，只组合存储与可视化发布，不实现协议知识。
+- `ProtocolRecord`、`ConstraintEvidence` 是稳定的报告记录，避免 manifest 直接序列化运行时对象。
+- records projection 负责把 `LinkProtocol`、`SystemProtocol` 显式降低为报告记录。它是展示边界，
+  不是兼容层。
+- `DocumentationStore` 管理被版本控制的发布树；目标既可以是 `docs/`，也可以是 `showcase/generated/`。
+  覆盖、删除和重建子树都必须由具名发布动作显式调用。
+
+### `protocol_model.visualization`
+
+- projection 把语义对象转换成文本、DOT 或 WaveJSON。
+- `GraphvizRenderer` 和 `WaveDromRenderer` 只做源格式到 SVG 的转换。
+- `VisualizationPublisher` 同时保存可检查的源文件和渲染结果，并向 `RunArtifactStore` 注册二者。
+- `system_topology_dot()` 与 `system_trace_dot()` 是当前架构的系统级视图，只依赖 record/trace 投影。
+
+### 协议局部投影
+
+协议特有的波形布局仍属于该协议。例如 AXI 五通道如何分组、字段宽度如何显示，不应进入通用
+可视化包。AXI lane/field 投影后续位于 `protocol_model/link/amba/axi/axi4/visualization.py`；TileLink 也应在
+自身协议包中产生 WaveJSON/DOT IR，再交给 publisher。
+
+### 场景报告
+
+场景层可以决定 case、标题、HTML 排版和要发布哪些图。运行目录、`dot` 调用、文档资源发布和
+manifest 构造交给对应基础设施，从而减少不同调用方形成不同存储契约的机会。
+
+## 两种存储生命周期
+
+| 存储 | 生命周期 | 是否可原地替换 | 入口 |
+|---|---|---:|---|
+| run artifacts | 一次运行的不可变快照 | finalize 后不可写 | `RunArtifactStore`，目录由调用方选择 |
+| maintained docs/assets | 被维护的发布树 | 可以，但必须显式 | `DocumentationStore` 或等价发布脚本 |
+
+存储生命周期不由顶层目录名决定。普通交互运行可以使用 `out/<subject>/<run-id>/`、临时目录或用户指定的
+workspace；测试优先使用临时目录。`docs/` 和 `showcase/generated/` 面向经过选择、需要随版本阅读的内容。
+写入后两者必须是显式发布动作：从已经 finalize 的 run 或确定性 source IR 中选择内容，保存生成参数和来源，
+再由 `DocumentationStore` 或专用脚本替换其拥有的子树。
+
+宣传 Demo 可以把“运行 + 发布”封装成一个具名命令，因为用户调用该命令的目的就是重建公开资源。这个例外
+不授权普通测试顺带更新图片；生成脚本仍应先在 staging 中完成全部渲染，成功后再发布，避免留下半套资源。
+
+## Manifest v3
+
+`manifest.json` 使用 `protocol-model.run/v3`，包含：
+
+- `subject` 和 `run_id`；
+- 顶层 verdict、cases、state 与 metadata；
+- 通用 `protocols` 记录，可同时描述 link 和 system scope；
+- 每个 artifact 的 kind、media type、case 和 source 标记。
+
+manifest 当前不保存 Python 类型路径，也不暴露运行时对象。即使 point-to-point 场景被提升为
+`SystemProtocol`，也可以同时记录其 system protocol 与实际使用的 link protocols。
+
+## 一次运行的目录约定
 
 ```text
-out/<run-id>/
-├── report.html         人工浏览入口
-├── manifest.json       文件索引和运行摘要
-├── constraints.json    本次采用的约束数据
-├── constraints.md      便于阅读的约束表
-├── network.svg         Project 组网
-├── cases/<case>/       trace、波形和因果图
-└── sources/            WaveJSON 和 Graphviz DOT 等可视化源文件
+<caller-selected-run-root>/
+├── manifest.json
+├── constraints.json
+├── constraints.md
+├── report.html
+├── network.svg
+├── cases/<case>/...
+└── sources/
+    ├── network.dot
+    └── cases/<case>/waveform.json
 ```
 
-合法判例与负例可以是同一次实验中的多个 case，共享拓扑和约束。也可以在研究目的确实不同的时候
-拆成两次运行；目录管理不替实验设计作这个决定。
+例如，临时运行可以选择 `out/axi4-demo/01/`；宣传脚本则可以在临时 staging 中创建同样结构，再显式发布到
+`showcase/generated/axi4/`。两者使用相同 manifest 和安全路径规则，不维护两套 artifact schema。
 
-约束表中的 `SPEC`、`PROFILE` 和 `TEST` 用来说明规则来源。`status`、`instances` 和 `witness`
-等字段是报告数据，不是一张要求开发者逐项签字的检查表。
-
-## 日常使用
-
-只改某个 Project 时，可直接运行其入口，例如：
-
-```bash
-./protocol_model/projects/prj_axi4_scenarios/run.sh
-```
-
-需要观察结果时打开同目录 `out/01/report.html`。只有当改动会影响运行行为、正在调查问题，或准备
-更新文档示例时，才需要重新生成相应结果。全量回归使用：
-
-```bash
-.venv/bin/python -m protocol_model run-all
-```
-
-`out/` 中的内容可以随时删除，不提交完整运行目录。
+路径只接受安全的 POSIX 相对路径，case 只能是一个路径段；artifact 必须位于本次 run root 内。
+同一路径不能重复注册，finalize 后不能继续写入，从而避免报告索引与磁盘内容悄悄分叉。

@@ -1,0 +1,40 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "==",
+      "data": [
+        "0",
+        "1"
+      ]
+    },
+    [
+      "AR",
+      {
+        "name": "CanonicalEvent",
+        "wave": "==",
+        "data": [
+          "6@0xd00:1x4I",
+          "7@0xd08:1x4I"
+        ]
+      }
+    ],
+    {
+      "name": "COMMITTED",
+      "wave": "10"
+    },
+    {
+      "name": "MODEL FAULT",
+      "wave": "x1"
+    }
+  ],
+  "head": {
+    "text": "A refined profile can bound outstanding reads / 细化 profile 可以限制 outstanding read"
+  },
+  "foot": {
+    "text": "1 column = 1 CanonicalEvent · MODEL ORDER ONLY · NOT PINS/CYCLES/RTL / 非引脚时序"
+  },
+  "config": {
+    "hscale": 9
+  }
+}

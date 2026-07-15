@@ -1,0 +1,115 @@
+{
+  "signal": [
+    {
+      "name": "ACLK",
+      "wave": "p."
+    },
+    {
+      "name": "ARESETn",
+      "wave": "01"
+    },
+    [
+      "AR",
+      {
+        "name": "VALID",
+        "wave": "01"
+      },
+      {
+        "name": "READY",
+        "wave": "1."
+      },
+      {
+        "name": "FIRE",
+        "wave": "01"
+      },
+      {
+        "name": "ID",
+        "wave": "x=",
+        "data": [
+          "2"
+        ]
+      },
+      {
+        "name": "ADDR",
+        "wave": "x=",
+        "data": [
+          "0x00000900"
+        ]
+      },
+      {
+        "name": "LEN",
+        "wave": "x=",
+        "data": [
+          "0 (1 beats)"
+        ]
+      },
+      {
+        "name": "SIZE",
+        "wave": "x=",
+        "data": [
+          "2 (4B)"
+        ]
+      },
+      {
+        "name": "BURST",
+        "wave": "x=",
+        "data": [
+          "INCR"
+        ]
+      }
+    ],
+    [
+      "R",
+      {
+        "name": "VALID",
+        "wave": "01"
+      },
+      {
+        "name": "READY",
+        "wave": "1."
+      },
+      {
+        "name": "FIRE",
+        "wave": "01"
+      },
+      {
+        "name": "ID",
+        "wave": "x=",
+        "data": [
+          "2"
+        ]
+      },
+      {
+        "name": "DATA",
+        "wave": "x=",
+        "data": [
+          "0x0"
+        ]
+      },
+      {
+        "name": "RESP",
+        "wave": "x=",
+        "data": [
+          "OKAY"
+        ]
+      },
+      {
+        "name": "RLAST",
+        "wave": "x1"
+      }
+    ],
+    {
+      "name": "MODEL FAULT",
+      "wave": "01"
+    }
+  ],
+  "head": {
+    "text": "A response cannot consume an obligation born at the same edge / 响应不能消费同一采样沿刚建立的义务"
+  },
+  "foot": {
+    "text": "ARESETn = !reset · FIRE = VALID & READY · protocol-model observation, not RTL/VCD"
+  },
+  "config": {
+    "hscale": 10
+  }
+}

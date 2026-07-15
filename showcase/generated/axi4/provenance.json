@@ -1,0 +1,34 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "axi4",
+  "source": "showcase/demos/axi4/run.py",
+  "command": "python3 showcase/demos/axi4/run.py",
+  "protocol_model_version": "0.3.0",
+  "catalog_modules": [
+    "cases.lifecycle",
+    "cases.geometry",
+    "cases.ordering",
+    "cases.observation",
+    "cases.exclusive_profile"
+  ],
+  "execution_models": [
+    "LinkSession",
+    "Axi4ObservationSession"
+  ],
+  "case_count": 24,
+  "deep_dive_cases": [
+    "write-early-wlast",
+    "write-narrow-unaligned-incr"
+  ],
+  "waveform_basis": {
+    "link-events": "one column per sequential CanonicalEvent input; not pin, cycle, VALID/READY, or RTL timing",
+    "atomic-frames": "ready/valid protocol observations; ARESETn is projected as the inverse of normalized active-high reset"
+  },
+  "renderers": {
+    "waveform": "WaveDrom 3.6.2 (package.json)",
+    "causality": "Graphviz dot",
+    "coverage_matrix": "Graphviz dot",
+    "topology": "Graphviz dot"
+  },
+  "publication_boundary": "representative protocol-model scenarios; not complete AXI4 specification coverage, RTL capture, or compliance evidence"
+}

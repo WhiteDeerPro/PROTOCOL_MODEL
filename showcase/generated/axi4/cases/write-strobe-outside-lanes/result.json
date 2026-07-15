@@ -1,0 +1,114 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "write-strobe-outside-lanes",
+  "theme": "geometry",
+  "title": {
+    "en": "WSTRB cannot select bytes outside the transfer container",
+    "zh-CN": "WSTRB 不得选择传输容器之外的字节"
+  },
+  "claim": {
+    "en": "At address 0x3 only lane 3 is legal for this first transfer.",
+    "zh-CN": "该首拍位于地址 0x3，只有字节通道 3 合法。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.write.byte_lanes",
+    "reason_contains": "outside allowed mask"
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.write.byte_lanes",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AW",
+      "key": 3,
+      "payload": {
+        "addr": 3,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 0,
+        "strb": 16,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AW",
+      "key": 3,
+      "payload": {
+        "addr": 3,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    }
+  ],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 1
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 1,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.write.byte_lanes",
+    "reason": "WSTRB 0x10 asserts lanes outside allowed mask 0x8 at beat 1",
+    "scope": "link",
+    "location": ""
+  }
+}

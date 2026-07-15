@@ -1,0 +1,49 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "==",
+      "data": [
+        "0",
+        "1"
+      ]
+    },
+    [
+      "AW",
+      {
+        "name": "CanonicalEvent",
+        "wave": "=x",
+        "data": [
+          "3@0x3:1x4I"
+        ]
+      }
+    ],
+    [
+      "W",
+      {
+        "name": "CanonicalEvent",
+        "wave": "x=",
+        "data": [
+          "D0x0/S10/L1"
+        ]
+      }
+    ],
+    {
+      "name": "COMMITTED",
+      "wave": "10"
+    },
+    {
+      "name": "MODEL FAULT",
+      "wave": "x1"
+    }
+  ],
+  "head": {
+    "text": "WSTRB cannot select bytes outside the transfer container / WSTRB 不得选择传输容器之外的字节"
+  },
+  "foot": {
+    "text": "1 column = 1 CanonicalEvent · MODEL ORDER ONLY · NOT PINS/CYCLES/RTL / 非引脚时序"
+  },
+  "config": {
+    "hscale": 9
+  }
+}

@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc" fill="#17243A">
+  <title id="title">Protocol Model project overview</title>
+  <desc id="desc">A newcomer-oriented overview of Protocol Model. It starts from mixed responsibilities in protocol verification, shows how common communication facts, link rules, virtual modules, boundary translation, and system composition relate, then presents model-level waveform, path, and causal evidence. The footer states what can be demonstrated today and what remains under construction.</desc>
+
+  <!--
+    Hand-authored presentation asset.
+    Keep the Chinese and English versions structurally aligned when editing.
+    No external fonts, scripts or images are required.
+  -->
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F8FAFD"/>
+      <stop offset="1" stop-color="#F3F0EA"/>
+    </linearGradient>
+    <linearGradient id="problem-bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#172842"/>
+      <stop offset="1" stop-color="#223A5C"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#15243A" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="8" refY="4.5" orient="auto">
+      <path d="M0 0 L9 4.5 L0 9 Z" fill="#4169E1"/>
+    </marker>
+    <marker id="arrow-soft" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 L8 4 L0 8 Z" fill="#AAB5C3"/>
+    </marker>
+    <style>
+      text { font-family: Inter, "Noto Sans", "Segoe UI", Arial, sans-serif; }
+      .eyebrow { font-size: 14px; font-weight: 750; letter-spacing: 2.1px; fill: #4169E1; }
+      .headline { font-size: 38px; font-weight: 760; letter-spacing: -0.7px; }
+      .subtitle { font-size: 18px; fill: #57667A; }
+      .column-kicker { font-size: 13px; font-weight: 760; letter-spacing: 1.8px; }
+      .section-title { font-size: 21px; font-weight: 730; }
+      .card-title { font-size: 19px; font-weight: 730; }
+      .body { font-size: 14px; fill: #4F5F73; }
+      .body-dark { font-size: 14px; fill: #DCE5F0; }
+      .small { font-size: 13px; fill: #64748B; }
+      .small-on-dark { font-size: 13px; fill: #AFC0D5; }
+      .tiny { font-size: 11px; fill: #738196; }
+      .tiny-on-dark { font-size: 11px; fill: #9EB1C8; }
+      .term { font-size: 11px; font-weight: 750; letter-spacing: 0.6px; }
+      .scope-title { font-size: 13px; font-weight: 780; letter-spacing: 1.5px; }
+      .scope-body { font-size: 13px; fill: #45556A; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#background)"/>
+
+  <!-- Header -->
+  <text x="60" y="54" class="eyebrow">PROTOCOL MODEL · METHOD OVERVIEW</text>
+  <text x="60" y="104" class="headline">Model communication in layers. Reconnect it with evidence.</text>
+  <text x="60" y="137" class="subtitle">An executable semantics workbench for bus protocols, module boundaries, and small interconnects</text>
+  <rect x="1408" y="42" width="132" height="34" rx="17" fill="#E8EEFF"/>
+  <text x="1427" y="64" class="term" fill="#3557C8">RESEARCH PROTOTYPE</text>
+
+  <!-- Column 1: problem -->
+  <g filter="url(#shadow)">
+    <rect x="60" y="180" width="330" height="480" rx="24" fill="url(#problem-bg)"/>
+  </g>
+  <text x="88" y="216" class="column-kicker" fill="#8DB0FF">01 · THE FRICTION</text>
+  <text x="88" y="252" class="section-title" fill="#FFFFFF">Three concerns often land</text>
+  <text x="88" y="279" class="section-title" fill="#FFFFFF">in one large state machine</text>
+  <text x="88" y="312" class="body-dark">Protocol rules, device decisions, and</text>
+  <text x="88" y="333" class="body-dark">network paths can obscure each other.</text>
+
+  <line x1="88" y1="362" x2="362" y2="362" stroke="#48617F"/>
+
+  <circle cx="108" cy="398" r="16" fill="#34507A"/>
+  <text x="103" y="404" font-size="14" font-weight="750" fill="#FFFFFF">1</text>
+  <text x="138" y="393" class="body-dark">Link legality becomes entangled</text>
+  <text x="138" y="415" class="small-on-dark">with a module's internal state</text>
+
+  <circle cx="108" cy="464" r="16" fill="#34507A"/>
+  <text x="103" y="470" font-size="14" font-weight="750" fill="#FFFFFF">2</text>
+  <text x="138" y="459" class="body-dark">Each protocol pair grows a bridge</text>
+  <text x="138" y="481" class="small-on-dark">with its own split and completion logic</text>
+
+  <circle cx="108" cy="530" r="16" fill="#34507A"/>
+  <text x="103" y="536" font-size="14" font-weight="750" fill="#FFFFFF">3</text>
+  <text x="138" y="525" class="body-dark">A failure stops at “bad waveform”</text>
+  <text x="138" y="547" class="small-on-dark">instead of rule, location, and cause</text>
+
+  <rect x="88" y="584" width="274" height="48" rx="12" fill="#132238" stroke="#4A6382"/>
+  <text x="108" y="604" class="tiny-on-dark">MODELING GOAL</text>
+  <text x="108" y="622" class="body-dark">Separate concerns; retain end-to-end links</text>
+
+  <!-- Problem to model -->
+  <path d="M402 420 L430 420" fill="none" stroke="#4169E1" stroke-width="2.4" marker-end="url(#arrow-blue)"/>
+
+  <!-- Column 2: model -->
+  <g filter="url(#shadow)">
+    <rect x="440" y="180" width="700" height="480" rx="24" fill="#FFFFFF"/>
+  </g>
+  <text x="470" y="216" class="column-kicker" fill="#4169E1">02 · LAYERED MODEL</text>
+  <text x="470" y="247" class="section-title">Answer each question, then compose at explicit boundaries</text>
+
+  <!-- System composition -->
+  <rect x="610" y="278" width="360" height="86" rx="17" fill="#F0ECFF" stroke="#8B74D6" stroke-width="1.5"/>
+  <rect x="632" y="294" width="104" height="22" rx="11" fill="#DDD4FF"/>
+  <text x="648" y="309" class="term" fill="#654BB7">SYSTEM</text>
+  <text x="632" y="338" class="card-title">Composition</text>
+  <text x="756" y="338" class="body">Which ports connect? Where do replies return?</text>
+
+  <!-- Link rules -->
+  <rect x="470" y="408" width="278" height="116" rx="17" fill="#ECF2FF" stroke="#6D8CE8" stroke-width="1.5"/>
+  <rect x="492" y="424" width="116" height="22" rx="11" fill="#DCE6FF"/>
+  <text x="507" y="439" class="term" fill="#3557C8">LINK RULES</text>
+  <text x="492" y="473" class="card-title">One link's language</text>
+  <text x="492" y="497" class="body">What may each side say?</text>
+  <text x="492" y="517" class="body">What makes a transaction legal?</text>
+
+  <!-- Boundary connector -->
+  <path d="M748 466 L832 466" fill="none" stroke="#D27A37" stroke-width="2.2" marker-end="url(#arrow-blue)"/>
+  <rect x="752" y="433" width="76" height="60" rx="13" fill="#FFF3E7" stroke="#E49958"/>
+  <text x="762" y="455" class="term" fill="#B85C20">PORT MAP</text>
+  <text x="759" y="477" class="term" fill="#B85C20">TRANSLATE</text>
+
+  <!-- Virtual module -->
+  <rect x="832" y="408" width="278" height="116" rx="17" fill="#EAF8F3" stroke="#55AA8D" stroke-width="1.5"/>
+  <rect x="854" y="424" width="132" height="22" rx="11" fill="#D8F0E7"/>
+  <text x="869" y="439" class="term" fill="#24795F">VIRTUAL MODULE</text>
+  <text x="854" y="473" class="card-title">Module behavior</text>
+  <text x="854" y="497" class="body">What does a named module emit?</text>
+  <text x="854" y="517" class="body">Who owns its communication state?</text>
+
+  <!-- Foundation -->
+  <rect x="470" y="564" width="640" height="66" rx="16" fill="#F6F8FB" stroke="#B9C3D0"/>
+  <rect x="492" y="580" width="126" height="22" rx="11" fill="#E8EDF3"/>
+  <text x="506" y="595" class="term" fill="#536276">COMMON FACTS</text>
+  <text x="638" y="596" class="body">events · fields · ordering · resources · pending obligations</text>
+
+  <!-- Bottom-up relationships -->
+  <path d="M592 564 L592 531" fill="none" stroke="#AAB5C3" stroke-width="1.8" marker-end="url(#arrow-soft)"/>
+  <path d="M988 564 L988 531" fill="none" stroke="#AAB5C3" stroke-width="1.8" marker-end="url(#arrow-soft)"/>
+  <path d="M610 408 C610 388 668 382 720 370" fill="none" stroke="#AAB5C3" stroke-width="1.8" marker-end="url(#arrow-soft)"/>
+  <path d="M970 408 C970 388 912 382 860 370" fill="none" stroke="#AAB5C3" stroke-width="1.8" marker-end="url(#arrow-soft)"/>
+
+  <!-- Model to evidence -->
+  <path d="M1152 420 L1180 420" fill="none" stroke="#4169E1" stroke-width="2.4" marker-end="url(#arrow-blue)"/>
+
+  <!-- Column 3: evidence -->
+  <g filter="url(#shadow)">
+    <rect x="1190" y="180" width="350" height="480" rx="24" fill="#FFFFFF"/>
+  </g>
+  <text x="1220" y="216" class="column-kicker" fill="#14866D">03 · EXECUTABLE EVIDENCE</text>
+  <text x="1220" y="247" class="section-title">A scenario leaves results</text>
+  <text x="1220" y="274" class="section-title">that remain inspectable</text>
+
+  <rect x="1220" y="302" width="290" height="44" rx="12" fill="#F4F7FA"/>
+  <text x="1242" y="329" class="body">constructed events / normalized samples</text>
+  <path d="M1365 346 L1365 368" fill="none" stroke="#AAB5C3" stroke-width="1.8" marker-end="url(#arrow-soft)"/>
+  <rect x="1220" y="374" width="290" height="52" rx="12" fill="#EAF2FF" stroke="#83A0EB"/>
+  <text x="1242" y="396" class="small">Run link and system rules</text>
+  <text x="1242" y="416" class="tiny">state, faults, and causal edges share one execution</text>
+
+  <!-- Evidence thumbnails -->
+  <rect x="1220" y="452" width="88" height="92" rx="13" fill="#F8FAFC" stroke="#CCD5E0"/>
+  <path d="M1235 478 H1252 V468 H1270 V489 H1293" fill="none" stroke="#4169E1" stroke-width="2"/>
+  <path d="M1235 500 H1260 V515 H1277 V500 H1293" fill="none" stroke="#14866D" stroke-width="2"/>
+  <text x="1239" y="533" class="tiny">waveform</text>
+
+  <rect x="1321" y="452" width="88" height="92" rx="13" fill="#F8FAFC" stroke="#CCD5E0"/>
+  <circle cx="1343" cy="485" r="8" fill="#6D8CE8"/>
+  <circle cx="1387" cy="475" r="8" fill="#8B74D6"/>
+  <circle cx="1387" cy="510" r="8" fill="#55AA8D"/>
+  <path d="M1351 483 L1378 477 M1350 490 L1379 506" stroke="#8593A5" stroke-width="2"/>
+  <text x="1341" y="533" class="tiny">path</text>
+
+  <rect x="1422" y="452" width="88" height="92" rx="13" fill="#F8FAFC" stroke="#CCD5E0"/>
+  <circle cx="1442" cy="480" r="7" fill="#4169E1"/>
+  <circle cx="1467" cy="498" r="7" fill="#E0904D"/>
+  <circle cx="1492" cy="516" r="7" fill="#D05252"/>
+  <path d="M1448 484 L1461 493 M1473 502 L1486 511" stroke="#8593A5" stroke-width="2"/>
+  <text x="1435" y="533" class="tiny">causality</text>
+
+  <text x="1220" y="574" class="small">Diagnosis: rule · reason · scope · location</text>
+  <rect x="1220" y="594" width="74" height="28" rx="14" fill="#DDF3E9"/>
+  <text x="1239" y="613" class="term" fill="#23765C">PASS</text>
+  <rect x="1304" y="594" width="66" height="28" rx="14" fill="#F9E2E2"/>
+  <text x="1322" y="613" class="term" fill="#A84444">FAIL</text>
+  <rect x="1380" y="594" width="130" height="28" rx="14" fill="#F3EBD9"/>
+  <text x="1398" y="613" class="term" fill="#8A6326">INCONCLUSIVE</text>
+  <text x="1220" y="646" class="tiny">Current visuals are model-level evidence, not captured RTL waves.</text>
+
+  <!-- Scope footer -->
+  <rect x="60" y="700" width="950" height="132" rx="21" fill="#FFFFFF" stroke="#C8D2DE"/>
+  <rect x="60" y="700" width="8" height="132" rx="4" fill="#14866D"/>
+  <text x="88" y="730" class="scope-title" fill="#14866D">DEMONSTRABLE TODAY</text>
+  <text x="88" y="760" class="scope-body">AXI / AHB / APB family link semantics · VirtualDut port bindings · synchronous point-to-point and bridge paths</text>
+  <text x="88" y="786" class="scope-body">structured traces · model-level protocol waves · topology and causal SVG projections</text>
+  <text x="88" y="812" class="tiny">Clause coverage is established by the requirement catalog and scenarios—not inferred from a protocol name.</text>
+
+  <rect x="1030" y="700" width="510" height="132" rx="21" fill="#FFF8EF" stroke="#E8C99F"/>
+  <rect x="1030" y="700" width="8" height="132" rx="4" fill="#E18843"/>
+  <text x="1058" y="730" class="scope-title" fill="#B76326">BOUNDARIES UNDER CONSTRUCTION</text>
+  <text x="1058" y="758" class="scope-body">one-command public demos · raw RTL / VCD / FSDB ingestion</text>
+  <text x="1058" y="784" class="scope-body">shared typed bridge executor · network time and deadlock analysis</text>
+  <text x="1058" y="812" class="tiny">For method research and model-level verification today; not a replacement for RTL sign-off.</text>
+
+  <text x="60" y="870" class="tiny">Protocol Model · Project overview · model-level communication semantics</text>
+  <text x="1540" y="870" class="tiny" text-anchor="end">English · 1600 × 900</text>
+</svg>

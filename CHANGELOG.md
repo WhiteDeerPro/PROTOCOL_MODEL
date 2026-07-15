@@ -1,16 +1,36 @@
 # Changelog
 
-## Unreleased — repository hygiene
+## 0.3.0 — bottom-up protocol architecture and public showcase (2026-07-16)
 
-- 删除旧的 `docs/images/` 手工 SVG 快照、早期设计草稿和 Project 内遗留运行目录。
-- 删除绕过 `ArtifactBundle` 的 CLI 文件输出；运行证据只允许进入带 manifest 的 `out/` bundle。
-- 将 legal/negative evidence 明确组织为同一 run bundle 下的 case；每个 case 生成 trace、WaveDrom
-  波形和 Graphviz 因果图，并由 manifest v2 与 Project 总报告关联。
-- 新增 `run-all`、`scripts/quickstart.sh` 和 `out/index.html` 统一实验入口。
-- 新增无 bridge 的 `prj_axi4_scenarios`，由 manager source 与 subordinate responder 两个
-  VirtualDut 批量执行 37 个 full-width AXI4 read/write/ordering/concurrency/reset case。
-- 单 transfer 信号检查现在保留底层精确 fault；`cycle_conflict` 仅用于同周期多 transfer
-  的非交换组合。
+本版本将开发期的 `0.2.0.dev0` 架构迁移整理为首个可公开审阅的 0.3 系列版本。它是
+pre-1.0 technical preview，公共入口和建模边界仍可能根据实际使用反馈调整。
+
+- 完成 v0.1 方法审计；语义资产迁入新层级后移除旧 Python 包、Project gallery 和兼容入口。
+- 新公共术语确定为 `LinkProtocol`、具体 `VirtualDut` 和全局 `SystemProtocol`；不暴露
+  `Agent` 抽象。
+- 新增 scope-aware constraint、resource、obligation 与可组合 `SemanticFragment`。
+- 新增 typed VirtualDut port、ProtocolLink、link ownership/boundary elaboration 和全局语义
+  namespace。
+- 支持把 SystemProtocol 封装为复合 VirtualDut，统一 SoC、chiplet、封装和板级递归组合。
+- 新增 executable event domain、LinkSession、CardinalityMonitor 和 SystemSession；单链路与
+  `A → bridge → B` 均通过统一的自动投递路径执行。
+- AMBA LinkProtocol 按 AXI/AHB/APB/ACE/CHI 家族组织；APB3/APB4/APB5 提供独立 API，
+  APB5 当前覆盖 user/wakeup/RME 并关闭 parity profile。
+- 新增 ACE-Lite ordinary-data profile，复用 AXI4 五通道语义并检查 domain/snoop/bar；
+  CHI Issue H 完成实施前边界审计。
+- 新增 APB、AHB、AXI4-Lite 与 AXI4 的功能性 VirtualDut integration；AXI4 normal burst endpoint
+  可展开逐 beat AddressAccess，AXI4-Stream 使用独立 StreamTransfer contract。
+- 新增同宽 AXI→APB bridge VirtualDut：Lite profile 为单活动事务；full AXI4 profile 提供有界 parent
+  FIFO、burst 逐 beat APB 调度、地址重映射和 completion 聚合。
+- 集成源码按职责拆为单端口 `integrations/attachments/` 与模块构造
+  `integrations/recipes/{endpoints,fabrics,bridges}/`；AMBA 表示端口绑定范围，不建立 AMBA 设备继承树。
+- 新增统一的 AXI4 场景展示入口；普通场景均保留波形、因果图和机器可读结果，少量代表场景提供展开讲解。
+- 新增中英文架构总览、one-pager、演示稿与发布文案，并将内部推广策略和可直接发布的材料分开维护。
+- 运行目录改为由调用方按用途选择；`out/` 仅为未指定时的 scratch 默认，受版本控制的展示资产只能由
+  具名生成脚本显式更新。
+- 新增基于 `pyproject.toml` 的 Python source/wheel packaging 元数据，版本由
+  `protocol_model.__version__` 单点提供。
+- 本迁移不承诺兼容 v0.1.x API；历史行为需要时从版本控制审计。
 
 ## 0.1.1 — project workflow and evidence management (2026-07-13)
 

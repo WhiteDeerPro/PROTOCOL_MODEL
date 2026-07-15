@@ -1,0 +1,510 @@
+{
+  "schema": "protocol-model.showcase.axi4-examples/v1",
+  "scope": "representative executable scenarios",
+  "coverage_statement": "scenario evidence only; case count is not specification coverage",
+  "themes": [
+    {
+      "theme": "lifecycle",
+      "label": {
+        "en": "Lifecycle",
+        "zh-CN": "事务生命周期"
+      },
+      "cases": [
+        "read-single-lifecycle",
+        "read-orphan-response",
+        "write-single-lifecycle",
+        "write-data-before-address",
+        "write-early-wlast",
+        "write-missing-wlast",
+        "write-wrong-bid"
+      ]
+    },
+    {
+      "theme": "geometry",
+      "label": {
+        "en": "Geometry",
+        "zh-CN": "burst 与字节几何"
+      },
+      "cases": [
+        "read-crosses-4kb-boundary",
+        "write-narrow-unaligned-incr",
+        "write-strobe-outside-lanes",
+        "read-wrap-four-legal",
+        "read-wrap-three-illegal",
+        "read-fixed-sixteen-legal",
+        "read-fixed-seventeen-illegal"
+      ]
+    },
+    {
+      "theme": "ordering/interleave",
+      "label": {
+        "en": "Ordering / interleave",
+        "zh-CN": "顺序与交织"
+      },
+      "cases": [
+        "read-cross-id-interleave",
+        "read-same-id-later-cannot-overtake",
+        "write-multiple-outstanding-reverse-b"
+      ]
+    },
+    {
+      "theme": "observation/reset",
+      "label": {
+        "en": "Observation / reset",
+        "zh-CN": "采样与复位"
+      },
+      "cases": [
+        "observation-same-frame-aw-w",
+        "observation-same-frame-ar-r",
+        "observation-stalled-payload-mutation",
+        "observation-reset-clears-pending-read"
+      ]
+    },
+    {
+      "theme": "exclusive/profile",
+      "label": {
+        "en": "Exclusive / profile",
+        "zh-CN": "独占访问与 profile"
+      },
+      "cases": [
+        "exclusive-matching-exokay",
+        "profile-bounded-read-capacity",
+        "exclusive-unmatched-success"
+      ]
+    }
+  ],
+  "cases": [
+    {
+      "name": "read-single-lifecycle",
+      "theme": "lifecycle",
+      "title": {
+        "en": "Single read opens and discharges one obligation",
+        "zh-CN": "单拍读事务打开并解除一个义务"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/read-single-lifecycle/result.json",
+      "waveform": "cases/read-single-lifecycle/waveform.svg",
+      "causality": "cases/read-single-lifecycle/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "read-orphan-response",
+      "theme": "lifecycle",
+      "title": {
+        "en": "An R response requires a pending AR",
+        "zh-CN": "R 响应必须对应已接受的 AR"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.read.orphan_beat",
+      "expectation": "MET",
+      "result": "cases/read-orphan-response/result.json",
+      "waveform": "cases/read-orphan-response/waveform.svg",
+      "causality": "cases/read-orphan-response/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "write-single-lifecycle",
+      "theme": "lifecycle",
+      "title": {
+        "en": "AW and W join before B completion",
+        "zh-CN": "AW 与 W 关联后再由 B 完成"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/write-single-lifecycle/result.json",
+      "waveform": "cases/write-single-lifecycle/waveform.svg",
+      "causality": "cases/write-single-lifecycle/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "write-data-before-address",
+      "theme": "lifecycle",
+      "title": {
+        "en": "A complete W burst may precede its AW descriptor",
+        "zh-CN": "完整 W burst 可以先于 AW 描述符到达"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/write-data-before-address/result.json",
+      "waveform": "cases/write-data-before-address/waveform.svg",
+      "causality": "cases/write-data-before-address/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "write-early-wlast",
+      "theme": "lifecycle",
+      "title": {
+        "en": "WLAST follows the oldest AW beat count",
+        "zh-CN": "WLAST 必须符合最早 AW 声明的拍数"
+      },
+      "mode": "atomic-frames",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.write.final_marker",
+      "expectation": "MET",
+      "result": "cases/write-early-wlast/result.json",
+      "waveform": "cases/write-early-wlast/waveform.svg",
+      "causality": "cases/write-early-wlast/causality.svg",
+      "deep_dive": true
+    },
+    {
+      "name": "write-missing-wlast",
+      "theme": "lifecycle",
+      "title": {
+        "en": "The final required W transfer asserts WLAST",
+        "zh-CN": "最后一拍必需的 W 传输必须置 WLAST"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.write.final_marker",
+      "expectation": "MET",
+      "result": "cases/write-missing-wlast/result.json",
+      "waveform": "cases/write-missing-wlast/waveform.svg",
+      "causality": "cases/write-missing-wlast/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "write-wrong-bid",
+      "theme": "lifecycle",
+      "title": {
+        "en": "BID identifies a pending write context",
+        "zh-CN": "BID 必须标识一笔待完成写事务"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.exclusive.orphan_write_response",
+      "expectation": "MET",
+      "result": "cases/write-wrong-bid/result.json",
+      "waveform": "cases/write-wrong-bid/waveform.svg",
+      "causality": "cases/write-wrong-bid/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "read-crosses-4kb-boundary",
+      "theme": "geometry",
+      "title": {
+        "en": "An INCR burst stays within one 4KB region",
+        "zh-CN": "INCR burst 必须位于同一个 4KB 区域"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.link_session.AR.event_schema",
+      "expectation": "MET",
+      "result": "cases/read-crosses-4kb-boundary/result.json",
+      "waveform": "cases/read-crosses-4kb-boundary/waveform.svg",
+      "causality": "cases/read-crosses-4kb-boundary/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "write-narrow-unaligned-incr",
+      "theme": "geometry",
+      "title": {
+        "en": "Narrow unaligned transfers rotate legal byte lanes",
+        "zh-CN": "窄位宽非对齐传输轮换合法字节通道"
+      },
+      "mode": "atomic-frames",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/write-narrow-unaligned-incr/result.json",
+      "waveform": "cases/write-narrow-unaligned-incr/waveform.svg",
+      "causality": "cases/write-narrow-unaligned-incr/causality.svg",
+      "deep_dive": true
+    },
+    {
+      "name": "write-strobe-outside-lanes",
+      "theme": "geometry",
+      "title": {
+        "en": "WSTRB cannot select bytes outside the transfer container",
+        "zh-CN": "WSTRB 不得选择传输容器之外的字节"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.write.byte_lanes",
+      "expectation": "MET",
+      "result": "cases/write-strobe-outside-lanes/result.json",
+      "waveform": "cases/write-strobe-outside-lanes/waveform.svg",
+      "causality": "cases/write-strobe-outside-lanes/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "read-wrap-four-legal",
+      "theme": "geometry",
+      "title": {
+        "en": "A four-transfer WRAP burst rotates inside its wrap window",
+        "zh-CN": "四拍 WRAP burst 在自身窗口内回绕"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/read-wrap-four-legal/result.json",
+      "waveform": "cases/read-wrap-four-legal/waveform.svg",
+      "causality": "cases/read-wrap-four-legal/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "read-wrap-three-illegal",
+      "theme": "geometry",
+      "title": {
+        "en": "WRAP uses one of the protocol's permitted transfer counts",
+        "zh-CN": "WRAP 必须使用协议允许的传输拍数"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.link_session.AR.event_schema",
+      "expectation": "MET",
+      "result": "cases/read-wrap-three-illegal/result.json",
+      "waveform": "cases/read-wrap-three-illegal/waveform.svg",
+      "causality": "cases/read-wrap-three-illegal/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "read-fixed-sixteen-legal",
+      "theme": "geometry",
+      "title": {
+        "en": "FIXED permits sixteen transfers at one address container",
+        "zh-CN": "FIXED 允许在同一地址容器上传输十六拍"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/read-fixed-sixteen-legal/result.json",
+      "waveform": "cases/read-fixed-sixteen-legal/waveform.svg",
+      "causality": "cases/read-fixed-sixteen-legal/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "read-fixed-seventeen-illegal",
+      "theme": "geometry",
+      "title": {
+        "en": "FIXED length does not exceed sixteen transfers",
+        "zh-CN": "FIXED 长度不超过十六拍"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.link_session.AR.event_schema",
+      "expectation": "MET",
+      "result": "cases/read-fixed-seventeen-illegal/result.json",
+      "waveform": "cases/read-fixed-seventeen-illegal/waveform.svg",
+      "causality": "cases/read-fixed-seventeen-illegal/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "read-cross-id-interleave",
+      "theme": "ordering/interleave",
+      "title": {
+        "en": "Responses for different IDs may interleave",
+        "zh-CN": "不同 ID 的读响应可以交织"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/read-cross-id-interleave/result.json",
+      "waveform": "cases/read-cross-id-interleave/waveform.svg",
+      "causality": "cases/read-cross-id-interleave/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "read-same-id-later-cannot-overtake",
+      "theme": "ordering/interleave",
+      "title": {
+        "en": "The oldest same-ID read consumes responses first",
+        "zh-CN": "同 ID 的最早读请求优先消费响应"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.read.final_marker",
+      "expectation": "MET",
+      "result": "cases/read-same-id-later-cannot-overtake/result.json",
+      "waveform": "cases/read-same-id-later-cannot-overtake/waveform.svg",
+      "causality": "cases/read-same-id-later-cannot-overtake/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "write-multiple-outstanding-reverse-b",
+      "theme": "ordering/interleave",
+      "title": {
+        "en": "Different write IDs may complete in reverse request order",
+        "zh-CN": "不同写 ID 可以按请求的逆序完成"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/write-multiple-outstanding-reverse-b/result.json",
+      "waveform": "cases/write-multiple-outstanding-reverse-b/waveform.svg",
+      "causality": "cases/write-multiple-outstanding-reverse-b/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "observation-same-frame-aw-w",
+      "theme": "observation/reset",
+      "title": {
+        "en": "AW and W at one edge commit as one frame",
+        "zh-CN": "同一采样沿的 AW 与 W 作为一个帧提交"
+      },
+      "mode": "atomic-frames",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/observation-same-frame-aw-w/result.json",
+      "waveform": "cases/observation-same-frame-aw-w/waveform.svg",
+      "causality": "cases/observation-same-frame-aw-w/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "observation-same-frame-ar-r",
+      "theme": "observation/reset",
+      "title": {
+        "en": "A response cannot consume an obligation born at the same edge",
+        "zh-CN": "响应不能消费同一采样沿刚建立的义务"
+      },
+      "mode": "atomic-frames",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.read.orphan_beat",
+      "expectation": "MET",
+      "result": "cases/observation-same-frame-ar-r/result.json",
+      "waveform": "cases/observation-same-frame-ar-r/waveform.svg",
+      "causality": "cases/observation-same-frame-ar-r/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "observation-stalled-payload-mutation",
+      "theme": "observation/reset",
+      "title": {
+        "en": "Payload remains stable while VALID is stalled",
+        "zh-CN": "VALID 阻塞期间 payload 保持稳定"
+      },
+      "mode": "atomic-frames",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.observation.AR.ready_valid.payload_stability",
+      "expectation": "MET",
+      "result": "cases/observation-stalled-payload-mutation/result.json",
+      "waveform": "cases/observation-stalled-payload-mutation/waveform.svg",
+      "causality": "cases/observation-stalled-payload-mutation/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "observation-reset-clears-pending-read",
+      "theme": "observation/reset",
+      "title": {
+        "en": "Reset starts a new observation and link epoch",
+        "zh-CN": "复位开启新的观察与链路 epoch"
+      },
+      "mode": "atomic-frames",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.read.orphan_beat",
+      "expectation": "MET",
+      "result": "cases/observation-reset-clears-pending-read/result.json",
+      "waveform": "cases/observation-reset-clears-pending-read/waveform.svg",
+      "causality": "cases/observation-reset-clears-pending-read/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "exclusive-matching-exokay",
+      "theme": "exclusive/profile",
+      "title": {
+        "en": "A matching link-local exclusive sequence may succeed",
+        "zh-CN": "匹配的链路内独占序列可以成功"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "PASS",
+      "observed": "PASS",
+      "rule": null,
+      "expectation": "MET",
+      "result": "cases/exclusive-matching-exokay/result.json",
+      "waveform": "cases/exclusive-matching-exokay/waveform.svg",
+      "causality": "cases/exclusive-matching-exokay/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "profile-bounded-read-capacity",
+      "theme": "exclusive/profile",
+      "title": {
+        "en": "A refined profile can bound outstanding reads",
+        "zh-CN": "细化 profile 可以限制 outstanding read"
+      },
+      "mode": "link-events",
+      "protocol": "axi4_one_read",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4_one_read.axi4.read.pending_transactions.capacity",
+      "expectation": "MET",
+      "result": "cases/profile-bounded-read-capacity/result.json",
+      "waveform": "cases/profile-bounded-read-capacity/waveform.svg",
+      "causality": "cases/profile-bounded-read-capacity/causality.svg",
+      "deep_dive": false
+    },
+    {
+      "name": "exclusive-unmatched-success",
+      "theme": "exclusive/profile",
+      "title": {
+        "en": "EXOKAY requires a matching completed exclusive read",
+        "zh-CN": "EXOKAY 要求存在匹配且已完成的独占读"
+      },
+      "mode": "link-events",
+      "protocol": "axi4",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "rule": "axi4.exclusive.unmatched_success",
+      "expectation": "MET",
+      "result": "cases/exclusive-unmatched-success/result.json",
+      "waveform": "cases/exclusive-unmatched-success/waveform.svg",
+      "causality": "cases/exclusive-unmatched-success/causality.svg",
+      "deep_dive": false
+    }
+  ]
+}

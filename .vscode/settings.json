@@ -22,5 +22,6 @@
     "node_modules": true,
     "build": true,
     "runs": true
-  }
+  },
+  "makefile.configureOnOpen": false
 }

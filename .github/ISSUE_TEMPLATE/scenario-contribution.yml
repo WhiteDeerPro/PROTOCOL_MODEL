@@ -1,0 +1,68 @@
+name: Scenario contribution
+description: Propose one reproducible legal or expected-violation scenario
+title: "[scenario] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Public scenarios connect expected and observed behavior, waveform, and causality evidence from one execution. Start with one primary learning goal.
+  - type: input
+    id: protocol
+    attributes:
+      label: Protocol and profile
+      placeholder: AXI4 full, 64-bit data, bounded read capacity 2
+    validations:
+      required: true
+  - type: input
+    id: goal
+    attributes:
+      label: Primary learning goal
+      description: What one relation, boundary, or diagnostic should a reader learn?
+      placeholder: Show that a stalled W payload must remain stable
+    validations:
+      required: true
+  - type: textarea
+    id: inputs
+    attributes:
+      label: Deterministic inputs
+      description: List the minimal frames/events, parameters, and any fixed seed needed to reproduce the case.
+    validations:
+      required: true
+  - type: dropdown
+    id: expected_verdict
+    attributes:
+      label: Expected protocol verdict
+      options:
+        - PASS (legal scenario)
+        - FAIL (expected violation)
+    validations:
+      required: true
+  - type: input
+    id: expected_rule
+    attributes:
+      label: Expected rule or fault
+      description: Required for an expected violation; use the current rule ID when known.
+      placeholder: ready_valid.payload_stability
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed evidence
+      description: If implemented, give the unified runner result and links/paths for the machine result, waveform, and causal graph. Otherwise state what remains to be implemented.
+    validations:
+      required: true
+  - type: textarea
+    id: novelty
+    attributes:
+      label: Why this adds useful breadth
+      description: Identify the new semantic theme or boundary; ordinary parameter sweeps normally belong inside an existing case.
+  - type: checkboxes
+    id: contract
+    attributes:
+      label: Scenario contract
+      options:
+        - label: The scenario has one primary learning goal and deterministic inputs.
+          required: true
+        - label: The proposal keeps expected and observed verdicts distinct.
+          required: true
+        - label: The completed public case will generate both waveform and causal-graph evidence through `showcase/demos/axi4/run.py`.
+          required: true

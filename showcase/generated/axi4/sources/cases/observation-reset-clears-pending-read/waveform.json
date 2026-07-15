@@ -1,0 +1,115 @@
+{
+  "signal": [
+    {
+      "name": "ACLK",
+      "wave": "p..."
+    },
+    {
+      "name": "ARESETn",
+      "wave": "0101"
+    },
+    [
+      "AR",
+      {
+        "name": "VALID",
+        "wave": "010."
+      },
+      {
+        "name": "READY",
+        "wave": "1..."
+      },
+      {
+        "name": "FIRE",
+        "wave": "010."
+      },
+      {
+        "name": "ID",
+        "wave": "x=x.",
+        "data": [
+          "4"
+        ]
+      },
+      {
+        "name": "ADDR",
+        "wave": "x=x.",
+        "data": [
+          "0x00000b00"
+        ]
+      },
+      {
+        "name": "LEN",
+        "wave": "x=x.",
+        "data": [
+          "0 (1 beats)"
+        ]
+      },
+      {
+        "name": "SIZE",
+        "wave": "x=x.",
+        "data": [
+          "2 (4B)"
+        ]
+      },
+      {
+        "name": "BURST",
+        "wave": "x=x.",
+        "data": [
+          "INCR"
+        ]
+      }
+    ],
+    [
+      "R",
+      {
+        "name": "VALID",
+        "wave": "0..1"
+      },
+      {
+        "name": "READY",
+        "wave": "1..."
+      },
+      {
+        "name": "FIRE",
+        "wave": "0..1"
+      },
+      {
+        "name": "ID",
+        "wave": "x..=",
+        "data": [
+          "4"
+        ]
+      },
+      {
+        "name": "DATA",
+        "wave": "x..=",
+        "data": [
+          "0x0"
+        ]
+      },
+      {
+        "name": "RESP",
+        "wave": "x..=",
+        "data": [
+          "OKAY"
+        ]
+      },
+      {
+        "name": "RLAST",
+        "wave": "x..1"
+      }
+    ],
+    {
+      "name": "MODEL FAULT",
+      "wave": "0..1"
+    }
+  ],
+  "head": {
+    "text": "Reset starts a new observation and link epoch / 复位开启新的观察与链路 epoch"
+  },
+  "foot": {
+    "text": "ARESETn = !reset · FIRE = VALID & READY · protocol-model observation, not RTL/VCD"
+  },
+  "config": {
+    "hscale": 6
+  }
+}

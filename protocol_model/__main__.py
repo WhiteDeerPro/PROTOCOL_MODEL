@@ -1,6 +1,7 @@
-"""Run Protocol Model inspection commands with ``python -m protocol_model``."""
+"""Show the active Protocol Model architecture."""
 
-from .cli import main
+from . import __version__
 
 
-raise SystemExit(main())
+print(f"protocol_model {__version__}")
+print("New API: LinkProtocol + VirtualDut + SystemProtocol")

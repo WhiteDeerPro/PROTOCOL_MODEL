@@ -1,0 +1,12 @@
+digraph axi4_case {
+  rankdir=LR;
+  label="A refined profile can bound outstanding reads / 细化 profile 可以限制 outstanding read";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.4, ranksep=0.65, splines=polyline, pad=0.2];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
+  edge [color="#3169a8", fontname="sans-serif", fontsize=9];
+  event0 [label="[0] ID6 A=0xd00 N=1 S=4B INCR"];
+  context [shape=note, style="filled", fillcolor="#f4f5f6", color="#7c8790", label="rejected input / 被拒输入\nID7 A=0xd08 N=1 S=4B INCR"];
+  fault [shape=octagon, style="filled", fillcolor="#ffe9e7", color="#b33a2b", label="REJECTED / 已拒绝\naxi4_one_read.axi4.read.pending_transactions.capacity\nresource 'axi4.read.pending_transactions' usage 2 exceeds profile capacity 1"];
+  context -> fault [style=dashed, color="#777777", label="diagnostic context / 诊断上下文（非因果边）"];
+}

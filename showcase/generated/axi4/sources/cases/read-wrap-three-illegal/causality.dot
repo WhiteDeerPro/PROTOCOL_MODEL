@@ -1,0 +1,11 @@
+digraph axi4_case {
+  rankdir=LR;
+  label="WRAP uses one of the protocol's permitted transfer counts / WRAP 必须使用协议允许的传输拍数";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.4, ranksep=0.65, splines=polyline, pad=0.2];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
+  edge [color="#3169a8", fontname="sans-serif", fontsize=9];
+  context [shape=note, style="filled", fillcolor="#f4f5f6", color="#7c8790", label="rejected input / 被拒输入\nID9 A=0x40 N=3 S=4B WRAP"];
+  fault [shape=octagon, style="filled", fillcolor="#ffe9e7", color="#b33a2b", label="REJECTED / 已拒绝\naxi4.link_session.AR.event_schema\nWRAP burst length must be 2, 4, 8, or 16 transfers"];
+  context -> fault [style=dashed, color="#777777", label="diagnostic context / 诊断上下文（非因果边）"];
+}

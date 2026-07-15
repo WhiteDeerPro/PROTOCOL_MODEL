@@ -1,0 +1,246 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "observation-reset-clears-pending-read",
+  "theme": "observation/reset",
+  "title": {
+    "en": "Reset starts a new observation and link epoch",
+    "zh-CN": "复位开启新的观察与链路 epoch"
+  },
+  "claim": {
+    "en": "An R after reset cannot complete the pre-reset AR.",
+    "zh-CN": "复位后的 R 不能完成复位前的 AR。"
+  },
+  "execution": {
+    "mode": "atomic-frames",
+    "protocol": "axi4",
+    "model": "Axi4ObservationSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "AtomicFrame protocol observation"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.read.orphan_beat",
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.read.orphan_beat",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "AtomicFrame",
+      "tick": 0,
+      "clock": "aclk",
+      "reset": true,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 1,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "AR",
+            "key": 4,
+            "payload": {
+              "addr": 2816,
+              "len": 0,
+              "size": 2,
+              "burst": "INCR",
+              "lock": 0,
+              "cache": 0,
+              "prot": 0,
+              "qos": 0,
+              "region": 0
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 2,
+      "clock": "aclk",
+      "reset": true,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 3,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "R",
+            "key": 4,
+            "payload": {
+              "data": 0,
+              "resp": "OKAY",
+              "last": true
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        }
+      }
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AR",
+      "key": 4,
+      "payload": {
+        "addr": 2816,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 1,
+      "trace_index": 0
+    }
+  ],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 1,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.read.orphan_beat",
+    "reason": "completion for key 4 has no pending obligation",
+    "scope": "link",
+    "location": ""
+  }
+}

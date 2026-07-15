@@ -1,0 +1,108 @@
+{
+  "signal": [
+    {
+      "name": "ACLK",
+      "wave": "p.."
+    },
+    {
+      "name": "ARESETn",
+      "wave": "01."
+    },
+    [
+      "AW",
+      {
+        "name": "VALID",
+        "wave": "010"
+      },
+      {
+        "name": "READY",
+        "wave": "1.."
+      },
+      {
+        "name": "FIRE",
+        "wave": "010"
+      },
+      {
+        "name": "ID",
+        "wave": "x=x",
+        "data": [
+          "1"
+        ]
+      },
+      {
+        "name": "ADDR",
+        "wave": "x=x",
+        "data": [
+          "0x00000003"
+        ]
+      },
+      {
+        "name": "LEN",
+        "wave": "x=x",
+        "data": [
+          "3 (4 beats)"
+        ]
+      },
+      {
+        "name": "SIZE",
+        "wave": "x=x",
+        "data": [
+          "2 (4B)"
+        ]
+      },
+      {
+        "name": "BURST",
+        "wave": "x=x",
+        "data": [
+          "INCR"
+        ]
+      }
+    ],
+    [
+      "W",
+      {
+        "name": "VALID",
+        "wave": "0.1"
+      },
+      {
+        "name": "READY",
+        "wave": "1.."
+      },
+      {
+        "name": "FIRE",
+        "wave": "0.1"
+      },
+      {
+        "name": "DATA",
+        "wave": "x.=",
+        "data": [
+          "0x1111111111111111"
+        ]
+      },
+      {
+        "name": "WSTRB",
+        "wave": "x.=",
+        "data": [
+          "0x08"
+        ]
+      },
+      {
+        "name": "WLAST",
+        "wave": "x.1"
+      }
+    ],
+    {
+      "name": "MODEL FAULT",
+      "wave": "0.1"
+    }
+  ],
+  "head": {
+    "text": "WLAST follows the oldest AW beat count / WLAST 必须符合最早 AW 声明的拍数"
+  },
+  "foot": {
+    "text": "ARESETn = !reset · FIRE = VALID & READY · protocol-model observation, not RTL/VCD"
+  },
+  "config": {
+    "hscale": 8
+  }
+}

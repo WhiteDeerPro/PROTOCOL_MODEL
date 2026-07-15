@@ -1,0 +1,14 @@
+digraph demo_scope {
+  rankdir=LR;
+  label="AXI4 executable example path / AXI4 可执行示例路径";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.5, ranksep=0.7, splines=polyline];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", margin="0.15,0.10"];
+  inputs [label="24 named inputs\nCanonicalEvent or AtomicFrame\n24 个具名输入轨迹", fillcolor="#f7f0ff", color="#7652a8"];
+  observation [label="Optional observation lowering\nready/valid + reset\n可选观察层下沉", fillcolor="#fff7dd", color="#a87d21"];
+  link [label="AXI4 LinkProtocol session\ngeometry · join · lifecycle\n几何 · 关联 · 生命周期", fillcolor="#eaf8ef", color="#2d8650"];
+  evidence [label="Per-case evidence\nresult · waveform · causality\n结果 · 波形 · 因果关系", fillcolor="#fff0ee", color="#a84a3d"];
+  inputs -> observation -> link -> evidence;
+  boundary [shape=note, label="Event-level waves show model sequence; AtomicFrame waves show protocol observations.\nNeither is an RTL pin/VCD capture.\n事件波形展示模型顺序；AtomicFrame 波形展示协议观察，均非 RTL/VCD。", fillcolor="#ffffff", color="#777777"];
+  boundary -> observation [style=dashed, arrowhead=none, color="#777777"];
+}

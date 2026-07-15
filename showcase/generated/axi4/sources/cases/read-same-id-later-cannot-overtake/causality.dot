@@ -1,0 +1,13 @@
+digraph axi4_case {
+  rankdir=LR;
+  label="The oldest same-ID read consumes responses first / 同 ID 的最早读请求优先消费响应";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.4, ranksep=0.65, splines=polyline, pad=0.2];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
+  edge [color="#3169a8", fontname="sans-serif", fontsize=9];
+  event0 [label="[0] ID3 A=0x600 N=2 S=4B INCR"];
+  event1 [label="[1] ID3 A=0x700 N=1 S=4B INCR"];
+  context [shape=note, style="filled", fillcolor="#f4f5f6", color="#7c8790", label="rejected input / 被拒输入\nID3 D=0x0 OKAY L=1"];
+  fault [shape=octagon, style="filled", fillcolor="#ffe9e7", color="#b33a2b", label="REJECTED / 已拒绝\naxi4.read.final_marker\nbeat 1/2 for key 3 requires last=False, got True"];
+  context -> fault [style=dashed, color="#777777", label="diagnostic context / 诊断上下文（非因果边）"];
+}

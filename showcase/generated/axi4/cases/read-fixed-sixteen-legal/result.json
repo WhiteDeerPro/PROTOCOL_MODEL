@@ -1,0 +1,592 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "read-fixed-sixteen-legal",
+  "theme": "geometry",
+  "title": {
+    "en": "FIXED permits sixteen transfers at one address container",
+    "zh-CN": "FIXED 允许在同一地址容器上传输十六拍"
+  },
+  "claim": {
+    "en": "Even at 0xFFF, every transfer reuses the same in-page container.",
+    "zh-CN": "即使位于 0xFFF，每一拍仍复用同一个页内传输容器。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "PASS",
+    "rule": null,
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "PASS",
+    "rule": null,
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 10,
+      "payload": {
+        "addr": 4095,
+        "len": 15,
+        "size": 2,
+        "burst": "FIXED",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 256,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 257,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 258,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 259,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 260,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 261,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 262,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 263,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 264,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 265,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 266,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 267,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 268,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 269,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 270,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 271,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AR",
+      "key": 10,
+      "payload": {
+        "addr": 4095,
+        "len": 15,
+        "size": 2,
+        "burst": "FIXED",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 256,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 1
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 257,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 2
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 258,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 3
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 259,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 4
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 260,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 5
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 261,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 6
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 262,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 7
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 263,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 8
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 264,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 9
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 265,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 10
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 266,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 11
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 267,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 12
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 268,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 13
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 269,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 14
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 270,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 15
+    },
+    {
+      "kind": "R",
+      "key": 10,
+      "payload": {
+        "data": 271,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 16
+    }
+  ],
+  "causal_edges": [
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      6,
+      7
+    ],
+    [
+      7,
+      8
+    ],
+    [
+      8,
+      9
+    ],
+    [
+      9,
+      10
+    ],
+    [
+      10,
+      11
+    ],
+    [
+      11,
+      12
+    ],
+    [
+      12,
+      13
+    ],
+    [
+      13,
+      14
+    ],
+    [
+      14,
+      15
+    ],
+    [
+      15,
+      16
+    ]
+  ],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 1,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": null
+}

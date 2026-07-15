@@ -1,0 +1,139 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "exclusive-unmatched-success",
+  "theme": "exclusive/profile",
+  "title": {
+    "en": "EXOKAY requires a matching completed exclusive read",
+    "zh-CN": "EXOKAY 要求存在匹配且已完成的独占读"
+  },
+  "claim": {
+    "en": "An exclusive write without a reservation may complete, but not with EXOKAY.",
+    "zh-CN": "没有 reservation 的独占写可以完成，但不能返回 EXOKAY。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.exclusive.unmatched_success",
+    "reason_contains": "matching completed exclusive read"
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.exclusive.unmatched_success",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AW",
+      "key": 6,
+      "payload": {
+        "addr": 3200,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 1,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 0,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "B",
+      "key": 6,
+      "payload": {
+        "resp": "EXOKAY"
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AW",
+      "key": 6,
+      "payload": {
+        "addr": 3200,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 1,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 0,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 1
+    }
+  ],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 1,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 1
+    },
+    "final": {
+      "axi4.write.pending_completions": 1,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.exclusive.unmatched_success",
+    "reason": "EXOKAY requires a matching completed exclusive read sequence",
+    "scope": "link",
+    "location": ""
+  }
+}

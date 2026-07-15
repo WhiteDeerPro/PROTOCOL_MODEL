@@ -1,0 +1,53 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "======",
+      "data": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ]
+    },
+    [
+      "AR",
+      {
+        "name": "CanonicalEvent",
+        "wave": "==x...",
+        "data": [
+          "1@0x400:2x4I",
+          "2@0x500:2x4I"
+        ]
+      }
+    ],
+    [
+      "R",
+      {
+        "name": "CanonicalEvent",
+        "wave": "x.====",
+        "data": [
+          "1:D0x11/OK/L0",
+          "2:D0x21/OK/L0",
+          "1:D0x12/OK/L1",
+          "2:D0x22/OK/L1"
+        ]
+      }
+    ],
+    {
+      "name": "COMMITTED",
+      "wave": "1....."
+    }
+  ],
+  "head": {
+    "text": "Responses for different IDs may interleave / 不同 ID 的读响应可以交织"
+  },
+  "foot": {
+    "text": "1 column = 1 CanonicalEvent · MODEL ORDER ONLY · NOT PINS/CYCLES/RTL / 非引脚时序"
+  },
+  "config": {
+    "hscale": 3
+  }
+}

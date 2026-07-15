@@ -1,0 +1,80 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "read-fixed-seventeen-illegal",
+  "theme": "geometry",
+  "title": {
+    "en": "FIXED length does not exceed sixteen transfers",
+    "zh-CN": "FIXED 长度不超过十六拍"
+  },
+  "claim": {
+    "en": "AxLEN=16 encodes seventeen transfers and is rejected for FIXED.",
+    "zh-CN": "AxLEN=16 表示十七拍，因此不适用于 FIXED。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.link_session.AR.event_schema",
+    "reason_contains": "FIXED burst length"
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.link_session.AR.event_schema",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 11,
+      "payload": {
+        "addr": 256,
+        "len": 16,
+        "size": 2,
+        "burst": "FIXED",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.link_session.AR.event_schema",
+    "reason": "FIXED burst length must not exceed 16 transfers",
+    "scope": "event",
+    "location": ""
+  }
+}

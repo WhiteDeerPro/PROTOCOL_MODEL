@@ -1,0 +1,120 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "profile-bounded-read-capacity",
+  "theme": "exclusive/profile",
+  "title": {
+    "en": "A refined profile can bound outstanding reads",
+    "zh-CN": "细化 profile 可以限制 outstanding read"
+  },
+  "claim": {
+    "en": "The second AR exceeds a configured capacity of one and is rolled back.",
+    "zh-CN": "在容量配置为一时，第二个 AR 超限并被回滚。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4_one_read",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4_one_read.axi4.read.pending_transactions.capacity",
+    "reason_contains": "usage 2 exceeds"
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4_one_read.axi4.read.pending_transactions.capacity",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 6,
+      "payload": {
+        "addr": 3328,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 7,
+      "payload": {
+        "addr": 3336,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AR",
+      "key": 6,
+      "payload": {
+        "addr": 3328,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    }
+  ],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 1,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 1,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4_one_read.axi4.read.pending_transactions.capacity",
+    "reason": "resource 'axi4.read.pending_transactions' usage 2 exceeds profile capacity 1",
+    "scope": "link",
+    "location": "axi4.read.pending_transactions"
+  }
+}

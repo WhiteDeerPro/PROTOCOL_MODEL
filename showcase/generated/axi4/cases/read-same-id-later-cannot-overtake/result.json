@@ -1,0 +1,153 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "read-same-id-later-cannot-overtake",
+  "theme": "ordering/interleave",
+  "title": {
+    "en": "The oldest same-ID read consumes responses first",
+    "zh-CN": "同 ID 的最早读请求优先消费响应"
+  },
+  "claim": {
+    "en": "A final beat shaped for the later one-beat read is early for the oldest read.",
+    "zh-CN": "面向后一笔单拍读的末拍，对最早的两拍读而言属于过早结束。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.read.final_marker",
+    "reason_contains": "beat 1/2"
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.read.final_marker",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 3,
+      "payload": {
+        "addr": 1536,
+        "len": 1,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 3,
+      "payload": {
+        "addr": 1792,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 3,
+      "payload": {
+        "data": 0,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AR",
+      "key": 3,
+      "payload": {
+        "addr": 1536,
+        "len": 1,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    },
+    {
+      "kind": "AR",
+      "key": 3,
+      "payload": {
+        "addr": 1792,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 1
+    }
+  ],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 2,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 2,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.read.final_marker",
+    "reason": "beat 1/2 for key 3 requires last=False, got True",
+    "scope": "link",
+    "location": ""
+  }
+}

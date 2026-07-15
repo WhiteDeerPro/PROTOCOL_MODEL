@@ -1,0 +1,48 @@
+# Python bytecode and tool caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.tox/
+.nox/
+
+# Python environments and package builds
+.venv/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# JavaScript dependencies
+node_modules/
+
+# Caller-selected scratch/run output.  Curated assets under
+# showcase/generated/ remain intentionally versioned.
+/out/
+/runs/
+/artifacts/
+.build/
+.overview-build-*/
+.*.previous/
+*.log
+*.tmp
+
+# Editors and operating-system metadata
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local automation state
+.agents/
+.codex/

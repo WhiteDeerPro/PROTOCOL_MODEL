@@ -1,0 +1,198 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "observation-stalled-payload-mutation",
+  "theme": "observation/reset",
+  "title": {
+    "en": "Payload remains stable while VALID is stalled",
+    "zh-CN": "VALID 阻塞期间 payload 保持稳定"
+  },
+  "claim": {
+    "en": "Changing ARADDR before acceptance violates ready/valid stability.",
+    "zh-CN": "AR 接受前改变 ARADDR 会违反 ready/valid 稳定性。"
+  },
+  "execution": {
+    "mode": "atomic-frames",
+    "protocol": "axi4",
+    "model": "Axi4ObservationSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "AtomicFrame protocol observation"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.observation.AR.ready_valid.payload_stability",
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.observation.AR.ready_valid.payload_stability",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "AtomicFrame",
+      "tick": 0,
+      "clock": "aclk",
+      "reset": true,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 1,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": false,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": false,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": false,
+          "event": null
+        },
+        "AR": {
+          "valid": true,
+          "ready": false,
+          "event": {
+            "kind": "AR",
+            "key": 3,
+            "payload": {
+              "addr": 2560,
+              "len": 0,
+              "size": 2,
+              "burst": "INCR",
+              "lock": 0,
+              "cache": 0,
+              "prot": 0,
+              "qos": 0,
+              "region": 0
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "R": {
+          "valid": false,
+          "ready": false,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 2,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": false,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": false,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": false,
+          "event": null
+        },
+        "AR": {
+          "valid": true,
+          "ready": false,
+          "event": {
+            "kind": "AR",
+            "key": 3,
+            "payload": {
+              "addr": 2568,
+              "len": 0,
+              "size": 2,
+              "burst": "INCR",
+              "lock": 0,
+              "cache": 0,
+              "prot": 0,
+              "qos": 0,
+              "region": 0
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "R": {
+          "valid": false,
+          "ready": false,
+          "event": null
+        }
+      }
+    }
+  ],
+  "accepted_events": [],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.observation.AR.ready_valid.payload_stability",
+    "reason": "offered event changed after stalling at tick 1",
+    "scope": "link",
+    "location": "AR"
+  }
+}

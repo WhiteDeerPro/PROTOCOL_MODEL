@@ -1,0 +1,228 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "exclusive-matching-exokay",
+  "theme": "exclusive/profile",
+  "title": {
+    "en": "A matching link-local exclusive sequence may succeed",
+    "zh-CN": "匹配的链路内独占序列可以成功"
+  },
+  "claim": {
+    "en": "The completed exclusive read makes one matching write eligible for EXOKAY.",
+    "zh-CN": "已完成的独占读使一笔匹配写事务具备返回 EXOKAY 的资格。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "PASS",
+    "rule": null,
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "PASS",
+    "rule": null,
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 5,
+      "payload": {
+        "addr": 3072,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 1,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 5,
+      "payload": {
+        "data": 0,
+        "resp": "EXOKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "AW",
+      "key": 5,
+      "payload": {
+        "addr": 3072,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 1,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 0,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "B",
+      "key": 5,
+      "payload": {
+        "resp": "EXOKAY"
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AR",
+      "key": 5,
+      "payload": {
+        "addr": 3072,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 1,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    },
+    {
+      "kind": "R",
+      "key": 5,
+      "payload": {
+        "data": 0,
+        "resp": "EXOKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 1
+    },
+    {
+      "kind": "AW",
+      "key": 5,
+      "payload": {
+        "addr": 3072,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 1,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 2
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 0,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 3
+    },
+    {
+      "kind": "B",
+      "key": 5,
+      "payload": {
+        "resp": "EXOKAY"
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 4
+    }
+  ],
+  "causal_edges": [
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      3,
+      4
+    ]
+  ],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 1,
+      "axi4.read.pending_transactions": 1,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 1,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 1
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": null
+}

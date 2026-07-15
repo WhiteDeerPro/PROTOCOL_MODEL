@@ -1,0 +1,220 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "read-wrap-four-legal",
+  "theme": "geometry",
+  "title": {
+    "en": "A four-transfer WRAP burst rotates inside its wrap window",
+    "zh-CN": "四拍 WRAP burst 在自身窗口内回绕"
+  },
+  "claim": {
+    "en": "Starting at 0x2C produces a legal four-transfer wrap in 0x20–0x2F.",
+    "zh-CN": "从 0x2C 开始的四拍传输会在 0x20–0x2F 窗口内合法回绕。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "PASS",
+    "rule": null,
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "PASS",
+    "rule": null,
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AR",
+      "key": 8,
+      "payload": {
+        "addr": 44,
+        "len": 3,
+        "size": 2,
+        "burst": "WRAP",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 8,
+      "payload": {
+        "data": 129,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 8,
+      "payload": {
+        "data": 130,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 8,
+      "payload": {
+        "data": 131,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 8,
+      "payload": {
+        "data": 132,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AR",
+      "key": 8,
+      "payload": {
+        "addr": 44,
+        "len": 3,
+        "size": 2,
+        "burst": "WRAP",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    },
+    {
+      "kind": "R",
+      "key": 8,
+      "payload": {
+        "data": 129,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 1
+    },
+    {
+      "kind": "R",
+      "key": 8,
+      "payload": {
+        "data": 130,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 2
+    },
+    {
+      "kind": "R",
+      "key": 8,
+      "payload": {
+        "data": 131,
+        "resp": "OKAY",
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 3
+    },
+    {
+      "kind": "R",
+      "key": 8,
+      "payload": {
+        "data": 132,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 4
+    }
+  ],
+  "causal_edges": [
+    [
+      0,
+      1
+    ],
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ]
+  ],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 1,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": null
+}

@@ -1,0 +1,75 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "=================",
+      "data": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        "13",
+        "14",
+        "15",
+        "16"
+      ]
+    },
+    [
+      "AR",
+      {
+        "name": "CanonicalEvent",
+        "wave": "=x...............",
+        "data": [
+          "10@0xfff:16x4F"
+        ]
+      }
+    ],
+    [
+      "R",
+      {
+        "name": "CanonicalEvent",
+        "wave": "x================",
+        "data": [
+          "10:D0x100/OK/L0",
+          "10:D0x101/OK/L0",
+          "10:D0x102/OK/L0",
+          "10:D0x103/OK/L0",
+          "10:D0x104/OK/L0",
+          "10:D0x105/OK/L0",
+          "10:D0x106/OK/L0",
+          "10:D0x107/OK/L0",
+          "10:D0x108/OK/L0",
+          "10:D0x109/OK/L0",
+          "10:D0x10a/OK/L0",
+          "10:D0x10b/OK/L0",
+          "10:D0x10c/OK/L0",
+          "10:D0x10d/OK/L0",
+          "10:D0x10e/OK/L0",
+          "10:D0x10f/OK/L1"
+        ]
+      }
+    ],
+    {
+      "name": "COMMITTED",
+      "wave": "1................"
+    }
+  ],
+  "head": {
+    "text": "FIXED permits sixteen transfers at one address container / FIXED 允许在同一地址容器上传输十六拍"
+  },
+  "foot": {
+    "text": "1 column = 1 CanonicalEvent · MODEL ORDER ONLY · NOT PINS/CYCLES/RTL / 非引脚时序"
+  },
+  "config": {
+    "hscale": 4
+  }
+}

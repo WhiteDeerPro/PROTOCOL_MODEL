@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "protocol-model"
+dynamic = ["version"]
+description = "Executable, composable models for communication protocols and protocol networks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "WhiteDeerPro" }]
+keywords = [
+  "protocol",
+  "verification",
+  "AXI",
+  "AMBA",
+  "hardware",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
+
+[project.urls]
+Homepage = "https://github.com/WhiteDeerPro/PROTOCOL_MODEL"
+Repository = "https://github.com/WhiteDeerPro/PROTOCOL_MODEL"
+Issues = "https://github.com/WhiteDeerPro/PROTOCOL_MODEL/issues"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["protocol_model*"]
+namespaces = false
+
+[tool.setuptools.dynamic]
+version = { attr = "protocol_model.__version__" }

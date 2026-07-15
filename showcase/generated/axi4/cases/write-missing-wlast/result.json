@@ -1,0 +1,114 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "write-missing-wlast",
+  "theme": "lifecycle",
+  "title": {
+    "en": "The final required W transfer asserts WLAST",
+    "zh-CN": "最后一拍必需的 W 传输必须置 WLAST"
+  },
+  "claim": {
+    "en": "A single-beat AW requires WLAST on its only W transfer.",
+    "zh-CN": "单拍 AW 要求唯一的 W 传输同时也是末拍。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.write.final_marker",
+    "reason_contains": "requires last=True"
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.write.final_marker",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AW",
+      "key": 12,
+      "payload": {
+        "addr": 776,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 0,
+        "strb": 15,
+        "last": false
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AW",
+      "key": 12,
+      "payload": {
+        "addr": 776,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    }
+  ],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 1
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 1,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.write.final_marker",
+    "reason": "W beat 1/1 requires last=True",
+    "scope": "link",
+    "location": ""
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "read-orphan-response",
+  "theme": "lifecycle",
+  "title": {
+    "en": "An R response requires a pending AR",
+    "zh-CN": "R 响应必须对应已接受的 AR"
+  },
+  "claim": {
+    "en": "A response with no pending request is rejected locally.",
+    "zh-CN": "没有待读请求的响应会在单链路范围内被拒绝。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.read.orphan_beat",
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.read.orphan_beat",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "R",
+      "key": 7,
+      "payload": {
+        "data": 0,
+        "resp": "OKAY",
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.read.orphan_beat",
+    "reason": "completion for key 7 has no pending obligation",
+    "scope": "link",
+    "location": ""
+  }
+}

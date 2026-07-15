@@ -1,0 +1,473 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "write-narrow-unaligned-incr",
+  "theme": "geometry",
+  "title": {
+    "en": "Narrow unaligned transfers rotate legal byte lanes",
+    "zh-CN": "窄位宽非对齐传输轮换合法字节通道"
+  },
+  "claim": {
+    "en": "The four legal WSTRB masks are derived from the AW geometry.",
+    "zh-CN": "四拍合法 WSTRB 由 AW 几何信息派生。"
+  },
+  "execution": {
+    "mode": "atomic-frames",
+    "protocol": "axi4",
+    "model": "Axi4ObservationSession"
+  },
+  "presentation": {
+    "level": "deep-dive",
+    "waveform_basis": "AtomicFrame protocol observation"
+  },
+  "expected": {
+    "verdict": "PASS",
+    "rule": null,
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "PASS",
+    "rule": null,
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "AtomicFrame",
+      "tick": 0,
+      "clock": "aclk",
+      "reset": true,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 1,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "AW",
+            "key": 1,
+            "payload": {
+              "addr": 3,
+              "len": 3,
+              "size": 2,
+              "burst": "INCR",
+              "lock": 0,
+              "cache": 0,
+              "prot": 0,
+              "qos": 0,
+              "region": 0
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 2,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "W",
+            "key": null,
+            "payload": {
+              "data": 1229782938247303441,
+              "strb": 8,
+              "last": false
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 3,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "W",
+            "key": null,
+            "payload": {
+              "data": 2459565876494606882,
+              "strb": 240,
+              "last": false
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 4,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "W",
+            "key": null,
+            "payload": {
+              "data": 3689348814741910323,
+              "strb": 15,
+              "last": false
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 5,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "W",
+            "key": null,
+            "payload": {
+              "data": 4919131752989213764,
+              "strb": 240,
+              "last": true
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 6,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "B",
+            "key": 1,
+            "payload": {
+              "resp": "OKAY"
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AW",
+      "key": 1,
+      "payload": {
+        "addr": 3,
+        "len": 3,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 1,
+      "trace_index": 0
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 1229782938247303441,
+        "strb": 8,
+        "last": false
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 2,
+      "trace_index": 1
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 2459565876494606882,
+        "strb": 240,
+        "last": false
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 3,
+      "trace_index": 2
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 3689348814741910323,
+        "strb": 15,
+        "last": false
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 4,
+      "trace_index": 3
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 4919131752989213764,
+        "strb": 240,
+        "last": true
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 5,
+      "trace_index": 4
+    },
+    {
+      "kind": "B",
+      "key": 1,
+      "payload": {
+        "resp": "OKAY"
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 6,
+      "trace_index": 5
+    }
+  ],
+  "causal_edges": [
+    [
+      1,
+      2
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      4,
+      5
+    ]
+  ],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 1,
+      "axi4.write.pending_completions": 1,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 1
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": null
+}

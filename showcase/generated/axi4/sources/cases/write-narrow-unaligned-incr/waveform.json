@@ -1,0 +1,139 @@
+{
+  "signal": [
+    {
+      "name": "ACLK",
+      "wave": "p......"
+    },
+    {
+      "name": "ARESETn",
+      "wave": "01....."
+    },
+    [
+      "AW",
+      {
+        "name": "VALID",
+        "wave": "010...."
+      },
+      {
+        "name": "READY",
+        "wave": "1......"
+      },
+      {
+        "name": "FIRE",
+        "wave": "010...."
+      },
+      {
+        "name": "ID",
+        "wave": "x=x....",
+        "data": [
+          "1"
+        ]
+      },
+      {
+        "name": "ADDR",
+        "wave": "x=x....",
+        "data": [
+          "0x00000003"
+        ]
+      },
+      {
+        "name": "LEN",
+        "wave": "x=x....",
+        "data": [
+          "3 (4 beats)"
+        ]
+      },
+      {
+        "name": "SIZE",
+        "wave": "x=x....",
+        "data": [
+          "2 (4B)"
+        ]
+      },
+      {
+        "name": "BURST",
+        "wave": "x=x....",
+        "data": [
+          "INCR"
+        ]
+      }
+    ],
+    [
+      "W",
+      {
+        "name": "VALID",
+        "wave": "0.1...0"
+      },
+      {
+        "name": "READY",
+        "wave": "1......"
+      },
+      {
+        "name": "FIRE",
+        "wave": "0.1...0"
+      },
+      {
+        "name": "DATA",
+        "wave": "x.====x",
+        "data": [
+          "0x1111111111111111",
+          "0x2222222222222222",
+          "0x3333333333333333",
+          "0x4444444444444444"
+        ]
+      },
+      {
+        "name": "WSTRB",
+        "wave": "x.====x",
+        "data": [
+          "0x08",
+          "0xf0",
+          "0x0f",
+          "0xf0"
+        ]
+      },
+      {
+        "name": "WLAST",
+        "wave": "x.0..1x"
+      }
+    ],
+    [
+      "B",
+      {
+        "name": "VALID",
+        "wave": "0.....1"
+      },
+      {
+        "name": "READY",
+        "wave": "1......"
+      },
+      {
+        "name": "FIRE",
+        "wave": "0.....1"
+      },
+      {
+        "name": "ID",
+        "wave": "x.....=",
+        "data": [
+          "1"
+        ]
+      },
+      {
+        "name": "RESP",
+        "wave": "x.....=",
+        "data": [
+          "OKAY"
+        ]
+      }
+    ]
+  ],
+  "head": {
+    "text": "Narrow unaligned transfers rotate legal byte lanes / 窄位宽非对齐传输轮换合法字节通道"
+  },
+  "foot": {
+    "text": "ARESETn = !reset · FIRE = VALID & READY · protocol-model observation, not RTL/VCD"
+  },
+  "config": {
+    "hscale": 4
+  }
+}

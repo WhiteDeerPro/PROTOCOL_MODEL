@@ -1,0 +1,250 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "observation-same-frame-aw-w",
+  "theme": "observation/reset",
+  "title": {
+    "en": "AW and W at one edge commit as one frame",
+    "zh-CN": "同一采样沿的 AW 与 W 作为一个帧提交"
+  },
+  "claim": {
+    "en": "The observation lowering correlates both transfers before the later B.",
+    "zh-CN": "观察层在后续 B 之前关联同一帧中的两个传输。"
+  },
+  "execution": {
+    "mode": "atomic-frames",
+    "protocol": "axi4",
+    "model": "Axi4ObservationSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "AtomicFrame protocol observation"
+  },
+  "expected": {
+    "verdict": "PASS",
+    "rule": null,
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "PASS",
+    "rule": null,
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "AtomicFrame",
+      "tick": 0,
+      "clock": "aclk",
+      "reset": true,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 1,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "AW",
+            "key": 1,
+            "payload": {
+              "addr": 2048,
+              "len": 0,
+              "size": 2,
+              "burst": "INCR",
+              "lock": 0,
+              "cache": 0,
+              "prot": 0,
+              "qos": 0,
+              "region": 0
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "W": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "W",
+            "key": null,
+            "payload": {
+              "data": 170,
+              "strb": 15,
+              "last": true
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 2,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "B",
+            "key": 1,
+            "payload": {
+              "resp": "OKAY"
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 170,
+        "strb": 15,
+        "last": true
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 1,
+      "trace_index": 0
+    },
+    {
+      "kind": "AW",
+      "key": 1,
+      "payload": {
+        "addr": 2048,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 1,
+      "trace_index": 1
+    },
+    {
+      "kind": "B",
+      "key": 1,
+      "payload": {
+        "resp": "OKAY"
+      },
+      "source": "showcase.axi4",
+      "clock": "aclk",
+      "timestamp": 2,
+      "trace_index": 2
+    }
+  ],
+  "causal_edges": [
+    [
+      1,
+      2
+    ],
+    [
+      0,
+      2
+    ]
+  ],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 1,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": null
+}

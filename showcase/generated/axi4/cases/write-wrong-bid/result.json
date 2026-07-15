@@ -1,0 +1,139 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "write-wrong-bid",
+  "theme": "lifecycle",
+  "title": {
+    "en": "BID identifies a pending write context",
+    "zh-CN": "BID 必须标识一笔待完成写事务"
+  },
+  "claim": {
+    "en": "A B response for ID 13 cannot complete the joined write for ID 12.",
+    "zh-CN": "ID 13 的 B 响应不能完成 ID 12 的已关联写事务。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.exclusive.orphan_write_response",
+    "reason_contains": "no matching AW context"
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.exclusive.orphan_write_response",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AW",
+      "key": 12,
+      "payload": {
+        "addr": 896,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 0,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "B",
+      "key": 13,
+      "payload": {
+        "resp": "OKAY"
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AW",
+      "key": 12,
+      "payload": {
+        "addr": 896,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 0,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 1
+    }
+  ],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 1,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 1
+    },
+    "final": {
+      "axi4.write.pending_completions": 1,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.exclusive.orphan_write_response",
+    "reason": "B has no matching AW context",
+    "scope": "link",
+    "location": ""
+  }
+}

@@ -1,0 +1,12 @@
+digraph axi4_case {
+  rankdir=LR;
+  label="WSTRB cannot select bytes outside the transfer container / WSTRB 不得选择传输容器之外的字节";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.4, ranksep=0.65, splines=polyline, pad=0.2];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
+  edge [color="#3169a8", fontname="sans-serif", fontsize=9];
+  event0 [label="[0] ID3 A=0x3 N=1 S=4B INCR"];
+  context [shape=note, style="filled", fillcolor="#f4f5f6", color="#7c8790", label="rejected input / 被拒输入\nD=0x0 S=0x10 L=1"];
+  fault [shape=octagon, style="filled", fillcolor="#ffe9e7", color="#b33a2b", label="REJECTED / 已拒绝\naxi4.write.byte_lanes\nWSTRB 0x10 asserts lanes outside allowed mask 0x8 at beat 1"];
+  context -> fault [style=dashed, color="#777777", label="diagnostic context / 诊断上下文（非因果边）"];
+}

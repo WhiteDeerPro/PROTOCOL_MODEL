@@ -1,0 +1,1607 @@
+{
+  "schema": "protocol-model.run/v3",
+  "subject": "axi4",
+  "run_id": "axi4",
+  "generated_at": "2026-07-15T20:30:44.532139+00:00",
+  "tool_version": "0.3.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "system",
+      "identity": "axi4-point-to-point",
+      "definition": "axi4-point-to-point",
+      "parameters": {},
+      "lineage": [],
+      "metadata": {
+        "virtual_duts": [
+          "memory_endpoint",
+          "requester"
+        ],
+        "links": [
+          "axi4-link"
+        ],
+        "boundary": []
+      }
+    },
+    {
+      "scope": "link",
+      "identity": "axi4",
+      "definition": "axi4",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 64,
+        "id_width": 4
+      },
+      "lineage": [],
+      "metadata": {
+        "roles": [
+          "manager",
+          "subordinate"
+        ],
+        "channels": [
+          "AR",
+          "AW",
+          "B",
+          "R",
+          "W"
+        ],
+        "monitors": [
+          "axi4.exclusive",
+          "axi4.read",
+          "axi4.write"
+        ],
+        "resources": [
+          {
+            "name": "axi4.read.pending_transactions",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "AR"
+            ],
+            "released_by": [
+              "R[last=True]",
+              "reset"
+            ],
+            "description": "accepted AR transactions awaiting their final R beat"
+          },
+          {
+            "name": "axi4.exclusive.reservations",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "R[last=True, resp=EXOKAY]"
+            ],
+            "released_by": [
+              "matching AW[lock=1]",
+              "later same-ID AR[lock=1]",
+              "reset"
+            ],
+            "description": "completed exclusive reads that can make one matching write eligible for EXOKAY"
+          },
+          {
+            "name": "axi4.write.assembling_data",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "first W[last=False] of burst"
+            ],
+            "released_by": [
+              "W[last=True]",
+              "reset"
+            ],
+            "description": "a partially observed W burst awaiting WLAST"
+          },
+          {
+            "name": "axi4.write.pending_descriptors",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "AW without available complete W burst"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "accepted AW descriptors awaiting a FIFO-matched W burst"
+          },
+          {
+            "name": "axi4.write.pending_data_bursts",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "W[last=True] without available AW"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "complete W bursts observed before their FIFO-matched AW"
+          },
+          {
+            "name": "axi4.write.pending_completions",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "AW/W FIFO join"
+            ],
+            "released_by": [
+              "B",
+              "reset"
+            ],
+            "description": "joined AW/W transactions awaiting B"
+          }
+        ]
+      }
+    },
+    {
+      "scope": "link",
+      "identity": "axi4_one_read",
+      "definition": "axi4_one_read",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 64,
+        "id_width": 4
+      },
+      "lineage": [
+        "axi4"
+      ],
+      "metadata": {
+        "roles": [
+          "manager",
+          "subordinate"
+        ],
+        "channels": [
+          "AR",
+          "AW",
+          "B",
+          "R",
+          "W"
+        ],
+        "monitors": [
+          "axi4.exclusive",
+          "axi4.read",
+          "axi4.write"
+        ],
+        "resources": [
+          {
+            "name": "axi4.read.pending_transactions",
+            "scope": "link",
+            "capacity": 1,
+            "acquired_by": [
+              "AR"
+            ],
+            "released_by": [
+              "R[last=True]",
+              "reset"
+            ],
+            "description": "accepted AR transactions awaiting their final R beat"
+          },
+          {
+            "name": "axi4.exclusive.reservations",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "R[last=True, resp=EXOKAY]"
+            ],
+            "released_by": [
+              "matching AW[lock=1]",
+              "later same-ID AR[lock=1]",
+              "reset"
+            ],
+            "description": "completed exclusive reads that can make one matching write eligible for EXOKAY"
+          },
+          {
+            "name": "axi4.write.assembling_data",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "first W[last=False] of burst"
+            ],
+            "released_by": [
+              "W[last=True]",
+              "reset"
+            ],
+            "description": "a partially observed W burst awaiting WLAST"
+          },
+          {
+            "name": "axi4.write.pending_descriptors",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "AW without available complete W burst"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "accepted AW descriptors awaiting a FIFO-matched W burst"
+          },
+          {
+            "name": "axi4.write.pending_data_bursts",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "W[last=True] without available AW"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "complete W bursts observed before their FIFO-matched AW"
+          },
+          {
+            "name": "axi4.write.pending_completions",
+            "scope": "link",
+            "capacity": null,
+            "acquired_by": [
+              "AW/W FIFO join"
+            ],
+            "released_by": [
+              "B",
+              "reset"
+            ],
+            "description": "joined AW/W transactions awaiting B"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "read-single-lifecycle",
+      "theme": "lifecycle",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-single-lifecycle/causality.svg",
+        "cases/read-single-lifecycle/result.json",
+        "cases/read-single-lifecycle/waveform.svg",
+        "sources/cases/read-single-lifecycle/causality.dot",
+        "sources/cases/read-single-lifecycle/waveform.json"
+      ]
+    },
+    {
+      "name": "read-orphan-response",
+      "theme": "lifecycle",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.read.orphan_beat",
+      "observed_rule": "axi4.read.orphan_beat",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-orphan-response/causality.svg",
+        "cases/read-orphan-response/result.json",
+        "cases/read-orphan-response/waveform.svg",
+        "sources/cases/read-orphan-response/causality.dot",
+        "sources/cases/read-orphan-response/waveform.json"
+      ]
+    },
+    {
+      "name": "write-single-lifecycle",
+      "theme": "lifecycle",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/write-single-lifecycle/causality.svg",
+        "cases/write-single-lifecycle/result.json",
+        "cases/write-single-lifecycle/waveform.svg",
+        "sources/cases/write-single-lifecycle/causality.dot",
+        "sources/cases/write-single-lifecycle/waveform.json"
+      ]
+    },
+    {
+      "name": "write-data-before-address",
+      "theme": "lifecycle",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/write-data-before-address/causality.svg",
+        "cases/write-data-before-address/result.json",
+        "cases/write-data-before-address/waveform.svg",
+        "sources/cases/write-data-before-address/causality.dot",
+        "sources/cases/write-data-before-address/waveform.json"
+      ]
+    },
+    {
+      "name": "write-early-wlast",
+      "theme": "lifecycle",
+      "deep_dive": true,
+      "input_mode": "atomic-frames",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.write.final_marker",
+      "observed_rule": "axi4.write.final_marker",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/write-early-wlast/causality.svg",
+        "cases/write-early-wlast/result.json",
+        "cases/write-early-wlast/waveform.svg",
+        "sources/cases/write-early-wlast/causality.dot",
+        "sources/cases/write-early-wlast/waveform.json"
+      ]
+    },
+    {
+      "name": "write-missing-wlast",
+      "theme": "lifecycle",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.write.final_marker",
+      "observed_rule": "axi4.write.final_marker",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/write-missing-wlast/causality.svg",
+        "cases/write-missing-wlast/result.json",
+        "cases/write-missing-wlast/waveform.svg",
+        "sources/cases/write-missing-wlast/causality.dot",
+        "sources/cases/write-missing-wlast/waveform.json"
+      ]
+    },
+    {
+      "name": "write-wrong-bid",
+      "theme": "lifecycle",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.exclusive.orphan_write_response",
+      "observed_rule": "axi4.exclusive.orphan_write_response",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/write-wrong-bid/causality.svg",
+        "cases/write-wrong-bid/result.json",
+        "cases/write-wrong-bid/waveform.svg",
+        "sources/cases/write-wrong-bid/causality.dot",
+        "sources/cases/write-wrong-bid/waveform.json"
+      ]
+    },
+    {
+      "name": "read-crosses-4kb-boundary",
+      "theme": "geometry",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.link_session.AR.event_schema",
+      "observed_rule": "axi4.link_session.AR.event_schema",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-crosses-4kb-boundary/causality.svg",
+        "cases/read-crosses-4kb-boundary/result.json",
+        "cases/read-crosses-4kb-boundary/waveform.svg",
+        "sources/cases/read-crosses-4kb-boundary/causality.dot",
+        "sources/cases/read-crosses-4kb-boundary/waveform.json"
+      ]
+    },
+    {
+      "name": "write-narrow-unaligned-incr",
+      "theme": "geometry",
+      "deep_dive": true,
+      "input_mode": "atomic-frames",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/write-narrow-unaligned-incr/causality.svg",
+        "cases/write-narrow-unaligned-incr/result.json",
+        "cases/write-narrow-unaligned-incr/waveform.svg",
+        "sources/cases/write-narrow-unaligned-incr/causality.dot",
+        "sources/cases/write-narrow-unaligned-incr/waveform.json"
+      ]
+    },
+    {
+      "name": "write-strobe-outside-lanes",
+      "theme": "geometry",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.write.byte_lanes",
+      "observed_rule": "axi4.write.byte_lanes",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/write-strobe-outside-lanes/causality.svg",
+        "cases/write-strobe-outside-lanes/result.json",
+        "cases/write-strobe-outside-lanes/waveform.svg",
+        "sources/cases/write-strobe-outside-lanes/causality.dot",
+        "sources/cases/write-strobe-outside-lanes/waveform.json"
+      ]
+    },
+    {
+      "name": "read-wrap-four-legal",
+      "theme": "geometry",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-wrap-four-legal/causality.svg",
+        "cases/read-wrap-four-legal/result.json",
+        "cases/read-wrap-four-legal/waveform.svg",
+        "sources/cases/read-wrap-four-legal/causality.dot",
+        "sources/cases/read-wrap-four-legal/waveform.json"
+      ]
+    },
+    {
+      "name": "read-wrap-three-illegal",
+      "theme": "geometry",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.link_session.AR.event_schema",
+      "observed_rule": "axi4.link_session.AR.event_schema",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-wrap-three-illegal/causality.svg",
+        "cases/read-wrap-three-illegal/result.json",
+        "cases/read-wrap-three-illegal/waveform.svg",
+        "sources/cases/read-wrap-three-illegal/causality.dot",
+        "sources/cases/read-wrap-three-illegal/waveform.json"
+      ]
+    },
+    {
+      "name": "read-fixed-sixteen-legal",
+      "theme": "geometry",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-fixed-sixteen-legal/causality.svg",
+        "cases/read-fixed-sixteen-legal/result.json",
+        "cases/read-fixed-sixteen-legal/waveform.svg",
+        "sources/cases/read-fixed-sixteen-legal/causality.dot",
+        "sources/cases/read-fixed-sixteen-legal/waveform.json"
+      ]
+    },
+    {
+      "name": "read-fixed-seventeen-illegal",
+      "theme": "geometry",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.link_session.AR.event_schema",
+      "observed_rule": "axi4.link_session.AR.event_schema",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-fixed-seventeen-illegal/causality.svg",
+        "cases/read-fixed-seventeen-illegal/result.json",
+        "cases/read-fixed-seventeen-illegal/waveform.svg",
+        "sources/cases/read-fixed-seventeen-illegal/causality.dot",
+        "sources/cases/read-fixed-seventeen-illegal/waveform.json"
+      ]
+    },
+    {
+      "name": "read-cross-id-interleave",
+      "theme": "ordering/interleave",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-cross-id-interleave/causality.svg",
+        "cases/read-cross-id-interleave/result.json",
+        "cases/read-cross-id-interleave/waveform.svg",
+        "sources/cases/read-cross-id-interleave/causality.dot",
+        "sources/cases/read-cross-id-interleave/waveform.json"
+      ]
+    },
+    {
+      "name": "read-same-id-later-cannot-overtake",
+      "theme": "ordering/interleave",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.read.final_marker",
+      "observed_rule": "axi4.read.final_marker",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/read-same-id-later-cannot-overtake/causality.svg",
+        "cases/read-same-id-later-cannot-overtake/result.json",
+        "cases/read-same-id-later-cannot-overtake/waveform.svg",
+        "sources/cases/read-same-id-later-cannot-overtake/causality.dot",
+        "sources/cases/read-same-id-later-cannot-overtake/waveform.json"
+      ]
+    },
+    {
+      "name": "write-multiple-outstanding-reverse-b",
+      "theme": "ordering/interleave",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/write-multiple-outstanding-reverse-b/causality.svg",
+        "cases/write-multiple-outstanding-reverse-b/result.json",
+        "cases/write-multiple-outstanding-reverse-b/waveform.svg",
+        "sources/cases/write-multiple-outstanding-reverse-b/causality.dot",
+        "sources/cases/write-multiple-outstanding-reverse-b/waveform.json"
+      ]
+    },
+    {
+      "name": "observation-same-frame-aw-w",
+      "theme": "observation/reset",
+      "deep_dive": false,
+      "input_mode": "atomic-frames",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/observation-same-frame-aw-w/causality.svg",
+        "cases/observation-same-frame-aw-w/result.json",
+        "cases/observation-same-frame-aw-w/waveform.svg",
+        "sources/cases/observation-same-frame-aw-w/causality.dot",
+        "sources/cases/observation-same-frame-aw-w/waveform.json"
+      ]
+    },
+    {
+      "name": "observation-same-frame-ar-r",
+      "theme": "observation/reset",
+      "deep_dive": false,
+      "input_mode": "atomic-frames",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.read.orphan_beat",
+      "observed_rule": "axi4.read.orphan_beat",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/observation-same-frame-ar-r/causality.svg",
+        "cases/observation-same-frame-ar-r/result.json",
+        "cases/observation-same-frame-ar-r/waveform.svg",
+        "sources/cases/observation-same-frame-ar-r/causality.dot",
+        "sources/cases/observation-same-frame-ar-r/waveform.json"
+      ]
+    },
+    {
+      "name": "observation-stalled-payload-mutation",
+      "theme": "observation/reset",
+      "deep_dive": false,
+      "input_mode": "atomic-frames",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.observation.AR.ready_valid.payload_stability",
+      "observed_rule": "axi4.observation.AR.ready_valid.payload_stability",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/observation-stalled-payload-mutation/causality.svg",
+        "cases/observation-stalled-payload-mutation/result.json",
+        "cases/observation-stalled-payload-mutation/waveform.svg",
+        "sources/cases/observation-stalled-payload-mutation/causality.dot",
+        "sources/cases/observation-stalled-payload-mutation/waveform.json"
+      ]
+    },
+    {
+      "name": "observation-reset-clears-pending-read",
+      "theme": "observation/reset",
+      "deep_dive": false,
+      "input_mode": "atomic-frames",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.read.orphan_beat",
+      "observed_rule": "axi4.read.orphan_beat",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/observation-reset-clears-pending-read/causality.svg",
+        "cases/observation-reset-clears-pending-read/result.json",
+        "cases/observation-reset-clears-pending-read/waveform.svg",
+        "sources/cases/observation-reset-clears-pending-read/causality.dot",
+        "sources/cases/observation-reset-clears-pending-read/waveform.json"
+      ]
+    },
+    {
+      "name": "exclusive-matching-exokay",
+      "theme": "exclusive/profile",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "PASS",
+      "observed": "PASS",
+      "expected_rule": null,
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/exclusive-matching-exokay/causality.svg",
+        "cases/exclusive-matching-exokay/result.json",
+        "cases/exclusive-matching-exokay/waveform.svg",
+        "sources/cases/exclusive-matching-exokay/causality.dot",
+        "sources/cases/exclusive-matching-exokay/waveform.json"
+      ]
+    },
+    {
+      "name": "profile-bounded-read-capacity",
+      "theme": "exclusive/profile",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4_one_read.axi4.read.pending_transactions.capacity",
+      "observed_rule": "axi4_one_read.axi4.read.pending_transactions.capacity",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/profile-bounded-read-capacity/causality.svg",
+        "cases/profile-bounded-read-capacity/result.json",
+        "cases/profile-bounded-read-capacity/waveform.svg",
+        "sources/cases/profile-bounded-read-capacity/causality.dot",
+        "sources/cases/profile-bounded-read-capacity/waveform.json"
+      ]
+    },
+    {
+      "name": "exclusive-unmatched-success",
+      "theme": "exclusive/profile",
+      "deep_dive": false,
+      "input_mode": "link-events",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "expected_rule": "axi4.exclusive.unmatched_success",
+      "observed_rule": "axi4.exclusive.unmatched_success",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/exclusive-unmatched-success/causality.svg",
+        "cases/exclusive-unmatched-success/result.json",
+        "cases/exclusive-unmatched-success/waveform.svg",
+        "sources/cases/exclusive-unmatched-success/causality.dot",
+        "sources/cases/exclusive-unmatched-success/waveform.json"
+      ]
+    }
+  ],
+  "state": {},
+  "metadata": {
+    "publication": "showcase/generated/axi4",
+    "case_count": 24,
+    "legal_case_count": 10,
+    "expected_rejection_count": 14,
+    "deep_dive_case_count": 2,
+    "run_status": "success",
+    "verdict_meaning": "all case expectations met",
+    "coverage_interpretation": "representative executable scenarios, not specification coverage",
+    "rtl_capture": false
+  },
+  "artifacts": [
+    {
+      "kind": "example_set_guide",
+      "path": "README.en.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "example_set_guide",
+      "path": "README.zh-CN.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/exclusive-matching-exokay/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "exclusive-matching-exokay",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/exclusive-matching-exokay/result.json",
+      "media_type": "application/json",
+      "case": "exclusive-matching-exokay",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/exclusive-matching-exokay/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "exclusive-matching-exokay",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/exclusive-unmatched-success/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "exclusive-unmatched-success",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/exclusive-unmatched-success/result.json",
+      "media_type": "application/json",
+      "case": "exclusive-unmatched-success",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/exclusive-unmatched-success/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "exclusive-unmatched-success",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/observation-reset-clears-pending-read/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "observation-reset-clears-pending-read",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/observation-reset-clears-pending-read/result.json",
+      "media_type": "application/json",
+      "case": "observation-reset-clears-pending-read",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/observation-reset-clears-pending-read/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "observation-reset-clears-pending-read",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/observation-same-frame-ar-r/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "observation-same-frame-ar-r",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/observation-same-frame-ar-r/result.json",
+      "media_type": "application/json",
+      "case": "observation-same-frame-ar-r",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/observation-same-frame-ar-r/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "observation-same-frame-ar-r",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/observation-same-frame-aw-w/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "observation-same-frame-aw-w",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/observation-same-frame-aw-w/result.json",
+      "media_type": "application/json",
+      "case": "observation-same-frame-aw-w",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/observation-same-frame-aw-w/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "observation-same-frame-aw-w",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/observation-stalled-payload-mutation/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "observation-stalled-payload-mutation",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/observation-stalled-payload-mutation/result.json",
+      "media_type": "application/json",
+      "case": "observation-stalled-payload-mutation",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/observation-stalled-payload-mutation/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "observation-stalled-payload-mutation",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/profile-bounded-read-capacity/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "profile-bounded-read-capacity",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/profile-bounded-read-capacity/result.json",
+      "media_type": "application/json",
+      "case": "profile-bounded-read-capacity",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/profile-bounded-read-capacity/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "profile-bounded-read-capacity",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-cross-id-interleave/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-cross-id-interleave",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-cross-id-interleave/result.json",
+      "media_type": "application/json",
+      "case": "read-cross-id-interleave",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-cross-id-interleave/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-cross-id-interleave",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-crosses-4kb-boundary/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-crosses-4kb-boundary",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-crosses-4kb-boundary/result.json",
+      "media_type": "application/json",
+      "case": "read-crosses-4kb-boundary",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-crosses-4kb-boundary/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-crosses-4kb-boundary",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-fixed-seventeen-illegal/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-fixed-seventeen-illegal",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-fixed-seventeen-illegal/result.json",
+      "media_type": "application/json",
+      "case": "read-fixed-seventeen-illegal",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-fixed-seventeen-illegal/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-fixed-seventeen-illegal",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-fixed-sixteen-legal/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-fixed-sixteen-legal",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-fixed-sixteen-legal/result.json",
+      "media_type": "application/json",
+      "case": "read-fixed-sixteen-legal",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-fixed-sixteen-legal/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-fixed-sixteen-legal",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-orphan-response/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-orphan-response",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-orphan-response/result.json",
+      "media_type": "application/json",
+      "case": "read-orphan-response",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-orphan-response/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-orphan-response",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-same-id-later-cannot-overtake/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-same-id-later-cannot-overtake",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-same-id-later-cannot-overtake/result.json",
+      "media_type": "application/json",
+      "case": "read-same-id-later-cannot-overtake",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-same-id-later-cannot-overtake/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-same-id-later-cannot-overtake",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-single-lifecycle/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-single-lifecycle",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-single-lifecycle/result.json",
+      "media_type": "application/json",
+      "case": "read-single-lifecycle",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-single-lifecycle/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-single-lifecycle",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-wrap-four-legal/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-wrap-four-legal",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-wrap-four-legal/result.json",
+      "media_type": "application/json",
+      "case": "read-wrap-four-legal",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-wrap-four-legal/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-wrap-four-legal",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/read-wrap-three-illegal/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-wrap-three-illegal",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/read-wrap-three-illegal/result.json",
+      "media_type": "application/json",
+      "case": "read-wrap-three-illegal",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/read-wrap-three-illegal/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "read-wrap-three-illegal",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/write-data-before-address/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-data-before-address",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/write-data-before-address/result.json",
+      "media_type": "application/json",
+      "case": "write-data-before-address",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/write-data-before-address/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-data-before-address",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/write-early-wlast/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-early-wlast",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/write-early-wlast/result.json",
+      "media_type": "application/json",
+      "case": "write-early-wlast",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/write-early-wlast/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-early-wlast",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/write-missing-wlast/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-missing-wlast",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/write-missing-wlast/result.json",
+      "media_type": "application/json",
+      "case": "write-missing-wlast",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/write-missing-wlast/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-missing-wlast",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/write-multiple-outstanding-reverse-b/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-multiple-outstanding-reverse-b",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/write-multiple-outstanding-reverse-b/result.json",
+      "media_type": "application/json",
+      "case": "write-multiple-outstanding-reverse-b",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/write-multiple-outstanding-reverse-b/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-multiple-outstanding-reverse-b",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/write-narrow-unaligned-incr/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-narrow-unaligned-incr",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/write-narrow-unaligned-incr/result.json",
+      "media_type": "application/json",
+      "case": "write-narrow-unaligned-incr",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/write-narrow-unaligned-incr/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-narrow-unaligned-incr",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/write-single-lifecycle/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-single-lifecycle",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/write-single-lifecycle/result.json",
+      "media_type": "application/json",
+      "case": "write-single-lifecycle",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/write-single-lifecycle/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-single-lifecycle",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/write-strobe-outside-lanes/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-strobe-outside-lanes",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/write-strobe-outside-lanes/result.json",
+      "media_type": "application/json",
+      "case": "write-strobe-outside-lanes",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/write-strobe-outside-lanes/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-strobe-outside-lanes",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/write-wrong-bid/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-wrong-bid",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/write-wrong-bid/result.json",
+      "media_type": "application/json",
+      "case": "write-wrong-bid",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/write-wrong-bid/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "write-wrong-bid",
+      "source": false
+    },
+    {
+      "kind": "coverage_matrix",
+      "path": "coverage.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "evidence_path",
+      "path": "evidence-path.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "example_set_index",
+      "path": "examples.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/exclusive-matching-exokay/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "exclusive-matching-exokay",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/exclusive-matching-exokay/waveform.json",
+      "media_type": "application/json",
+      "case": "exclusive-matching-exokay",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/exclusive-unmatched-success/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "exclusive-unmatched-success",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/exclusive-unmatched-success/waveform.json",
+      "media_type": "application/json",
+      "case": "exclusive-unmatched-success",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/observation-reset-clears-pending-read/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "observation-reset-clears-pending-read",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/observation-reset-clears-pending-read/waveform.json",
+      "media_type": "application/json",
+      "case": "observation-reset-clears-pending-read",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/observation-same-frame-ar-r/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "observation-same-frame-ar-r",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/observation-same-frame-ar-r/waveform.json",
+      "media_type": "application/json",
+      "case": "observation-same-frame-ar-r",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/observation-same-frame-aw-w/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "observation-same-frame-aw-w",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/observation-same-frame-aw-w/waveform.json",
+      "media_type": "application/json",
+      "case": "observation-same-frame-aw-w",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/observation-stalled-payload-mutation/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "observation-stalled-payload-mutation",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/observation-stalled-payload-mutation/waveform.json",
+      "media_type": "application/json",
+      "case": "observation-stalled-payload-mutation",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/profile-bounded-read-capacity/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "profile-bounded-read-capacity",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/profile-bounded-read-capacity/waveform.json",
+      "media_type": "application/json",
+      "case": "profile-bounded-read-capacity",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-cross-id-interleave/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-cross-id-interleave",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-cross-id-interleave/waveform.json",
+      "media_type": "application/json",
+      "case": "read-cross-id-interleave",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-crosses-4kb-boundary/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-crosses-4kb-boundary",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-crosses-4kb-boundary/waveform.json",
+      "media_type": "application/json",
+      "case": "read-crosses-4kb-boundary",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-fixed-seventeen-illegal/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-fixed-seventeen-illegal",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-fixed-seventeen-illegal/waveform.json",
+      "media_type": "application/json",
+      "case": "read-fixed-seventeen-illegal",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-fixed-sixteen-legal/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-fixed-sixteen-legal",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-fixed-sixteen-legal/waveform.json",
+      "media_type": "application/json",
+      "case": "read-fixed-sixteen-legal",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-orphan-response/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-orphan-response",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-orphan-response/waveform.json",
+      "media_type": "application/json",
+      "case": "read-orphan-response",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-same-id-later-cannot-overtake/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-same-id-later-cannot-overtake",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-same-id-later-cannot-overtake/waveform.json",
+      "media_type": "application/json",
+      "case": "read-same-id-later-cannot-overtake",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-single-lifecycle/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-single-lifecycle",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-single-lifecycle/waveform.json",
+      "media_type": "application/json",
+      "case": "read-single-lifecycle",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-wrap-four-legal/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-wrap-four-legal",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-wrap-four-legal/waveform.json",
+      "media_type": "application/json",
+      "case": "read-wrap-four-legal",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/read-wrap-three-illegal/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "read-wrap-three-illegal",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/read-wrap-three-illegal/waveform.json",
+      "media_type": "application/json",
+      "case": "read-wrap-three-illegal",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/write-data-before-address/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "write-data-before-address",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/write-data-before-address/waveform.json",
+      "media_type": "application/json",
+      "case": "write-data-before-address",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/write-early-wlast/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "write-early-wlast",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/write-early-wlast/waveform.json",
+      "media_type": "application/json",
+      "case": "write-early-wlast",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/write-missing-wlast/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "write-missing-wlast",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/write-missing-wlast/waveform.json",
+      "media_type": "application/json",
+      "case": "write-missing-wlast",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/write-multiple-outstanding-reverse-b/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "write-multiple-outstanding-reverse-b",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/write-multiple-outstanding-reverse-b/waveform.json",
+      "media_type": "application/json",
+      "case": "write-multiple-outstanding-reverse-b",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/write-narrow-unaligned-incr/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "write-narrow-unaligned-incr",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/write-narrow-unaligned-incr/waveform.json",
+      "media_type": "application/json",
+      "case": "write-narrow-unaligned-incr",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/write-single-lifecycle/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "write-single-lifecycle",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/write-single-lifecycle/waveform.json",
+      "media_type": "application/json",
+      "case": "write-single-lifecycle",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/write-strobe-outside-lanes/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "write-strobe-outside-lanes",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/write-strobe-outside-lanes/waveform.json",
+      "media_type": "application/json",
+      "case": "write-strobe-outside-lanes",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/write-wrong-bid/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "write-wrong-bid",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/write-wrong-bid/waveform.json",
+      "media_type": "application/json",
+      "case": "write-wrong-bid",
+      "source": true
+    },
+    {
+      "kind": "coverage_matrix_source",
+      "path": "sources/coverage.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "evidence_path_source",
+      "path": "sources/evidence-path.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

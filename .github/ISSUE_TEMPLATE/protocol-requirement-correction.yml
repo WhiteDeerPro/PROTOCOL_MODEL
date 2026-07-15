@@ -1,0 +1,51 @@
+name: Protocol requirement correction
+description: Correct a modeled rule, profile boundary, or protocol interpretation
+title: "[requirement] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for checking the protocol model. Please identify one bounded requirement and its source. A short paraphrase is enough; do not paste long specification extracts.
+  - type: input
+    id: protocol
+    attributes:
+      label: Protocol and profile
+      description: For example, AXI4 full, AXI4-Lite, AHB-Lite, or APB4.
+      placeholder: AXI4 full, 64-bit data, current base profile
+    validations:
+      required: true
+  - type: input
+    id: requirement
+    attributes:
+      label: Requirement or rule
+      description: Name the modeled rule, requirement ID, or behavior being corrected.
+      placeholder: axi4.write.final_marker / WLAST timing
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Specification source
+      description: Give the document title, revision and section, followed by a short paraphrase.
+      placeholder: Document and revision; section/table; paraphrased requirement
+    validations:
+      required: true
+  - type: textarea
+    id: mismatch
+    attributes:
+      label: Current and expected behavior
+      description: Describe what the model currently accepts/rejects and what should happen instead. Include a minimal event sequence when useful.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope notes
+      description: Note optional signals, ordering profile, widths, exclusions, or whether this is a protocol rule versus an implementation choice.
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: Claim boundary
+      options:
+        - label: This report concerns a bounded requirement; it is not a blanket compliance claim.
+          required: true

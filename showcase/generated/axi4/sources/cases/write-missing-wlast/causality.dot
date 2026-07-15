@@ -1,0 +1,12 @@
+digraph axi4_case {
+  rankdir=LR;
+  label="The final required W transfer asserts WLAST / 最后一拍必需的 W 传输必须置 WLAST";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.4, ranksep=0.65, splines=polyline, pad=0.2];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
+  edge [color="#3169a8", fontname="sans-serif", fontsize=9];
+  event0 [label="[0] ID12 A=0x308 N=1 S=4B INCR"];
+  context [shape=note, style="filled", fillcolor="#f4f5f6", color="#7c8790", label="rejected input / 被拒输入\nD=0x0 S=0xf L=0"];
+  fault [shape=octagon, style="filled", fillcolor="#ffe9e7", color="#b33a2b", label="REJECTED / 已拒绝\naxi4.write.final_marker\nW beat 1/1 requires last=True"];
+  context -> fault [style=dashed, color="#777777", label="diagnostic context / 诊断上下文（非因果边）"];
+}

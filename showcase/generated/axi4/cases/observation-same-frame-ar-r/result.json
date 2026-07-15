@@ -1,0 +1,158 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "observation-same-frame-ar-r",
+  "theme": "observation/reset",
+  "title": {
+    "en": "A response cannot consume an obligation born at the same edge",
+    "zh-CN": "响应不能消费同一采样沿刚建立的义务"
+  },
+  "claim": {
+    "en": "R is checked against state visible before the current AR commits.",
+    "zh-CN": "R 依据当前 AR 提交之前可见的状态进行检查。"
+  },
+  "execution": {
+    "mode": "atomic-frames",
+    "protocol": "axi4",
+    "model": "Axi4ObservationSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "AtomicFrame protocol observation"
+  },
+  "expected": {
+    "verdict": "FAIL",
+    "rule": "axi4.read.orphan_beat",
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "FAIL",
+    "rule": "axi4.read.orphan_beat",
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "AtomicFrame",
+      "tick": 0,
+      "clock": "aclk",
+      "reset": true,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "R": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        }
+      }
+    },
+    {
+      "type": "AtomicFrame",
+      "tick": 1,
+      "clock": "aclk",
+      "reset": false,
+      "source": "showcase.axi4",
+      "lanes": {
+        "AW": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "W": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "B": {
+          "valid": false,
+          "ready": true,
+          "event": null
+        },
+        "AR": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "AR",
+            "key": 2,
+            "payload": {
+              "addr": 2304,
+              "len": 0,
+              "size": 2,
+              "burst": "INCR",
+              "lock": 0,
+              "cache": 0,
+              "prot": 0,
+              "qos": 0,
+              "region": 0
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        },
+        "R": {
+          "valid": true,
+          "ready": true,
+          "event": {
+            "kind": "R",
+            "key": 2,
+            "payload": {
+              "data": 0,
+              "resp": "OKAY",
+              "last": true
+            },
+            "source": "model",
+            "clock": null,
+            "timestamp": null,
+            "trace_index": null
+          }
+        }
+      }
+    }
+  ],
+  "accepted_events": [],
+  "causal_edges": [],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 0
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": {
+    "rule": "axi4.read.orphan_beat",
+    "reason": "completion for key 2 has no pending obligation",
+    "scope": "link",
+    "location": ""
+  }
+}

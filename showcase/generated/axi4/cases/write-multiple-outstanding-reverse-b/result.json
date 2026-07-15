@@ -1,0 +1,251 @@
+{
+  "schema": "protocol-model.showcase.axi4-example/v1",
+  "name": "write-multiple-outstanding-reverse-b",
+  "theme": "ordering/interleave",
+  "title": {
+    "en": "Different write IDs may complete in reverse request order",
+    "zh-CN": "不同写 ID 可以按请求的逆序完成"
+  },
+  "claim": {
+    "en": "W remains FIFO-correlated with AW while B selects pending writes by ID.",
+    "zh-CN": "W 仍按 FIFO 与 AW 关联，而 B 可以按 ID 选择待完成写事务。"
+  },
+  "execution": {
+    "mode": "link-events",
+    "protocol": "axi4",
+    "model": "LinkSession"
+  },
+  "presentation": {
+    "level": "catalog",
+    "waveform_basis": "sequential CanonicalEvent inputs"
+  },
+  "expected": {
+    "verdict": "PASS",
+    "rule": null,
+    "reason_contains": null
+  },
+  "observed": {
+    "verdict": "PASS",
+    "rule": null,
+    "expectation_met": true
+  },
+  "inputs": [
+    {
+      "type": "CanonicalEvent",
+      "kind": "AW",
+      "key": 14,
+      "payload": {
+        "addr": 3584,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "AW",
+      "key": 15,
+      "payload": {
+        "addr": 3592,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 20,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 21,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "B",
+      "key": 15,
+      "payload": {
+        "resp": "OKAY"
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    },
+    {
+      "type": "CanonicalEvent",
+      "kind": "B",
+      "key": 14,
+      "payload": {
+        "resp": "OKAY"
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": null
+    }
+  ],
+  "accepted_events": [
+    {
+      "kind": "AW",
+      "key": 14,
+      "payload": {
+        "addr": 3584,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 0
+    },
+    {
+      "kind": "AW",
+      "key": 15,
+      "payload": {
+        "addr": 3592,
+        "len": 0,
+        "size": 2,
+        "burst": "INCR",
+        "lock": 0,
+        "cache": 0,
+        "prot": 0,
+        "qos": 0,
+        "region": 0
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 1
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 20,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 2
+    },
+    {
+      "kind": "W",
+      "key": null,
+      "payload": {
+        "data": 21,
+        "strb": 15,
+        "last": true
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 3
+    },
+    {
+      "kind": "B",
+      "key": 15,
+      "payload": {
+        "resp": "OKAY"
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 4
+    },
+    {
+      "kind": "B",
+      "key": 14,
+      "payload": {
+        "resp": "OKAY"
+      },
+      "source": "model",
+      "clock": null,
+      "timestamp": null,
+      "trace_index": 5
+    }
+  ],
+  "causal_edges": [
+    [
+      1,
+      4
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      2,
+      5
+    ]
+  ],
+  "resources": {
+    "peak": {
+      "axi4.exclusive.reservations": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.write.pending_completions": 2,
+      "axi4.write.pending_data_bursts": 0,
+      "axi4.write.pending_descriptors": 2
+    },
+    "final": {
+      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_descriptors": 0,
+      "axi4.read.pending_transactions": 0,
+      "axi4.write.assembling_data": 0,
+      "axi4.exclusive.reservations": 0,
+      "axi4.write.pending_data_bursts": 0
+    }
+  },
+  "fault": null
+}

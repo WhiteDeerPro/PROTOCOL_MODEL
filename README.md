@@ -112,10 +112,18 @@ python showcase/demos/system/chi_issue_h_routed_read/run.py
 [实现状态](docs/architecture/implementation-status.md)；产物边界见
 [运行产物、可视化与文档发布](docs/architecture/run-output-management.md)。
 
-开发时如需检查当前架构，可按修改风险选择定向测试，或显式运行当前测试集：
+编辑循环先运行小型代表集和受影响职责的 target：
 
 ```bash
 make smoke
+make test-target TARGET=chi
 ```
 
-测试用于检查所修改的语义路径，不以 case 数量替代协议覆盖或架构进度。
+完成代码变更前运行全量维护基线：
+
+```bash
+make test
+```
+
+可用 target、integration、迁移哨兵与 release 测试入口见
+[测试说明](tests/README.md)。测试用于检查所修改的语义路径，不以 case 数量替代协议覆盖或架构进度。

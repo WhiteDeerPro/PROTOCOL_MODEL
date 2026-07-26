@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- 将回归入口分为 smoke、职责 target、integration、迁移哨兵和 full baseline，增加 suite manifest 自检与
+  Python 3.10/3.13 最小 CI；同时收敛仓库工作约定，并让根 Roadmap 只维护长期依赖和 canonical 施工入口。
+
 ## 0.4.0 — interface scopes, executable fabrics, and CHI network slices (2026-07-27)
 
 - 建立当前版本的单一 canonical 术语注册表，并将公共词族收敛为 `InterfaceEventKind`、

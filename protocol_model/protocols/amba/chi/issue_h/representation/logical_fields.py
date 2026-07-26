@@ -5,10 +5,13 @@ The codec sits between typed protocol messages and packed channel flits:
 ``typed message <-> logical field record <-> future packed-bit codec``
 
 A logical field record preserves the specification-facing field names,
-per-opcode field presence, constants, and widths.  It deliberately has no bit
-offsets, padding, parity, lane placement, or PHY meaning.  Network route and
-fragment identities also remain on :class:`ChiNetworkPacket`; this module only
-projects protocol-message fields.
+per-opcode field presence, constants, and widths of the registered typed
+profile.  "Exact" in this module means exact for that intentionally bounded
+profile, not a claim that the complete Issue H conditional-field catalog is
+implemented.  The record deliberately has no bit offsets, padding, parity,
+lane placement, or PHY meaning.  Network route and fragment identities also
+remain on :class:`ChiNetworkPacket`; this module only projects
+protocol-message fields.
 
 The registry is local to this optional codec.  A typed message that has no
 registered logical form can still be a valid CHI representation when a caller
@@ -24,6 +27,7 @@ from typing import Mapping, TypeAlias
 
 from .dat import (
     ChiCompDataMessage,
+    ChiCopyBackWrDataMessage,
     ChiDatOpcode,
     ChiSnpRespDataMessage,
 )
@@ -40,9 +44,11 @@ from .req import (
     ChiReadSharedMessage,
     ChiReadUniqueMessage,
     ChiReqOpcode,
+    ChiWriteBackFullMessage,
 )
 from .rsp import (
     ChiCompAckMessage,
+    ChiCompDBIDRespMessage,
     ChiPCrdGrantMessage,
     ChiRetryAckMessage,
     ChiRspOpcode,
@@ -406,6 +412,13 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
     ),
     _schema(
         ChiChannelKind.REQ,
+        ChiReqOpcode.WRITE_BACK_FULL,
+        7,
+        ChiWriteBackFullMessage,
+        _READ_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
         ChiReqOpcode.PROTOCOL_CREDIT_RETURN,
         7,
         ChiPCrdReturnMessage,
@@ -436,6 +449,21 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
             _integer("TxnID", "transaction_id", 12),
             _integer("QoS", "qos", 4),
             _integer("Resp", "response", 3),
+            _boolean("TraceTag", "trace_tag"),
+        ),
+    ),
+    _schema(
+        ChiChannelKind.RSP,
+        ChiRspOpcode.COMP_DBID_RESP,
+        5,
+        ChiCompDBIDRespMessage,
+        (
+            _integer("TxnID", "transaction_id", 12),
+            _integer("DBID", "data_buffer_id", 12),
+            _integer("QoS", "qos", 4),
+            _integer("RespErr", "response_error", 2),
+            _integer("Resp", "response", 3),
+            _integer("CBusy", "completer_busy", 3),
             _boolean("TraceTag", "trace_tag"),
         ),
     ),
@@ -531,6 +559,29 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
             _integer("DataSource", "data_source", 8),
             _integer("CBusy", "completer_busy", 3),
             _integer("DBID", "data_buffer_id", 12),
+            _integer("CCID", "critical_chunk_id", 2),
+            _boolean("TraceTag", "trace_tag"),
+        ),
+    ),
+    _schema(
+        ChiChannelKind.DAT,
+        ChiDatOpcode.COPY_BACK_WRITE_DATA,
+        4,
+        ChiCopyBackWrDataMessage,
+        (
+            _integer("TxnID", "transaction_id", 12),
+            _integer(
+                "Data",
+                "data",
+                profile_width="data_width",
+            ),
+            _integer("DataID", "data_id", 2),
+            _integer("QoS", "qos", 4),
+            _integer("RespErr", "response_error", 2),
+            _integer("Resp", "response", 3),
+            _integer("DataSource", "data_source", 8),
+            _integer("CBusy", "completer_busy", 3),
+            _integer("BE", "byte_enable", 64),
             _integer("CCID", "critical_chunk_id", 2),
             _boolean("TraceTag", "trace_tag"),
         ),

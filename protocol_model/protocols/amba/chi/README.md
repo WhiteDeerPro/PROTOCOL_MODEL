@@ -102,14 +102,14 @@ transmitter→receiver hop 上的 flit，不解释 coherence opcode；`Interface
 当前 Home 固定选择“吸收 PassDirty、返回 `CompData_SC`、在 `CompAck` 后提交 backing/directory”这一种
 规范允许的 no-SD 结果；它没有覆盖所有可选 Home policy。`SC` holder 已可通过
 `ReadUnique→UC→local write→UD` 完成受限升级，但仍未实现 `CleanUnique`/`MakeUnique`、packed bit/raw
-pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、dirty eviction/writeback、
+pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty victim/eviction scheduling、
 same-line transient/hazard，以及 MOESI `SD`/Owned。Participant
 facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，尚未并入通用
 `SystemSession` action loop；有界 scheduler budget 耗尽给出 inconclusive，不作为 network deadlock
 证明。
 
-后续扩展继续以可执行 lifecycle 为单位增加。紧邻的增量包括 `CleanUnique`/`MakeUnique`、dirty
-eviction/writeback、same-line transient/hazard，以及同一 Home/type 下多个 waiter 的具名选择与公平性合同。
+后续扩展继续以可执行 lifecycle 为单位增加。紧邻的增量包括 `CleanUnique`/`MakeUnique`、自动 dirty
+victim/eviction scheduling、same-line transient/hazard，以及同一 Home/type 下多个 waiter 的具名选择与公平性合同。
 `PCrdGrant`、`RetryAck` 仍走 Home→Requester 的 RSP 路径；`PCrdReturn` 根据 CHI Issue H B2.5.6 走
 Requester→Home 的 REQ 路径，router 继续只按 `channel + TgtID` 透明转发。NodeID ownership 与首条
 single-scope address/Home/domain authority 已由 system construction 闭合；multi-Home/SAM 选择和

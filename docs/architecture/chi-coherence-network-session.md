@@ -510,11 +510,11 @@ RN holds UD
 ```
 
 这里实现的是显式提交一条已选择的 `UD` line；victim selection、LRU、自动 eviction trigger 和 writeback
-queue scheduling 仍属于可选 Cache VirtualDut refinement。当前完整 lifecycle 可在 packet-delivery session
-运行，feature/capability 已声明 Requester↔Home 的 REQ/RSP/DAT 闭合；resolved topology/network 的
-可执行 witness 与 showcase 仍需单独固化。这里没有发现新的语义层阻塞；当前缺少的是可复用的两节点
-CHI construction helper。下一步应先把端口、双向 transport、binding/facet 与 capability contract 的
-样板抽成调用方可配置的 builder，再让 writeback witness 使用它，避免在测试中复制一套私有拓扑装配。
+queue scheduling 仍属于可选 Cache VirtualDut refinement。完整 lifecycle 已在 packet-delivery session
+以及 resolved XP topology/network 中运行：后者从 feature/capability 证据闭合 Requester↔Home 的
+REQ/RSP/DAT route，保存三份 packet 的连续 lineage，并检查 Home backing/DBID 与 RN `UD→I` 的最终提交。
+RN cache behavior 通过 canonical binder 绑定调用方已有 VirtualDut；binder 不创建 port 或 connection，
+网络仍由 SystemProtocol construction 显式声明。
 
 当前 cache-line 数据不分片，因此所有参与 coherence lifecycle 的 DAT route 都在打开 session 时检查为
 512-bit。128/256-bit DAT connection 需要先提供 splitter/reassembler 和 fragment correlation，不能只因

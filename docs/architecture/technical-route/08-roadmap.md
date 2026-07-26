@@ -43,10 +43,10 @@ coherence-domain membership 派生 `eligible Snoopees = members - requester`；N
 与 REQ/SNP/RSP/DAT flow 随后使用同一派生结果闭合。Home directory 仍只选择一笔事务的实际 holder，
 不取代静态 domain authority。
 
-1. 为现有显式 `UD` victim 增加经 topology/network 的完整 writeback witness，证明所选 address authority
-   也约束写回 Home；暂不同时引入 replacement policy；
+1. 在已闭合的显式 `UD` topology writeback 基础上，增加 Retry/error/Snoop 并发与可选的
+   victim/writeback scheduling；replacement policy 保持独立 refinement；
 2. 在已有 `UD`/PassDirty、no-SD downgrade 和 ReadUnique upgrade 基础上补
-   `CleanUnique`/`MakeUnique`、dirty eviction/writeback，继续闭合 MESI 的常用生命周期；
+   `CleanUnique`/`MakeUnique` 与 clean `Evict`，继续闭合 MESI 的常用生命周期；
 3. 增加同 line transient/hazard、Retry/error 组合、多 waiter policy、多个 pending emission batch 与
    wait-for projection；
 4. 再以 `SD`/Owned、shared-dirty authority 与 forwarding/DCT 检验 MOESI-like 扩展；

@@ -6,7 +6,9 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     CHI_ISSUE_H_LOGICAL_FIELD_CODEC,
     ChiChannelKind,
     ChiCompAckMessage,
+    ChiCompDBIDRespMessage,
     ChiCompDataMessage,
+    ChiCopyBackWrDataMessage,
     ChiIssueHDatProfile,
     ChiIssueHReqProfile,
     ChiLogicalCodecError,
@@ -25,6 +27,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiSnpNotSharedDirtyMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
+    ChiWriteBackFullMessage,
 )
 
 
@@ -38,6 +41,15 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
             (ChiReadSharedMessage(2, 0x8000), None),
             (ChiReadNotSharedDirtyMessage(3, 0xA000), None),
             (ChiReadUniqueMessage(4, 0xC000), None),
+            (
+                ChiWriteBackFullMessage(
+                    0x12,
+                    0xE000,
+                    qos=3,
+                    trace_tag=True,
+                ),
+                None,
+            ),
             (ChiPCrdReturnMessage(2), None),
             (ChiSnpRespMessage(4, ChiRespCode.I), None),
             (
@@ -49,6 +61,16 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                 ChiIssueHDatProfile(data_width=512),
             ),
             (ChiCompAckMessage(5), None),
+            (
+                ChiCompDBIDRespMessage(
+                    0x12,
+                    0x234,
+                    qos=2,
+                    completer_busy=3,
+                    trace_tag=True,
+                ),
+                None,
+            ),
             (ChiRetryAckMessage(6, 3), None),
             (ChiPCrdGrantMessage(3), None),
             (ChiSnpSharedMessage(7, 0x8000), None),
@@ -68,6 +90,17 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                     home_node_id=0x21,
                     response=ChiRespCode.UC,
                     data_buffer_id=0x200,
+                ),
+                ChiIssueHDatProfile(data_width=512),
+            ),
+            (
+                ChiCopyBackWrDataMessage(
+                    0x234,
+                    (1 << 400) | 0xD177,
+                    data_id=0,
+                    qos=4,
+                    completer_busy=2,
+                    trace_tag=True,
                 ),
                 ChiIssueHDatProfile(data_width=512),
             ),
@@ -285,6 +318,127 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
         self.assertEqual(52, widths["Addr"])
         self.assertEqual(1, widths["ExpCompAck"])
         self.assertFalse(hasattr(schema, "bit_offset"))
+
+    def test_writeback_forms_have_exact_logical_field_sets(self) -> None:
+        cases = (
+            (
+                ChiWriteBackFullMessage(0x12, 0x8000),
+                (
+                    "Opcode",
+                    "TxnID",
+                    "Addr",
+                    "Size",
+                    "QoS",
+                    "PAS",
+                    "LikelyShared",
+                    "AllowRetry",
+                    "Order",
+                    "PCrdType",
+                    "MemAttr",
+                    "SnpAttr",
+                    "Excl",
+                    "ExpCompAck",
+                    "TagOp",
+                    "TraceTag",
+                ),
+            ),
+            (
+                ChiCompDBIDRespMessage(0x12, 0x234),
+                (
+                    "Opcode",
+                    "TxnID",
+                    "DBID",
+                    "QoS",
+                    "RespErr",
+                    "Resp",
+                    "CBusy",
+                    "TraceTag",
+                ),
+            ),
+            (
+                ChiCopyBackWrDataMessage(
+                    0x234,
+                    (1 << 400) | 0xD177,
+                ),
+                (
+                    "Opcode",
+                    "TxnID",
+                    "Data",
+                    "DataID",
+                    "QoS",
+                    "RespErr",
+                    "Resp",
+                    "DataSource",
+                    "CBusy",
+                    "BE",
+                    "CCID",
+                    "TraceTag",
+                ),
+            ),
+        )
+
+        for message, expected_fields in cases:
+            with self.subTest(message=type(message).__name__):
+                schema = self.codec.schema_for_message(message)
+                assert schema is not None
+
+                self.assertEqual(expected_fields, schema.field_names)
+                self.assertEqual(
+                    expected_fields,
+                    tuple(
+                        self.codec.encode(
+                            message,
+                            (
+                                ChiIssueHDatProfile(data_width=512)
+                                if isinstance(
+                                    message,
+                                    ChiCopyBackWrDataMessage,
+                                )
+                                else None
+                            ),
+                        ).fields
+                    ),
+                )
+
+    def test_writeback_forms_use_their_channel_profiles(self) -> None:
+        invalid_cases = (
+            (
+                ChiWriteBackFullMessage(
+                    1,
+                    0x8000,
+                    size=5,
+                ),
+                None,
+                "Size=6",
+            ),
+            (
+                ChiCompDBIDRespMessage(
+                    1,
+                    2,
+                    response=ChiRespCode.SC,
+                ),
+                None,
+                "Resp=0",
+            ),
+            (
+                ChiCopyBackWrDataMessage(
+                    2,
+                    1 << 200,
+                ),
+                ChiIssueHDatProfile(data_width=128),
+                "configured 128-bit payload",
+            ),
+        )
+
+        for message, profile, expected in invalid_cases:
+            with self.subTest(message=type(message).__name__):
+                reasons = self.codec.explain_encode(message, profile)
+
+                self.assertTrue(
+                    any(expected in reason for reason in reasons)
+                )
+                with self.assertRaises(ChiLogicalCodecError):
+                    self.codec.encode(message, profile)
 
     def test_unknown_opcode_is_a_codec_coverage_gap(self) -> None:
         record = ChiLogicalFieldRecord(

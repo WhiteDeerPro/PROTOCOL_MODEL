@@ -294,8 +294,8 @@ time domains ──► UART ──► CDC
 根 Roadmap 不再定义“下一版本 A/B/C”或复制一份近期任务清单。当前施工统一从
 [技术路线实施阶段](docs/architecture/technical-route/08-roadmap.md)中的三个入口读取：
 
-- `C1`：从已闭合的 CHI participant/network 与 single-scope address→Home/domain authority，推进
-  topology writeback witness、常用一致性生命周期和后续 multi-Home/SAM 扩展；
+- `C1`：从已闭合的 CHI participant/network、topology writeback witness 与 single-scope
+  address→Home/domain authority，推进常用一致性生命周期和后续 multi-Home/SAM 扩展；
 - `S3`：从已有 address projection/direct-neighbor closure 推进 capability-backed system construction；
 - `S4`：从已有有限容量、blocked reason 和显式 advance 推进 emission-level admission、lineage、
   held/waiting resource 与 recoverable wakeup。

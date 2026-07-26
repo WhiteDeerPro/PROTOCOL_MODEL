@@ -4,7 +4,7 @@ from collections import Counter
 import unittest
 
 from protocol_model.integrations.recipes.amba.chi import (
-    build_chi_cache_participant_fixture,
+    bind_chi_issue_h_cache_lines,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
@@ -13,6 +13,8 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_DIRTY_UNIQUE_HOME_CAPABILITIES,
     CHI_DIRTY_UNIQUE_REQUESTER_CAPABILITIES,
     CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES,
+    CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
+    CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
     CHI_MESI_READ_NOT_SHARED_DIRTY_HOME_CAPABILITIES,
     CHI_MESI_READ_NOT_SHARED_DIRTY_REQUESTER_CAPABILITIES,
     CHI_MESI_READ_NOT_SHARED_DIRTY_SNOOPEE_CAPABILITIES,
@@ -31,7 +33,9 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
 from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiChannelKind,
     ChiCompAckMessage,
+    ChiCompDBIDRespMessage,
     ChiCompDataMessage,
+    ChiCopyBackWrDataMessage,
     ChiIssueHDatProfile,
     ChiIssueHReqProfile,
     ChiIssueHRspProfile,
@@ -43,22 +47,27 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiSnpRespDataMessage,
     ChiSnpNotSharedDirtyMessage,
     ChiSnpUniqueMessage,
+    ChiWriteBackFullMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
+    CHI_FEATURE_DIRTY_WRITEBACK,
     CHI_MESI_NO_SD_REQUIRED_FEATURES,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
     CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE,
+    CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE,
     CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE,
     ChiAdvanceCoherenceNetwork,
     ChiCoherenceAuthorityContract,
     ChiCoherenceDomain,
+    ChiCoherenceNetworkEventKind,
     ChiCoherenceNetworkSession,
     ChiCoherenceNetworkState,
     ChiFeatureContract,
     ChiHomeAuthority,
     ChiSubmitCoherentRead,
+    ChiSubmitWriteBackFull,
     ChiWriteUniqueCacheLine,
     resolve_chi_system,
 )
@@ -99,6 +108,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
     HOME = 0x21
     ADDRESS = 0x8000
     DATA = (1 << 400) | 0xC0DE
+    DIRTY_DATA = (1 << 420) | 0xD177
 
     @staticmethod
     def port(
@@ -165,19 +175,26 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         *,
         dirty: bool = False,
         mesi: bool = False,
+        writeback: bool = False,
         data_width: int = 512,
     ):
-        if dirty and mesi:
-            raise ValueError("select either dirty-unique or MESI read mode")
-        uses_dirty_data = dirty or mesi
+        if sum((dirty, mesi, writeback)) > 1:
+            raise ValueError(
+                "select one dirty-unique, MESI read, or writeback mode"
+            )
+        snoop_uses_dirty_data = dirty or mesi
         builder = SystemProtocolBuilder(
             (
-                "chi_mesi_read_not_shared_dirty_via_xp"
-                if mesi
+                "chi_dirty_writeback_via_xp"
+                if writeback
                 else (
-                    "chi_dirty_unique_via_xp"
-                    if dirty
-                    else "chi_clean_unique_via_xp"
+                    "chi_mesi_read_not_shared_dirty_via_xp"
+                    if mesi
+                    else (
+                        "chi_dirty_unique_via_xp"
+                        if dirty
+                        else "chi_clean_unique_via_xp"
+                    )
                 )
             )
         )
@@ -185,12 +202,12 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
             VirtualDut(
                 "rn0",
                 {
-                    "tx_req_rsp": self.port(
-                        "tx_req_rsp",
+                    "tx_to_xp": self.port(
+                        "tx_to_xp",
                         TransportDirection.TRANSMIT,
                     ),
-                    "rx_dat": self.port(
-                        "rx_dat",
+                    "rx_from_xp": self.port(
+                        "rx_from_xp",
                         TransportDirection.RECEIVE,
                     ),
                 },
@@ -216,12 +233,12 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
             VirtualDut(
                 "hn0",
                 {
-                    "rx_req_rsp": self.port(
-                        "rx_req_rsp",
+                    "rx_from_xp": self.port(
+                        "rx_from_xp",
                         TransportDirection.RECEIVE,
                     ),
-                    "tx_dat_snp": self.port(
-                        "tx_dat_snp",
+                    "tx_to_xp": self.port(
+                        "tx_to_xp",
                         TransportDirection.TRANSMIT,
                     ),
                 },
@@ -253,9 +270,18 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         connection_specs = (
             (
                 "rn0_to_xp",
-                VirtualDutPortRef("rn0", "tx_req_rsp"),
+                VirtualDutPortRef("rn0", "tx_to_xp"),
                 VirtualDutPortRef("xp0", "from_rn0"),
-                frozenset((ChiChannelKind.REQ, ChiChannelKind.RSP)),
+                frozenset(
+                    (
+                        ChiChannelKind.REQ,
+                        (
+                            ChiChannelKind.DAT
+                            if writeback
+                            else ChiChannelKind.RSP
+                        ),
+                    )
+                ),
             ),
             (
                 "rn1_to_xp",
@@ -266,7 +292,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                         ChiChannelKind.RSP,
                         *(
                             (ChiChannelKind.DAT,)
-                            if uses_dirty_data
+                            if snoop_uses_dirty_data
                             else ()
                         ),
                     )
@@ -281,7 +307,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                         ChiChannelKind.RSP,
                         *(
                             (ChiChannelKind.DAT,)
-                            if uses_dirty_data
+                            if snoop_uses_dirty_data
                             else ()
                         ),
                     )
@@ -289,15 +315,29 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
             ),
             (
                 "hn0_to_xp",
-                VirtualDutPortRef("hn0", "tx_dat_snp"),
+                VirtualDutPortRef("hn0", "tx_to_xp"),
                 VirtualDutPortRef("xp0", "from_hn0"),
-                frozenset((ChiChannelKind.DAT, ChiChannelKind.SNP)),
+                (
+                    frozenset((ChiChannelKind.RSP,))
+                    if writeback
+                    else frozenset(
+                        (ChiChannelKind.DAT, ChiChannelKind.SNP)
+                    )
+                ),
             ),
             (
                 "xp_to_rn0",
                 VirtualDutPortRef("xp0", "to_rn0"),
-                VirtualDutPortRef("rn0", "rx_dat"),
-                frozenset((ChiChannelKind.DAT,)),
+                VirtualDutPortRef("rn0", "rx_from_xp"),
+                frozenset(
+                    (
+                        (
+                            ChiChannelKind.RSP
+                            if writeback
+                            else ChiChannelKind.DAT
+                        ),
+                    )
+                ),
             ),
             (
                 "xp_to_rn1",
@@ -314,12 +354,20 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
             (
                 "xp_to_hn0",
                 VirtualDutPortRef("xp0", "to_hn0"),
-                VirtualDutPortRef("hn0", "rx_req_rsp"),
+                VirtualDutPortRef("hn0", "rx_from_xp"),
                 frozenset(
                     (
                         ChiChannelKind.REQ,
-                        ChiChannelKind.RSP,
-                        *((ChiChannelKind.DAT,) if uses_dirty_data else ()),
+                        (
+                            ChiChannelKind.DAT
+                            if writeback
+                            else ChiChannelKind.RSP
+                        ),
+                        *(
+                            (ChiChannelKind.DAT,)
+                            if snoop_uses_dirty_data
+                            else ()
+                        ),
                     )
                 ),
             ),
@@ -341,50 +389,126 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         builder.add_address_claim(
             AddressClaim(
                 home_address_claim,
-                VirtualDutPortRef("hn0", "rx_req_rsp"),
+                VirtualDutPortRef("hn0", "rx_from_xp"),
                 AddressWindow(self.ADDRESS, 0x40),
             )
         )
         system = builder.build().elaborate()
         duts = system.spec.virtual_duts
-        requester = build_chi_cache_participant_fixture(
-            "requester",
+        requester_assembly = bind_chi_issue_h_cache_lines(
+            duts["rn0"],
             self.REQUESTER,
             self.HOME,
+            port_channels={
+                "tx_to_xp": (
+                    frozenset(
+                        (ChiChannelKind.REQ, ChiChannelKind.DAT)
+                    )
+                    if writeback
+                    else frozenset(
+                        (ChiChannelKind.REQ, ChiChannelKind.RSP)
+                    )
+                ),
+                "rx_from_xp": (
+                    frozenset((ChiChannelKind.RSP,))
+                    if writeback
+                    else frozenset((ChiChannelKind.DAT,))
+                ),
+            },
+            initial_lines=(
+                (
+                    ChiCacheLine(
+                        self.ADDRESS,
+                        ChiCacheState.UD,
+                        self.DIRTY_DATA,
+                    ),
+                )
+                if writeback
+                else ()
+            ),
+            participant_name="requester",
+            binding_name="rn0",
         )
-        snoopees = {
-            "rn1": build_chi_cache_participant_fixture(
-                "snoopee_1",
+        snoopee_assemblies = {
+            "rn1": bind_chi_issue_h_cache_lines(
+                duts["rn1"],
                 self.FIRST_SNOOPEE,
                 self.HOME,
+                port_channels={
+                    "rx_snp": frozenset((ChiChannelKind.SNP,)),
+                    "tx_rsp": frozenset(
+                        (
+                            ChiChannelKind.RSP,
+                            *(
+                                (ChiChannelKind.DAT,)
+                                if snoop_uses_dirty_data
+                                else ()
+                            ),
+                        )
+                    ),
+                },
                 initial_lines=(
                     ChiCacheLine(
                         self.ADDRESS,
                         (
                             ChiCacheState.UC
-                            if uses_dirty_data
-                            else ChiCacheState.SC
+                            if snoop_uses_dirty_data
+                            else (
+                                ChiCacheState.I
+                                if writeback
+                                else ChiCacheState.SC
+                            )
                         ),
-                        self.DATA,
+                        (
+                            None
+                            if writeback
+                            else self.DATA
+                        ),
                     ),
                 ),
+                participant_name="snoopee_1",
+                binding_name="rn1",
             ),
-            "rn2": build_chi_cache_participant_fixture(
-                "snoopee_2",
+            "rn2": bind_chi_issue_h_cache_lines(
+                duts["rn2"],
                 self.SECOND_SNOOPEE,
                 self.HOME,
+                port_channels={
+                    "rx_snp": frozenset((ChiChannelKind.SNP,)),
+                    "tx_rsp": frozenset(
+                        (
+                            ChiChannelKind.RSP,
+                            *(
+                                (ChiChannelKind.DAT,)
+                                if snoop_uses_dirty_data
+                                else ()
+                            ),
+                        )
+                    ),
+                },
                 initial_lines=(
                     ChiCacheLine(
                         self.ADDRESS,
                         (
                             ChiCacheState.I
-                            if uses_dirty_data
+                            if snoop_uses_dirty_data or writeback
                             else ChiCacheState.SC
                         ),
-                        None if uses_dirty_data else self.DATA,
+                        (
+                            None
+                            if snoop_uses_dirty_data or writeback
+                            else self.DATA
+                        ),
                     ),
                 ),
+                participant_name="snoopee_2",
+                binding_name="rn2",
             ),
+        }
+        requester = requester_assembly.participant
+        snoopees = {
+            name: assembly.participant
+            for name, assembly in snoopee_assemblies.items()
         }
         home = ChiCoherentHomeNode(
             "home",
@@ -395,7 +519,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                     self.DATA,
                     sharers=(
                         frozenset()
-                        if uses_dirty_data
+                        if snoop_uses_dirty_data or writeback
                         else frozenset(
                             (
                                 self.FIRST_SNOOPEE,
@@ -404,13 +528,21 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                         )
                     ),
                     unique_owner=(
-                        self.FIRST_SNOOPEE if uses_dirty_data else None
+                        (
+                            self.REQUESTER
+                            if writeback
+                            else self.FIRST_SNOOPEE
+                        )
+                        if snoop_uses_dirty_data or writeback
+                        else None
                     ),
                 ),
             ),
             initial_snoop_transaction_id=0x100,
             initial_data_buffer_id=0x200,
-            allow_dirty_data_transfer=uses_dirty_data,
+            allow_dirty_data_transfer=(
+                snoop_uses_dirty_data or writeback
+            ),
         )
         router = ChiStoreForwardRouterNode(
             "xp0",
@@ -425,7 +557,11 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                 ChiExactNodeRoute(
                     self.REQUESTER,
                     "to_rn0",
-                    frozenset((ChiChannelKind.DAT,)),
+                    (
+                        frozenset((ChiChannelKind.RSP,))
+                        if writeback
+                        else frozenset((ChiChannelKind.DAT,))
+                    ),
                 ),
                 ChiExactNodeRoute(
                     self.FIRST_SNOOPEE,
@@ -443,10 +579,14 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                     frozenset(
                         (
                             ChiChannelKind.REQ,
-                            ChiChannelKind.RSP,
+                            (
+                                ChiChannelKind.DAT
+                                if writeback
+                                else ChiChannelKind.RSP
+                            ),
                             *(
                                 (ChiChannelKind.DAT,)
-                                if uses_dirty_data
+                                if snoop_uses_dirty_data
                                 else ()
                             ),
                         )
@@ -458,82 +598,49 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
 
         port_binding = ChiParticipantPortBinding
         bindings = {
-            "rn0": ChiParticipantBinding(
-                "rn0",
-                duts["rn0"],
-                requester,
-                (
-                    port_binding(
-                        duts["rn0"].port("tx_req_rsp"),
-                        frozenset(
-                            (ChiChannelKind.REQ, ChiChannelKind.RSP)
-                        ),
-                    ),
-                    port_binding(
-                        duts["rn0"].port("rx_dat"),
-                        frozenset((ChiChannelKind.DAT,)),
-                    ),
-                ),
-                frozenset((self.REQUESTER,)),
-            ),
+            "rn0": requester_assembly.binding,
             "hn0": ChiParticipantBinding(
                 "hn0",
                 duts["hn0"],
                 home,
                 (
                     port_binding(
-                        duts["hn0"].port("rx_req_rsp"),
+                        duts["hn0"].port("rx_from_xp"),
                         frozenset(
                             (
                                 ChiChannelKind.REQ,
-                                ChiChannelKind.RSP,
+                                (
+                                    ChiChannelKind.DAT
+                                    if writeback
+                                    else ChiChannelKind.RSP
+                                ),
                                 *(
                                     (ChiChannelKind.DAT,)
-                                    if uses_dirty_data
+                                    if snoop_uses_dirty_data
                                     else ()
                                 ),
                             )
                         ),
                     ),
                     port_binding(
-                        duts["hn0"].port("tx_dat_snp"),
-                        frozenset(
-                            (ChiChannelKind.DAT, ChiChannelKind.SNP)
+                        duts["hn0"].port("tx_to_xp"),
+                        (
+                            frozenset((ChiChannelKind.RSP,))
+                            if writeback
+                            else frozenset(
+                                (
+                                    ChiChannelKind.DAT,
+                                    ChiChannelKind.SNP,
+                                )
+                            )
                         ),
                     ),
                 ),
                 frozenset((self.HOME,)),
             ),
         }
-        for name, node_id in (
-            ("rn1", self.FIRST_SNOOPEE),
-            ("rn2", self.SECOND_SNOOPEE),
-        ):
-            bindings[name] = ChiParticipantBinding(
-                name,
-                duts[name],
-                snoopees[name],
-                (
-                    port_binding(
-                        duts[name].port("rx_snp"),
-                        frozenset((ChiChannelKind.SNP,)),
-                    ),
-                    port_binding(
-                        duts[name].port("tx_rsp"),
-                        frozenset(
-                            (
-                                ChiChannelKind.RSP,
-                                *(
-                                    (ChiChannelKind.DAT,)
-                                    if uses_dirty_data
-                                    else ()
-                                ),
-                            )
-                        ),
-                    ),
-                ),
-                frozenset((node_id,)),
-            )
+        for name in ("rn1", "rn2"):
+            bindings[name] = snoopee_assemblies[name].binding
         bindings["xp0"] = ChiParticipantBinding(
             "xp0",
             duts["xp0"],
@@ -547,7 +654,14 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                     (
                         "from_rn0",
                         frozenset(
-                            (ChiChannelKind.REQ, ChiChannelKind.RSP)
+                            (
+                                ChiChannelKind.REQ,
+                                (
+                                    ChiChannelKind.DAT
+                                    if writeback
+                                    else ChiChannelKind.RSP
+                                ),
+                            )
                         ),
                     ),
                     (
@@ -557,7 +671,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                                 ChiChannelKind.RSP,
                                 *(
                                     (ChiChannelKind.DAT,)
-                                    if uses_dirty_data
+                                    if snoop_uses_dirty_data
                                     else ()
                                 ),
                             )
@@ -570,7 +684,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                                 ChiChannelKind.RSP,
                                 *(
                                     (ChiChannelKind.DAT,)
-                                    if uses_dirty_data
+                                    if snoop_uses_dirty_data
                                     else ()
                                 ),
                             )
@@ -578,11 +692,25 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                     ),
                     (
                         "from_hn0",
-                        frozenset(
-                            (ChiChannelKind.DAT, ChiChannelKind.SNP)
+                        (
+                            frozenset((ChiChannelKind.RSP,))
+                            if writeback
+                            else frozenset(
+                                (
+                                    ChiChannelKind.DAT,
+                                    ChiChannelKind.SNP,
+                                )
+                            )
                         ),
                     ),
-                    ("to_rn0", frozenset((ChiChannelKind.DAT,))),
+                    (
+                        "to_rn0",
+                        (
+                            frozenset((ChiChannelKind.RSP,))
+                            if writeback
+                            else frozenset((ChiChannelKind.DAT,))
+                        ),
+                    ),
                     ("to_rn1", frozenset((ChiChannelKind.SNP,))),
                     ("to_rn2", frozenset((ChiChannelKind.SNP,))),
                     (
@@ -590,10 +718,14 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                         frozenset(
                             (
                                 ChiChannelKind.REQ,
-                                ChiChannelKind.RSP,
+                                (
+                                    ChiChannelKind.DAT
+                                    if writeback
+                                    else ChiChannelKind.RSP
+                                ),
                                 *(
                                     (ChiChannelKind.DAT,)
-                                    if uses_dirty_data
+                                    if snoop_uses_dirty_data
                                     else ()
                                 ),
                             )
@@ -606,14 +738,18 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         contract = ChiFeatureContract(
             {"requester": "rn0"},
             frozenset(
-                CHI_MESI_NO_SD_REQUIRED_FEATURES
-                if mesi
+                (CHI_FEATURE_DIRTY_WRITEBACK,)
+                if writeback
                 else (
-                    (
-                        CHI_FEATURE_DIRTY_UNIQUE_TRANSFER
-                        if dirty
-                        else CHI_FEATURE_CLEAN_READ_UNIQUE
-                    ),
+                    CHI_MESI_NO_SD_REQUIRED_FEATURES
+                    if mesi
+                    else (
+                        (
+                            CHI_FEATURE_DIRTY_UNIQUE_TRANSFER
+                            if dirty
+                            else CHI_FEATURE_CLEAN_READ_UNIQUE
+                        ),
+                    )
                 )
             ),
         )
@@ -621,68 +757,76 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
             ChiParticipantCapability(
                 "rn0",
                 (
-                    (
-                        CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
-                        | CHI_DIRTY_UNIQUE_REQUESTER_CAPABILITIES
-                        | CHI_MESI_READ_NOT_SHARED_DIRTY_REQUESTER_CAPABILITIES
-                    )
-                    if mesi
+                    CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES
+                    if writeback
                     else (
                         CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
                         | CHI_DIRTY_UNIQUE_REQUESTER_CAPABILITIES
-                        if dirty
-                        else CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
+                        | CHI_MESI_READ_NOT_SHARED_DIRTY_REQUESTER_CAPABILITIES
+                        if mesi
+                        else (
+                            CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
+                            | CHI_DIRTY_UNIQUE_REQUESTER_CAPABILITIES
+                            if dirty
+                            else CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
+                        )
                     )
                 ),
             ),
             ChiParticipantCapability(
                 "hn0",
                 (
-                    (
-                        CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
-                        | CHI_DIRTY_UNIQUE_HOME_CAPABILITIES
-                        | CHI_MESI_READ_NOT_SHARED_DIRTY_HOME_CAPABILITIES
-                    )
-                    if mesi
+                    CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES
+                    if writeback
                     else (
                         CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
                         | CHI_DIRTY_UNIQUE_HOME_CAPABILITIES
-                        if dirty
-                        else CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
+                        | CHI_MESI_READ_NOT_SHARED_DIRTY_HOME_CAPABILITIES
+                        if mesi
+                        else (
+                            CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
+                            | CHI_DIRTY_UNIQUE_HOME_CAPABILITIES
+                            if dirty
+                            else CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
+                        )
                     )
                 ),
             ),
             ChiParticipantCapability(
                 "rn1",
                 (
-                    (
-                        CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
-                        | CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES
-                        | CHI_MESI_READ_NOT_SHARED_DIRTY_SNOOPEE_CAPABILITIES
-                    )
-                    if mesi
+                    frozenset()
+                    if writeback
                     else (
                         CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
                         | CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES
-                        if dirty
-                        else CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
+                        | CHI_MESI_READ_NOT_SHARED_DIRTY_SNOOPEE_CAPABILITIES
+                        if mesi
+                        else (
+                            CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
+                            | CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES
+                            if dirty
+                            else CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
+                        )
                     )
                 ),
             ),
             ChiParticipantCapability(
                 "rn2",
                 (
-                    (
-                        CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
-                        | CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES
-                        | CHI_MESI_READ_NOT_SHARED_DIRTY_SNOOPEE_CAPABILITIES
-                    )
-                    if mesi
+                    frozenset()
+                    if writeback
                     else (
                         CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
                         | CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES
-                        if dirty
-                        else CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
+                        | CHI_MESI_READ_NOT_SHARED_DIRTY_SNOOPEE_CAPABILITIES
+                        if mesi
+                        else (
+                            CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
+                            | CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES
+                            if dirty
+                            else CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
+                        )
                     )
                 ),
             ),
@@ -690,12 +834,14 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         return resolve_chi_system(
             system,
             facets=(
+                requester_assembly.facets.facets[0],
                 *(
-                    ChiBehaviorFacet.from_binding(
-                        bindings[name],
-                        ChiFacetKind.TRANSACTION,
-                    )
-                    for name in ("rn0", "rn1", "rn2", "hn0")
+                    snoopee_assemblies[name].facets.facets[0]
+                    for name in ("rn1", "rn2")
+                ),
+                ChiBehaviorFacet.from_binding(
+                    bindings["hn0"],
+                    ChiFacetKind.TRANSACTION,
                 ),
                 ChiBehaviorFacet.from_binding(
                     bindings["xp0"],
@@ -723,20 +869,24 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
             system_capabilities=frozenset(
                 (
                     *(
-                        (
-                            CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
-                            CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE,
-                            CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE,
-                        )
-                        if mesi
+                        (CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE,)
+                        if writeback
                         else (
                             (
                                 CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
                                 CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE,
+                                CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE,
                             )
-                            if dirty
+                            if mesi
                             else (
-                                CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+                                (
+                                    CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+                                    CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE,
+                                )
+                                if dirty
+                                else (
+                                    CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+                                )
                             )
                         )
                     ),
@@ -766,6 +916,11 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         session = ChiCoherenceNetworkSession.from_resolved(resolved)
         state = session.initial_state()
 
+        for name in ("rn0", "rn1", "rn2"):
+            self.assertIs(
+                resolved.system.spec.virtual_duts[name],
+                resolved.binding_by_name[name].dut,
+            )
         self.assertIsInstance(state, ChiCoherenceNetworkState)
         self.assertIs(session.network, resolved.network)
         self.assertEqual(0, state.scheduler_cursor)
@@ -938,6 +1093,195 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         entry = state.coherence.home.directory[self.ADDRESS]
         self.assertEqual(self.REQUESTER, entry.unique_owner)
         self.assertEqual(self.DATA, entry.data)
+
+    def test_writeback_full_closes_req_rsp_dat_through_the_xp(self) -> None:
+        resolved = self.build_resolved(writeback=True)
+        self.assertTrue(resolved.is_closed)
+        evidence = resolved.capabilities.require(
+            CHI_FEATURE_DIRTY_WRITEBACK
+        )
+        self.assertEqual(
+            {
+                "writeback_request",
+                "writeback_dbid_response",
+                "writeback_copyback_data",
+            },
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            {
+                ChiChannelKind.REQ: ("rn0_to_xp", "xp_to_hn0"),
+                ChiChannelKind.RSP: ("hn0_to_xp", "xp_to_rn0"),
+                ChiChannelKind.DAT: ("rn0_to_xp", "xp_to_hn0"),
+            },
+            {
+                flow.channel: flow.connections
+                for flow in resolved.flow_projection.flows
+            },
+        )
+
+        rn_binding = resolved.binding_by_name["rn0"]
+        self.assertIs(
+            resolved.system.spec.virtual_duts["rn0"],
+            rn_binding.dut,
+        )
+        for channel, direction, expected_port in (
+            (
+                ChiChannelKind.REQ,
+                TransportDirection.TRANSMIT,
+                "tx_to_xp",
+            ),
+            (
+                ChiChannelKind.RSP,
+                TransportDirection.RECEIVE,
+                "rx_from_xp",
+            ),
+            (
+                ChiChannelKind.DAT,
+                TransportDirection.TRANSMIT,
+                "tx_to_xp",
+            ),
+        ):
+            self.assertEqual(
+                (expected_port,),
+                tuple(
+                    port.name
+                    for port in rn_binding.ports_for(channel, direction)
+                ),
+            )
+
+        session = ChiCoherenceNetworkSession.from_resolved(resolved)
+        state = session.initial_state()
+        self.assertIs(
+            ChiCacheState.UD,
+            state.coherence.request_nodes[self.REQUESTER]
+            .permissions[self.ADDRESS],
+        )
+        self.assertEqual(
+            self.REQUESTER,
+            state.coherence.home.directory[self.ADDRESS].unique_owner,
+        )
+
+        events = []
+        issued = self.apply(
+            session,
+            state,
+            ChiSubmitWriteBackFull(
+                self.REQUESTER,
+                ChiWriteBackFullMessage(0x15, self.ADDRESS),
+            ),
+        )
+        state = issued.state
+        events.extend(issued.emissions)
+        for _ in range(1024):
+            if session.is_quiescent(state):
+                break
+            advanced = self.apply(
+                session,
+                state,
+                ChiAdvanceCoherenceNetwork(),
+            )
+            state = advanced.state
+            events.extend(advanced.emissions)
+        else:
+            self.fail(
+                "WriteBackFull did not quiesce within 1024 microsteps"
+            )
+
+        endpoint_events = tuple(
+            event
+            for event in events
+            if event.kind is ChiCoherenceNetworkEventKind.ENDPOINT_ACCEPT
+        )
+        self.assertEqual(3, len(endpoint_events))
+        by_message_type = {
+            type(event.packet.message): event
+            for event in endpoint_events
+            if event.packet is not None
+        }
+        self.assertEqual(
+            {
+                ChiWriteBackFullMessage,
+                ChiCompDBIDRespMessage,
+                ChiCopyBackWrDataMessage,
+            },
+            set(by_message_type),
+        )
+        request_event = by_message_type[ChiWriteBackFullMessage]
+        response_event = by_message_type[ChiCompDBIDRespMessage]
+        data_event = by_message_type[ChiCopyBackWrDataMessage]
+        assert request_event.packet is not None
+        assert response_event.packet is not None
+        assert data_event.packet is not None
+        self.assertIs(ChiChannelKind.REQ, request_event.packet.channel)
+        self.assertIs(ChiChannelKind.RSP, response_event.packet.channel)
+        self.assertIs(ChiChannelKind.DAT, data_event.packet.channel)
+        self.assertEqual(
+            request_event.lineage,
+            response_event.lineage[: len(request_event.lineage)],
+        )
+        self.assertEqual(
+            response_event.lineage,
+            data_event.lineage[: len(response_event.lineage)],
+        )
+        self.assertEqual("rn0.issue", request_event.lineage[0])
+        self.assertEqual("hn0.accept", request_event.lineage[-1])
+        self.assertEqual("rn0.accept", response_event.lineage[-1])
+        self.assertEqual("hn0.accept", data_event.lineage[-1])
+        route_segments = (
+            (
+                request_event.lineage,
+                ("rn0_to_xp@", "xp_to_hn0@"),
+            ),
+            (
+                response_event.lineage[len(request_event.lineage) :],
+                ("hn0_to_xp@", "xp_to_rn0@"),
+            ),
+            (
+                data_event.lineage[len(response_event.lineage) :],
+                ("rn0_to_xp@", "xp_to_hn0@"),
+            ),
+        )
+        for lineage, connection_prefixes in route_segments:
+            for prefix in connection_prefixes:
+                with self.subTest(route_prefix=prefix):
+                    self.assertTrue(
+                        any(
+                            item.startswith(prefix)
+                            for item in lineage
+                        ),
+                        (prefix, lineage),
+                    )
+
+        response = response_event.packet.message
+        copyback = data_event.packet.message
+        assert isinstance(response, ChiCompDBIDRespMessage)
+        assert isinstance(copyback, ChiCopyBackWrDataMessage)
+        self.assertEqual(0x15, response.transaction_id)
+        self.assertEqual(
+            response.data_buffer_id,
+            copyback.transaction_id,
+        )
+        self.assertEqual(self.DIRTY_DATA, copyback.data)
+
+        home_state = state.coherence.home
+        rn_state = state.coherence.request_nodes[self.REQUESTER]
+        entry = home_state.directory[self.ADDRESS]
+        self.assertEqual(self.DIRTY_DATA, entry.data)
+        self.assertIsNone(entry.unique_owner)
+        self.assertFalse(entry.sharers)
+        self.assertFalse(home_state.pending_writebacks)
+        self.assertEqual(
+            (response.data_buffer_id + 1) % (1 << 12),
+            home_state.next_data_buffer_id,
+        )
+        self.assertFalse(rn_state.pending_writebacks)
+        self.assertIs(
+            ChiCacheState.I,
+            rn_state.permissions[self.ADDRESS],
+        )
+        self.assertNotIn(self.ADDRESS, rn_state.cache.lines)
+        self.assertTrue(session.is_quiescent(state))
 
     def test_mesi_dirty_owner_downgrades_to_two_clean_sharers(self) -> None:
         resolved = self.build_resolved(mesi=True)

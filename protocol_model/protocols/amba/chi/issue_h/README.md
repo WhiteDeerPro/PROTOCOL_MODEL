@@ -71,19 +71,19 @@ REQ {
 packed REQFLIT bits / observed pins
 ```
 
-logical record 保存规范字段名、逻辑类型、宽度和每个 opcode 的精确字段集合，但不分配 bit offset。布尔字段
-保持 `bool`，integer/enum 字段规范化为非负整数；缺字段、额外字段、错误常量和 profile-invalid 组合都会在
-decode 边界得到可解释诊断。相同 opcode 数值必须与 channel 联合判别，例如 REQ、RSP 和 SNP 的 `0x07`
-分别选择不同 message form。
+logical record 保存当前受限 typed profile 的规范字段名、逻辑类型、宽度和每个已登记 opcode form 的精确
+字段集合，但不分配 bit offset，也不声称覆盖完整 Issue H conditional-field catalog。布尔字段保持 `bool`，
+integer/enum 字段规范化为非负整数；缺字段、额外字段、错误常量和 profile-invalid 组合都会在 decode
+边界得到可解释诊断。相同 opcode 数值必须与 channel 联合判别，例如 REQ、RSP 和 SNP 的 `0x07` 分别选择
+不同 message form。
 
-当前 codec 覆盖 read、snoop、completion、Retry/P-Credit 所使用的 REQ/RSP/SNP/DAT form，因此 clean
-ReadUnique、dirty unique responsibility transfer，以及
+当前 codec 覆盖已实现的 17 个 protocol-message form，包括 read、snoop、completion、Retry/P-Credit 与
+writeback 使用的 REQ/RSP/SNP/DAT form。因此 clean ReadUnique、dirty unique responsibility transfer、
+`WriteBackFull→CompDBIDResp→CopyBackWrData`，以及
 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`
-都可以完整 round-trip。`WriteBackFull`、`CompDBIDResp` 和 `CopyBackWrData` 已有 typed
-message/profile 与 executable lifecycle，但尚未登记到 logical-field codec。`SrcID/TgtID`、packet
-index/count 仍归 `ChiNetworkPacket`；`LCrdReturn` 属于 hop-local maintenance flit，也不进入 message
-codec。SNP `Addr` 继续使用 normalized full byte address，packed SNPFLIT 省略低位的处理留给未来 bit
-codec。
+都可以完整 round-trip。`SrcID/TgtID`、packet index/count 仍归 `ChiNetworkPacket`；四个 channel 的
+`LCrdReturn` 属于 hop-local maintenance flit，也不进入 message codec。SNP `Addr` 继续使用 normalized
+full byte address，packed SNPFLIT 省略低位的处理留给未来 bit codec。
 
 codec 复用 channel profile 作为合法性权威。本轮同时补齐了 coherent Read 的 Issue H 属性限制：
 `Size=6`、`SnpAttr=1`、`MemAttr∈{0101,1101}`、`Order=0` 和 `ExpCompAck=1`；`ReadUnique` 还要求
@@ -116,7 +116,7 @@ snoop filter、MOESI shared-dirty 和 forwarding response 仍未实现。
 | 输入/事实 | 主要判定者 | 当前检查 |
 |---|---|---|
 | typed REQ/RSP/SNP/DAT message | `representation` value 与 profile | 固定字段类型/宽度、address/data 范围、保留编码和本 opcode 的局部条件 |
-| named logical-field record | `ChiIssueHLogicalFieldCodec` | channel+opcode form、精确字段集合、常量、逻辑类型、profile width 与 typed message round-trip |
+| named logical-field record | `ChiIssueHLogicalFieldCodec` | channel+opcode form、当前 typed profile 的精确字段集合、常量、逻辑类型、profile width 与 typed message round-trip |
 | `ChiNetworkPacket` | network envelope | channel 与 message 种类、可路由 source/target identity、packet index/count |
 | `ChiProtocolFlit` 或 channel-local `LCrdReturn` | transport envelope | protocol flit 必须携带 packet；link-maintenance flit 必须留在当前 hop |
 | 一帧 normalized channel observation | `ChiTransportLinkSession` | clock/tick、activation 顺序、FLITV/typed flit、frame-start L-Credit、Resource Plane、credit capacity 与 deactivation return |
@@ -332,7 +332,9 @@ clean `ReadUnique` 经 XP 的七 packet witness，也已闭合 dirty owner 经 X
 `SnpRespData_I_PD`、再以 `CompData_UD_PD` 转移责任的五 packet witness。第三条五 packet witness
 执行 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`，
 并检查 Home
-在 CompAck 后提交 backing/directory、两个 `SC` holder 与清空后的 `unique_owner`。详细原子边界与阶段限制见
+在 CompAck 后提交 backing/directory、两个 `SC` holder 与清空后的 `unique_owner`。显式 dirty
+writeback 也已有经 XP 的三 packet witness，闭合 REQ、反向 RSP、CopyBack DAT 的 route lineage，并检查
+Home backing/DBID 与 RN `UD→I` 的提交结果。详细原子边界与阶段限制见
 [CHI coherence network session](../../../../../docs/architecture/chi-coherence-network-session.md)。
 
 ## 场景与功能边界

@@ -307,8 +307,9 @@ dirty data/responsibility→CompData_SC→CompAck→Home backing/directory commi
 路径。当前 Home 固定选择吸收 PassDirty 并返回 `CompData_SC`，这是规范允许结果的受限子集。普通
 clean `ReadShared` 与任一允许 `UD` 的 feature 组合仍在本 profile 之外。
 `SC→ReadUnique→UC→local write→UD` 已实现；
-coherence domain 自动成员派生、真实 snoop filter、router multicast、`CleanUnique`/`MakeUnique`、
-dirty eviction/writeback、same-line transient/hazard 和 MOESI `SD`/Owned 仍属于后续
+显式 `UD` writeback 已经经 resolved XP topology 闭合；真实 snoop filter、router multicast、
+`CleanUnique`/`MakeUnique`、自动 dirty victim/eviction scheduling、same-line transient/hazard 和
+MOESI `SD`/Owned 仍属于后续
 participant/system 能力。
 
 这里仍按三种投影保存权威：message/opcode/field 与 transaction-local correlation 属于 typed
@@ -343,8 +344,8 @@ transport projection；其余 property 仍未闭合：
   closure 和受限 family scheduler。clean `ReadShared/ReadUnique` 已进入 participant lifecycle，并由
   topology-driven composition scheduler 自动推进 REQ/SNP/RSP/DAT/CompAck；dirty unique transfer 与
   no-SD `ReadNotSharedDirty` 也已闭合，其中后者以 CompAck 后的 Home backing/directory commit 结束
-  dirty responsibility。通用 participant plan、address→home/coherence authority、
-  `CleanUnique`/`MakeUnique`、dirty eviction/writeback、
+  dirty responsibility；显式 `UD` writeback 也已闭合经 XP 的 REQ/RSP/DAT route 与提交结果。
+  通用 participant plan、multi-Home/SAM authority、`CleanUnique`/`MakeUnique`、自动 dirty victim/eviction scheduling、
   same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；

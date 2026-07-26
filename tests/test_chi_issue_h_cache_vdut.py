@@ -4,7 +4,11 @@ import unittest
 
 from protocol_model.integrations.recipes import (
     attach_chi_issue_h_coherence,
+    bind_chi_issue_h_cache_vdut,
     build_chi_issue_h_cache_vdut,
+)
+from protocol_model.integrations.recipes.amba.chi import (
+    bind_chi_issue_h_cache_lines,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiCacheLine,
@@ -18,11 +22,17 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiReadSharedMessage,
     ChiSnpSharedMessage,
 )
+from protocol_model.protocols.amba.chi.issue_h.transport import (
+    CHI_ISSUE_H_TRANSPORT_FAMILY,
+)
+from protocol_model.system import SystemProtocolBuilder
 from protocol_model.virtual_dut import (
     CacheCore,
     CacheLinePayload,
     CacheLineStore,
     TransportDirection,
+    TransportPort,
+    VirtualDut,
 )
 
 
@@ -128,6 +138,99 @@ class ChiIssueHCacheVdutRecipeTest(unittest.TestCase):
         state = assembly.participant.initial_state()
         self.assertEqual(0x1234, state.cache.lines[0x8000].data)
         self.assertIs(ChiCacheState.SC, state.permissions[0x8000])
+
+    def test_binder_reuses_one_canonical_virtual_dut_boundary(self) -> None:
+        tx = TransportPort(
+            "tx_req_rsp",
+            CHI_ISSUE_H_TRANSPORT_FAMILY,
+            TransportDirection.TRANSMIT,
+        )
+        rx = TransportPort(
+            "rx_dat",
+            CHI_ISSUE_H_TRANSPORT_FAMILY,
+            TransportDirection.RECEIVE,
+        )
+        dut = VirtualDut("rn0", {tx.name: tx, rx.name: rx})
+        store = CacheLineStore(
+            "rn0.lines",
+            line_bytes=64,
+            initial_lines=(CacheLinePayload(0x8000, 0x1234),),
+        )
+        core = CacheCore("rn0.cache", store)
+        assembly = bind_chi_issue_h_cache_vdut(
+            dut,
+            core,
+            0x10,
+            0x20,
+            port_channels={
+                "tx_req_rsp": frozenset(
+                    (ChiChannelKind.REQ, ChiChannelKind.RSP)
+                ),
+                "rx_dat": frozenset((ChiChannelKind.DAT,)),
+            },
+            initial_permissions={0x8000: ChiCacheState.SC},
+            participant_name="requester",
+            binding_name="rn0",
+        )
+        system = SystemProtocolBuilder("canonical_cache").add_dut(
+            dut
+        ).build()
+
+        self.assertIs(dut, assembly.virtual_dut)
+        self.assertIs(dut, assembly.facets.dut)
+        self.assertIs(dut, assembly.binding.dut)
+        self.assertIs(dut, system.virtual_duts["rn0"])
+        self.assertIs(core, assembly.cache_core)
+        self.assertIs(core, assembly.participant.cache_core)
+        self.assertIs(tx, assembly.binding.ports[0].port)
+        self.assertIs(rx, assembly.binding.ports[1].port)
+        self.assertEqual("requester", assembly.participant.name)
+        self.assertEqual("rn0", assembly.binding.name)
+
+    def test_binder_rejects_non_rn_channel_directions(self) -> None:
+        tx = TransportPort(
+            "tx",
+            CHI_ISSUE_H_TRANSPORT_FAMILY,
+            TransportDirection.TRANSMIT,
+        )
+        rx = TransportPort(
+            "rx",
+            CHI_ISSUE_H_TRANSPORT_FAMILY,
+            TransportDirection.RECEIVE,
+        )
+        dut = VirtualDut("rn0", {tx.name: tx, rx.name: rx})
+
+        with self.subTest("REQ is not received by an RN"):
+            with self.assertRaisesRegex(ValueError, "cannot receive REQ"):
+                bind_chi_issue_h_cache_lines(
+                    dut,
+                    0x10,
+                    0x20,
+                    port_channels={
+                        "rx": frozenset((ChiChannelKind.REQ,))
+                    },
+                )
+        with self.subTest("SNP is not transmitted by an RN"):
+            with self.assertRaisesRegex(ValueError, "cannot transmit SNP"):
+                bind_chi_issue_h_cache_lines(
+                    dut,
+                    0x10,
+                    0x20,
+                    port_channels={
+                        "tx": frozenset((ChiChannelKind.SNP,))
+                    },
+                )
+
+    def test_line_convenience_requires_an_existing_virtual_dut(self) -> None:
+        with self.assertRaisesRegex(TypeError, "existing VirtualDut"):
+            bind_chi_issue_h_cache_lines(  # type: ignore[arg-type]
+                object(),
+                0x10,
+                0x20,
+                port_channels={
+                    "tx": frozenset((ChiChannelKind.REQ,))
+                },
+            )
 
     def test_first_transient_policy_reserves_one_local_line(self) -> None:
         assembly = build_chi_issue_h_cache_vdut("l1d0", 0x10, 0x20)

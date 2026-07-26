@@ -3,6 +3,7 @@
 from .chi import (
     ChiIssueHCacheVdutAssembly,
     attach_chi_issue_h_coherence,
+    bind_chi_issue_h_cache_vdut,
     build_chi_issue_h_cache_vdut,
 )
 from .endpoints import (
@@ -48,6 +49,7 @@ __all__ = [
     "Axi4WriteRouteTableProfile",
     "ChiIssueHCacheVdutAssembly",
     "attach_chi_issue_h_coherence",
+    "bind_chi_issue_h_cache_vdut",
     "build_amba_queued_address_responder_vdut",
     "build_amba_sensor_fifo_vdut",
     "build_amba_serialized_memory_copy_vdut",

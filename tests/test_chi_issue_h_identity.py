@@ -179,6 +179,47 @@ class ChiIssueHIdentityClosureTest(unittest.TestCase):
         with self.assertRaises(TypeError):
             plan.owner_by_node_id[0x08] = plan.owner_by_node_id[0x07]
 
+    def test_same_named_clone_is_not_the_canonical_topology_dut(self) -> None:
+        clone = VirtualDut(
+            self.dut.name,
+            {
+                "tx": self._port("tx", TransportDirection.TRANSMIT),
+                "rx": self._port("rx", TransportDirection.RECEIVE),
+            },
+        )
+        binding = ChiParticipantBinding(
+            "transactions",
+            clone,
+            self.transaction_component,
+            (
+                ChiParticipantPortBinding(
+                    clone.port("tx"),
+                    frozenset((ChiChannelKind.REQ,)),
+                ),
+                ChiParticipantPortBinding(
+                    clone.port("rx"),
+                    frozenset((ChiChannelKind.REQ,)),
+                ),
+            ),
+            frozenset((0x07,)),
+        )
+
+        plan = resolve_chi_node_identities(
+            self.system,
+            (
+                ChiBehaviorFacet.from_binding(
+                    binding,
+                    ChiFacetKind.TRANSACTION,
+                ),
+            ),
+        )
+
+        self.assertEqual(
+            tuple(issue.code for issue in plan.errors),
+            (ChiIdentityIssueCode.NONCANONICAL_DUT,),
+        )
+        self.assertNotIn(0x07, plan.owner_by_node_id)
+
     def test_transaction_identity_gap_is_structured(self) -> None:
         transaction = self._facet(
             "transactions", ChiFacetKind.TRANSACTION, frozenset()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from protocol_model.integrations.recipes.amba.chi import (
-    build_chi_cache_participant_fixture,
+    bind_chi_issue_h_cache_lines,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
@@ -258,16 +258,28 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
         system = builder.build().elaborate()
         duts = system.spec.virtual_duts
 
-        requester = build_chi_cache_participant_fixture(
-            "requester",
+        requester_assembly = bind_chi_issue_h_cache_lines(
+            duts["rn0"],
             self.REQUESTER,
             self.HOME,
+            port_channels={
+                "tx_req_ack": frozenset(
+                    (ChiChannelKind.REQ, ChiChannelKind.RSP)
+                ),
+                "rx_dat": frozenset((ChiChannelKind.DAT,)),
+            },
+            participant_name="requester",
+            binding_name="rn0",
         )
-        peers = {
-            "rn1": build_chi_cache_participant_fixture(
-                "peer1",
+        peer_assemblies = {
+            "rn1": bind_chi_issue_h_cache_lines(
+                duts["rn1"],
                 self.FIRST_PEER,
                 self.HOME,
+                port_channels={
+                    "rx_snp": frozenset((ChiChannelKind.SNP,)),
+                    "tx_rsp": frozenset((ChiChannelKind.RSP,)),
+                },
                 initial_lines=(
                     ChiCacheLine(
                         self.ADDRESS,
@@ -275,11 +287,17 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
                         self.DATA,
                     ),
                 ),
+                participant_name="peer1",
+                binding_name="rn1",
             ),
-            "rn2": build_chi_cache_participant_fixture(
-                "peer2",
+            "rn2": bind_chi_issue_h_cache_lines(
+                duts["rn2"],
                 self.SECOND_PEER,
                 self.HOME,
+                port_channels={
+                    "rx_snp": frozenset((ChiChannelKind.SNP,)),
+                    "tx_rsp": frozenset((ChiChannelKind.RSP,)),
+                },
                 initial_lines=(
                     ChiCacheLine(
                         self.ADDRESS,
@@ -287,7 +305,14 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
                         self.DATA,
                     ),
                 ),
+                participant_name="peer2",
+                binding_name="rn2",
             ),
+        }
+        requester = requester_assembly.participant
+        peers = {
+            name: assembly.participant
+            for name, assembly in peer_assemblies.items()
         }
         home = ChiCoherentHomeNode(
             "home",
@@ -311,29 +336,17 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
             ),
         )
         item = ChiParticipantPortBinding
+        requester_binding = requester_assembly.binding
+        if compound_requester:
+            requester_binding = ChiParticipantBinding(
+                requester_binding.name,
+                requester_binding.dut,
+                requester_binding.component,
+                requester_binding.ports,
+                frozenset((self.REQUESTER, 0x0A)),
+            )
         bindings = {
-            "rn0": ChiParticipantBinding(
-                "rn0",
-                duts["rn0"],
-                requester,
-                (
-                    item(
-                        duts["rn0"].port("tx_req_ack"),
-                        frozenset(
-                            (ChiChannelKind.REQ, ChiChannelKind.RSP)
-                        ),
-                    ),
-                    item(
-                        duts["rn0"].port("rx_dat"),
-                        frozenset((ChiChannelKind.DAT,)),
-                    ),
-                ),
-                frozenset(
-                    (self.REQUESTER, 0x0A)
-                    if compound_requester
-                    else (self.REQUESTER,)
-                ),
-            ),
+            "rn0": requester_binding,
             "hn0": ChiParticipantBinding(
                 "hn0",
                 duts["hn0"],
@@ -369,29 +382,12 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
                 frozenset((self.HOME,)),
             ),
         }
-        for index, (name, node) in enumerate(peers.items(), start=1):
-            bindings[name] = ChiParticipantBinding(
-                name,
-                duts[name],
-                node,
-                (
-                    item(
-                        duts[name].port("rx_snp"),
-                        frozenset((ChiChannelKind.SNP,)),
-                    ),
-                    item(
-                        duts[name].port("tx_rsp"),
-                        frozenset((ChiChannelKind.RSP,)),
-                    ),
-                ),
-                frozenset(
-                    (
-                        self.FIRST_PEER
-                        if index == 1
-                        else self.SECOND_PEER,
-                    )
-                ),
-            )
+        bindings.update(
+            {
+                name: assembly.binding
+                for name, assembly in peer_assemblies.items()
+            }
+        )
 
         contract = ChiFeatureContract(
             (
@@ -426,12 +422,23 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
         )
         resolved = resolve_chi_system(
             system,
-            facets=tuple(
+            facets=(
+                (
+                    ChiBehaviorFacet.from_binding(
+                        requester_binding,
+                        ChiFacetKind.TRANSACTION,
+                    )
+                    if compound_requester
+                    else requester_assembly.facets.facets[0]
+                ),
                 ChiBehaviorFacet.from_binding(
-                    binding,
+                    bindings["hn0"],
                     ChiFacetKind.TRANSACTION,
-                )
-                for binding in bindings.values()
+                ),
+                *(
+                    assembly.facets.facets[0]
+                    for assembly in peer_assemblies.values()
+                ),
             ),
             feature_contract=contract,
             authority_contract=ChiCoherenceAuthorityContract(

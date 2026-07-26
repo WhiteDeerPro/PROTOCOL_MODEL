@@ -15,7 +15,7 @@ from collections import Counter
 from dataclasses import dataclass
 
 from protocol_model.integrations.recipes.amba.chi import (
-    build_chi_cache_participant_fixture,
+    bind_chi_issue_h_cache_lines,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
@@ -482,15 +482,25 @@ def build_clean_mesh() -> CleanMeshAssembly:
     elaborated = system.elaborate()
     resolved_duts = elaborated.spec.virtual_duts
 
-    requester = build_chi_cache_participant_fixture(
-        "rn0",
+    requester = bind_chi_issue_h_cache_lines(
+        resolved_duts["rn0"],
         REQUESTER_NODE_ID,
         HOME_NODE_ID,
+        port_channels={
+            "tx_req_rsp": REQ_RSP,
+            "rx_dat": DAT,
+        },
+        participant_name="rn0",
+        binding_name="rn0",
     )
-    first_snoopee = build_chi_cache_participant_fixture(
-        "rn1",
+    first_snoopee = bind_chi_issue_h_cache_lines(
+        resolved_duts["rn1"],
         FIRST_SNOOPEE_NODE_ID,
         HOME_NODE_ID,
+        port_channels={
+            "rx_snp": SNP,
+            "tx_rsp": RSP,
+        },
         initial_lines=(
             ChiCacheLine(
                 LINE_ADDRESS,
@@ -498,11 +508,17 @@ def build_clean_mesh() -> CleanMeshAssembly:
                 LINE_DATA,
             ),
         ),
+        participant_name="rn1",
+        binding_name="rn1",
     )
-    second_snoopee = build_chi_cache_participant_fixture(
-        "rn2",
+    second_snoopee = bind_chi_issue_h_cache_lines(
+        resolved_duts["rn2"],
         SECOND_SNOOPEE_NODE_ID,
         HOME_NODE_ID,
+        port_channels={
+            "rx_snp": SNP,
+            "tx_rsp": RSP,
+        },
         initial_lines=(
             ChiCacheLine(
                 LINE_ADDRESS,
@@ -510,6 +526,8 @@ def build_clean_mesh() -> CleanMeshAssembly:
                 LINE_DATA,
             ),
         ),
+        participant_name="rn2",
+        binding_name="rn2",
     )
     home = ChiCoherentHomeNode(
         "hn0",
@@ -528,36 +546,9 @@ def build_clean_mesh() -> CleanMeshAssembly:
     )
 
     bindings = {
-        "rn0": _participant_binding(
-            "rn0",
-            resolved_duts["rn0"],
-            requester,
-            (
-                ("tx_req_rsp", REQ_RSP),
-                ("rx_dat", DAT),
-            ),
-            REQUESTER_NODE_ID,
-        ),
-        "rn1": _participant_binding(
-            "rn1",
-            resolved_duts["rn1"],
-            first_snoopee,
-            (
-                ("rx_snp", SNP),
-                ("tx_rsp", RSP),
-            ),
-            FIRST_SNOOPEE_NODE_ID,
-        ),
-        "rn2": _participant_binding(
-            "rn2",
-            resolved_duts["rn2"],
-            second_snoopee,
-            (
-                ("rx_snp", SNP),
-                ("tx_rsp", RSP),
-            ),
-            SECOND_SNOOPEE_NODE_ID,
-        ),
+        "rn0": requester.binding,
+        "rn1": first_snoopee.binding,
+        "rn2": second_snoopee.binding,
         "hn0": _participant_binding(
             "hn0",
             resolved_duts["hn0"],
@@ -608,12 +599,12 @@ def build_clean_mesh() -> CleanMeshAssembly:
     resolved = resolve_chi_system(
         elaborated,
         facets=(
-            *(
-                ChiBehaviorFacet.from_binding(
-                    bindings[name],
-                    ChiFacetKind.TRANSACTION,
-                )
-                for name in ("rn0", "rn1", "rn2", "hn0")
+            *requester.facets.facets,
+            *first_snoopee.facets.facets,
+            *second_snoopee.facets.facets,
+            ChiBehaviorFacet.from_binding(
+                bindings["hn0"],
+                ChiFacetKind.TRANSACTION,
             ),
             *(
                 ChiBehaviorFacet.from_binding(

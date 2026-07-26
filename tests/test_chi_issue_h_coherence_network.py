@@ -52,9 +52,12 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE,
     CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE,
     ChiAdvanceCoherenceNetwork,
+    ChiCoherenceAuthorityContract,
+    ChiCoherenceDomain,
     ChiCoherenceNetworkSession,
     ChiCoherenceNetworkState,
     ChiFeatureContract,
+    ChiHomeAuthority,
     ChiSubmitCoherentRead,
     ChiWriteUniqueCacheLine,
     resolve_chi_system,
@@ -67,7 +70,12 @@ from protocol_model.protocols.amba.chi.issue_h.transport import (
     ChiSnpChannelProfile,
     ChiTransportLinkProfile,
 )
-from protocol_model.system import SystemProtocolBuilder, VirtualDutPortRef
+from protocol_model.system import (
+    AddressClaim,
+    AddressWindow,
+    SystemProtocolBuilder,
+    VirtualDutPortRef,
+)
 from protocol_model.virtual_dut.boundary import (
     DutBehaviorTag,
     TransportDirection,
@@ -329,6 +337,14 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                 ),
             )
 
+        home_address_claim = "hn0.cache_line"
+        builder.add_address_claim(
+            AddressClaim(
+                home_address_claim,
+                VirtualDutPortRef("hn0", "rx_req_rsp"),
+                AddressWindow(self.ADDRESS, 0x40),
+            )
+        )
         system = builder.build().elaborate()
         duts = system.spec.virtual_duts
         requester = build_chi_cache_participant_fixture(
@@ -588,7 +604,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         )
 
         contract = ChiFeatureContract(
-            {"requester": "rn0", "home": "hn0"},
+            {"requester": "rn0"},
             frozenset(
                 CHI_MESI_NO_SD_REQUIRED_FEATURES
                 if mesi
@@ -600,7 +616,6 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                     ),
                 )
             ),
-            role_sets={"snoopee": frozenset(("rn1", "rn2"))},
         )
         capabilities = (
             ChiParticipantCapability(
@@ -688,6 +703,22 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                 ),
             ),
             feature_contract=contract,
+            authority_contract=ChiCoherenceAuthorityContract(
+                authorities=(
+                    ChiHomeAuthority(
+                        home_address_claim,
+                        "hn0",
+                        "coherent_agents",
+                    ),
+                ),
+                domains=(
+                    ChiCoherenceDomain(
+                        "coherent_agents",
+                        frozenset(("rn0", "rn1", "rn2")),
+                    ),
+                ),
+            ),
+            feature_address_claim=home_address_claim,
             participant_capabilities=capabilities,
             system_capabilities=frozenset(
                 (

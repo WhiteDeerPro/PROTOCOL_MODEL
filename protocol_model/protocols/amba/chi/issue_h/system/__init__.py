@@ -1,5 +1,14 @@
 """System/runtime views for executable CHI Issue H networks."""
 
+from .authority import (
+    ChiCoherenceAuthorityContract,
+    ChiCoherenceDomain,
+    ChiHomeAuthority,
+    ChiResolvedCoherenceAuthorityPlan,
+    ChiResolvedCoherenceDomain,
+    ChiResolvedHomeAuthority,
+    resolve_chi_coherence_authority,
+)
 from .capability import (
     CHI_BASE_PATH_CAPABILITIES,
     CHI_BUILTIN_FEATURE_CATALOG,
@@ -135,6 +144,8 @@ __all__ = [
     "ChiCapabilityClosureError",
     "ChiCapabilityGap",
     "ChiCapabilityGapKind",
+    "ChiCoherenceAuthorityContract",
+    "ChiCoherenceDomain",
     "ChiFeatureCatalog",
     "ChiFeatureContract",
     "ChiFeatureDefinition",
@@ -151,7 +162,11 @@ __all__ = [
     "ChiIdentityResolutionError",
     "ChiRoleCardinality",
     "ChiRoleRequirement",
+    "ChiHomeAuthority",
+    "ChiResolvedCoherenceAuthorityPlan",
+    "ChiResolvedCoherenceDomain",
     "ChiResolvedIdentityPlan",
+    "ChiResolvedHomeAuthority",
     "ChiResolvedNodeIdentity",
     "ResolvedChiCapabilities",
     "ResolvedChiSystem",
@@ -194,6 +209,7 @@ __all__ = [
     "bind_chi_flow_requirement",
     "project_chi_flow_capabilities",
     "resolve_chi_capabilities",
+    "resolve_chi_coherence_authority",
     "resolve_chi_node_identities",
     "resolve_projected_chi_capabilities",
     "resolve_chi_system",

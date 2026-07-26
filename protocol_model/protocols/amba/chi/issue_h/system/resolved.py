@@ -1,4 +1,4 @@
-"""One construction-time closure joining CHI facets, identity, and flows.
+"""One construction-time closure joining CHI system authority and flows.
 
 Generic SystemProtocol elaboration proves weak module/port/connection
 structure.  This CHI-family construction adds the facts required before a CHI
@@ -6,6 +6,7 @@ transaction runtime can be trusted:
 
 * transaction and forwarding facets are bound to canonical VirtualDuts;
 * NodeID ownership is unambiguous;
+* one explicit address-claim scope selects its Home and coherence domain;
 * every required feature has participant behavior offers;
 * every required channel flow is executable through the constructed router
   and transport runtime.
@@ -37,12 +38,19 @@ from .capability import (
     ChiCapabilityKey,
     ChiFeatureCatalog,
     ChiFeatureContract,
+    ChiFeatureKey,
     ResolvedChiCapabilities,
     resolve_chi_capabilities,
 )
 from .capability_projection import (
     ChiFlowProjection,
     project_chi_flow_capabilities,
+)
+from .authority import (
+    ChiCoherenceAuthorityContract,
+    ChiResolvedCoherenceAuthorityPlan,
+    ChiResolvedHomeAuthority,
+    resolve_chi_coherence_authority,
 )
 from .identity import (
     ChiResolvedIdentityPlan,
@@ -59,6 +67,8 @@ class ResolvedChiSystem:
     facets: tuple[ChiBehaviorFacet, ...]
     feature_contract: ChiFeatureContract
     identities: ChiResolvedIdentityPlan
+    authority_plan: ChiResolvedCoherenceAuthorityPlan
+    feature_address_claim: str
     flow_projection: ChiFlowProjection
     capabilities: ResolvedChiCapabilities
     network: ChiTransportNetworkSession
@@ -75,6 +85,30 @@ class ResolvedChiSystem:
             raise TypeError("resolved CHI system requires a feature contract")
         if not isinstance(self.identities, ChiResolvedIdentityPlan):
             raise TypeError("resolved CHI system requires an identity plan")
+        if not isinstance(
+            self.authority_plan, ChiResolvedCoherenceAuthorityPlan
+        ):
+            raise TypeError(
+                "resolved CHI system requires a coherence authority plan"
+            )
+        if self.authority_plan.system is not self.system:
+            raise ValueError(
+                "resolved CHI authority must describe the same system"
+            )
+        if (
+            not isinstance(self.feature_address_claim, str)
+            or not self.feature_address_claim
+        ):
+            raise ValueError(
+                "resolved CHI system requires a feature address claim"
+            )
+        authority = self.authority_plan.authority_for_claim(
+            self.feature_address_claim
+        )
+        if self.feature_contract.role_members("home") != (authority.home,):
+            raise ValueError(
+                "resolved CHI Home role must come from its address authority"
+            )
         if not isinstance(self.flow_projection, ChiFlowProjection):
             raise TypeError("resolved CHI system requires a flow projection")
         if not isinstance(self.capabilities, ResolvedChiCapabilities):
@@ -113,6 +147,14 @@ class ResolvedChiSystem:
         object.__setattr__(self, "forwarding_bindings", forwarding)
 
     @property
+    def feature_authority(self) -> ChiResolvedHomeAuthority:
+        """Return the Home/domain authority selected for this feature scope."""
+
+        return self.authority_plan.authority_for_claim(
+            self.feature_address_claim
+        )
+
+    @property
     def is_closed(self) -> bool:
         return (
             self.identities.is_closed
@@ -123,8 +165,11 @@ class ResolvedChiSystem:
         )
 
     def require_closed(self) -> "ResolvedChiSystem":
-        """Require identity and the feature contract before opening a session."""
+        """Require authority, identity, and features before opening a session."""
 
+        self.authority_plan.authority_for_claim(
+            self.feature_address_claim
+        )
         self.identities.require_closed()
         self.capabilities.require_contract()
         return self
@@ -171,6 +216,8 @@ def resolve_chi_system(
     *,
     facets: tuple[ChiBehaviorFacet, ...],
     feature_contract: ChiFeatureContract,
+    authority_contract: ChiCoherenceAuthorityContract,
+    feature_address_claim: str,
     participant_capabilities: tuple[ChiParticipantCapability, ...],
     transmitter_capacity_by_connection: Mapping[str, int] | None = None,
     system_capabilities: frozenset[ChiCapabilityKey] = frozenset(),
@@ -184,6 +231,19 @@ def resolve_chi_system(
     if not isinstance(feature_contract, ChiFeatureContract):
         raise TypeError(
             "CHI system resolution requires a feature contract"
+        )
+    if not isinstance(
+        authority_contract, ChiCoherenceAuthorityContract
+    ):
+        raise TypeError(
+            "CHI system resolution requires a coherence authority contract"
+        )
+    if (
+        not isinstance(feature_address_claim, str)
+        or not feature_address_claim
+    ):
+        raise ValueError(
+            "CHI system resolution requires a feature address claim"
         )
     if (
         CHI_FEATURE_CLEAN_READ_SHARED in feature_contract.required
@@ -233,6 +293,20 @@ def resolve_chi_system(
             f"{invalid_roles!r}"
         )
 
+    identities = resolve_chi_node_identities(system, facet_items)
+    authority_plan = resolve_chi_coherence_authority(
+        system,
+        facet_items,
+        identities,
+        authority_contract,
+    )
+    effective_contract = _bind_feature_authority(
+        feature_contract,
+        authority_plan,
+        feature_address_claim,
+        catalog,
+    )
+
     forwarding = tuple(
         item.binding
         for item in facet_items
@@ -255,16 +329,15 @@ def resolve_chi_system(
             transmitter_capacity_by_connection
         ),
     )
-    identities = resolve_chi_node_identities(system, facet_items)
     projection = project_chi_flow_capabilities(
         network,
-        feature_contract,
+        effective_contract,
         bindings=tuple(bindings.values()),
         catalog=catalog,
         target_node_id_by_participant=target_node_id_by_participant,
     )
     capabilities = resolve_chi_capabilities(
-        feature_contract,
+        effective_contract,
         participants=tuple(participant_capabilities),
         flows=projection.flows,
         system_capabilities=system_capabilities,
@@ -273,13 +346,98 @@ def resolve_chi_system(
     return ResolvedChiSystem(
         system,
         facet_items,
-        feature_contract,
+        effective_contract,
         identities,
+        authority_plan,
+        feature_address_claim,
         projection,
         capabilities,
         network,
         bindings,
         forwarding,
+    )
+
+
+def _bind_feature_authority(
+    feature_contract: ChiFeatureContract,
+    authority_plan: ChiResolvedCoherenceAuthorityPlan,
+    feature_address_claim: str,
+    catalog: ChiFeatureCatalog,
+) -> ChiFeatureContract:
+    """Derive Home and eligible Snoopee roles from one address scope.
+
+    The caller still chooses the initiating Requester and required features.
+    Home and Snoopee are system authority, so accepting them as parallel
+    caller-authored role facts would recreate the construction inversion this
+    resolver is intended to remove.
+    """
+
+    derived_roles = {"home", "snoopee"}
+    duplicated = derived_roles & (
+        set(feature_contract.roles) | set(feature_contract.role_sets)
+    )
+    if duplicated:
+        raise ValueError(
+            "CHI system feature intent must not bind authority-derived roles: "
+            f"{sorted(duplicated)!r}"
+        )
+    unknown_required = (
+        feature_contract.required - set(catalog.definitions)
+    )
+    if unknown_required:
+        raise ValueError(
+            "CHI feature contract requires unknown features: "
+            f"{sorted(str(item) for item in unknown_required)!r}"
+        )
+
+    required_roles: set[str] = set()
+    visited: set[ChiFeatureKey] = set()
+
+    def visit(feature: ChiFeatureKey) -> None:
+        if feature in visited:
+            return
+        visited.add(feature)
+        definition = catalog.definitions[feature]
+        required_roles.update(item.role for item in definition.roles)
+        for dependency in definition.dependencies:
+            visit(dependency)
+
+    for feature in feature_contract.required:
+        visit(feature)
+
+    authority = authority_plan.authority_for_claim(
+        feature_address_claim
+    )
+    roles = dict(feature_contract.roles)
+    role_sets = dict(feature_contract.role_sets)
+    roles["home"] = authority.home
+
+    if "snoopee" in required_roles:
+        requester_members = feature_contract.role_members("requester")
+        if (
+            requester_members is None
+            or len(requester_members) != 1
+            or feature_contract.role_is_set("requester")
+        ):
+            raise ValueError(
+                "coherence authority derivation requires one scalar requester"
+            )
+        if authority.coherence_domain is None:
+            raise ValueError(
+                f"CHI Home authority for claim {feature_address_claim!r} "
+                "does not select a coherence domain"
+            )
+        role_sets["snoopee"] = frozenset(
+            authority_plan.eligible_snoopees(
+                feature_address_claim,
+                requester_members[0],
+            )
+        )
+
+    return ChiFeatureContract(
+        roles,
+        feature_contract.required,
+        role_sets,
     )
 
 

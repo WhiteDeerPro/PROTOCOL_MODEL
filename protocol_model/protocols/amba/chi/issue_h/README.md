@@ -76,12 +76,14 @@ logical record 保存规范字段名、逻辑类型、宽度和每个 opcode 的
 decode 边界得到可解释诊断。相同 opcode 数值必须与 channel 联合判别，例如 REQ、RSP 和 SNP 的 `0x07`
 分别选择不同 message form。
 
-当前 codec 覆盖本切片已有的全部 REQ/RSP/SNP/DAT protocol message，因此 clean ReadUnique、dirty
-unique responsibility transfer，以及
+当前 codec 覆盖 read、snoop、completion、Retry/P-Credit 所使用的 REQ/RSP/SNP/DAT form，因此 clean
+ReadUnique、dirty unique responsibility transfer，以及
 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`
-都可以完整 round-trip。`SrcID/TgtID`、packet index/count 仍归 `ChiNetworkPacket`；`LCrdReturn`
-属于 hop-local maintenance flit，也不进入 message codec。SNP `Addr` 继续使用 normalized full byte
-address，packed SNPFLIT 省略低位的处理留给未来 bit codec。
+都可以完整 round-trip。`WriteBackFull`、`CompDBIDResp` 和 `CopyBackWrData` 已有 typed
+message/profile 与 executable lifecycle，但尚未登记到 logical-field codec。`SrcID/TgtID`、packet
+index/count 仍归 `ChiNetworkPacket`；`LCrdReturn` 属于 hop-local maintenance flit，也不进入 message
+codec。SNP `Addr` 继续使用 normalized full byte address，packed SNPFLIT 省略低位的处理留给未来 bit
+codec。
 
 codec 复用 channel profile 作为合法性权威。本轮同时补齐了 coherent Read 的 Issue H 属性限制：
 `Size=6`、`SnpAttr=1`、`MemAttr∈{0101,1101}`、`Order=0` 和 `ExpCompAck=1`；`ReadUnique` 还要求
@@ -309,15 +311,17 @@ ReadNotSharedDirty，dependency closure 再由前者带入 clean ReadUnique。�
 flow schema：
 Requester→Home REQ、Home→Snoopee SNP、Snoopee→Home RSP、Home→Requester DAT，以及
 Requester→Home CompAck RSP。dirty-data 路径再增加 Snoopee→Home DAT；RSP 与 DAT 回程不会因目标相同
-而合并成一条虚构 channel。两个 RSP 方向分别闭合。Requester 和 Home 是单成员 role；Snoopee 可以绑定为
-显式有限 `role_sets`。resolver 与 topology flow projector 复用同一展开规则，对集合中每个 peer 分别检查
-participant capability、Home→peer SNP 和 peer→Home RSP，诊断会保留具体端点。显式空集表示该 construction
-没有 peer Snoopee，和漏绑角色不同。
+而合并成一条虚构 channel。两个 RSP 方向分别闭合。独立 capability API 仍允许用 `role_sets` 检查任意
+有限集合；进入 `resolve_chi_system()` 后，feature intent 只手工选择 Requester。CHI authority contract
+引用通用 `AddressClaim`，为本次 feature scope 派生 scalar Home，并从 coherence domain 派生
+`Snoopee = members - requester`。resolver 拒绝另一份手填 Home/Snoopee role，随后 topology flow projector
+对每个派生成员分别检查 participant capability、Home→peer SNP 和 peer→Home RSP，诊断保留具体端点。
+只含 Requester 的 domain 会派生显式空 peer set；这与 authority 未绑定 domain 不同。
 
-这里的集合是构造期声明的 eligible peer domain，并非一笔事务已经选出的目标列表。运行时 Home 仍根据
-directory 从中选择实际 holder 并生成 per-target packet copy。`ChiCoherenceSession.from_resolved()`
-现在从同一份 closed construction 取得 scalar requester、Home 和 finite Snoopee set，建立恰好由
-`requester ∪ snoopees` 构成的 RN registry；它同时保留 requester-only issue、Snoopee-only SNP/RSP 和
+domain 是构造期声明的 eligible peer 集合，并非一笔事务已经选出的目标列表。运行时 Home 仍根据
+directory 从中选择实际 holder 并生成 per-target packet copy；session opening 会拒绝 directory holder
+越出 domain。`ChiCoherenceSession.from_resolved()` 从同一份 closed authority/feature construction 建立
+恰好由 `requester ∪ snoopees` 构成的 RN registry；它同时保留 requester-only issue、Snoopee-only SNP/RSP 和
 Shared/Unique/dirty-unique/dirty-writeback/MESI no-SD feature enablement。直接调用 packet-delivery API
 也会重复检查这些
 role authority，不能绕过构造期边界。当前窄 profile 要求每个绑定只提供其 component 的单一 NodeID；
@@ -340,7 +344,8 @@ network/router 执行分支。
 仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、`CleanUnique`/`MakeUnique`、clean
 `Evict`、自动 victim/writeback scheduling、writeback 与 Retry/error/Snoop 的并发组合、
 same-line transient/hazard、`SD`/Owned、forwarding snoop、真实 snoop filter、WriteNoSnp、
-multi-packet DAT、NodeID/address→Home authority，以及跨 hop wait-for/deadlock 分析。准确状态只在
+multi-packet DAT、同一 runtime 的 multi-Home/SAM 选择、跨 domain 执行，以及跨 hop wait-for/deadlock
+分析。准确状态只在
 [实现状态](../../../../../docs/architecture/implementation-status.md)维护，协议/网络/链路的分工见
 [通信建模的三张视图](../../../../../docs/architecture/communication-scope-and-transport.md)。
 

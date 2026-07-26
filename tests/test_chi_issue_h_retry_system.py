@@ -27,10 +27,12 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_REQUEST_RETRY,
     ChiAdvanceReadNetwork,
     ChiCancelRead,
+    ChiCoherenceAuthorityContract,
     ChiReadNoSnpRetrySystemSession,
     ChiReadNoSnpSystemEventKind,
     ChiSubmitRead,
     ChiFeatureContract,
+    ChiHomeAuthority,
     resolve_chi_system,
 )
 from protocol_model.protocols.amba.chi.issue_h.transport import (
@@ -40,7 +42,12 @@ from protocol_model.protocols.amba.chi.issue_h.transport import (
     ChiRspChannelProfile,
     ChiTransportLinkProfile,
 )
-from protocol_model.system import SystemProtocolBuilder, VirtualDutPortRef
+from protocol_model.system import (
+    AddressClaim,
+    AddressWindow,
+    SystemProtocolBuilder,
+    VirtualDutPortRef,
+)
 from protocol_model.virtual_dut.boundary import (
     TransportDirection,
     TransportPort,
@@ -49,6 +56,8 @@ from protocol_model.virtual_dut.boundary import (
 
 
 class ChiIssueHRetrySystemTest(unittest.TestCase):
+    HOME_ADDRESS_CLAIM = "home.cache_line"
+
     def setUp(self) -> None:
         self.profile = ChiReadNoSnpDirectProfile(0x07, 0x21, 128, 2)
         self.ledger = ChiReadNoSnpRetryLedger("rn.retry", self.profile)
@@ -136,6 +145,13 @@ class ChiIssueHRetrySystemTest(unittest.TestCase):
                 receiver,
                 profile=profile,
             )
+        builder.add_address_claim(
+            AddressClaim(
+                self.HOME_ADDRESS_CLAIM,
+                VirtualDutPortRef("home", "rx_req"),
+                AddressWindow(0x4000, 0x40),
+            )
+        )
         return builder.build()
 
     def _bindings(self):
@@ -188,10 +204,7 @@ class ChiIssueHRetrySystemTest(unittest.TestCase):
 
     def test_retry_flow_closes_without_manual_transport_actions(self) -> None:
         contract = ChiFeatureContract(
-            {
-                "requester": self.requester_binding.name,
-                "home": self.home_binding.name,
-            },
+            {"requester": self.requester_binding.name},
             frozenset((CHI_FEATURE_REQUEST_RETRY,)),
         )
         resolved = resolve_chi_system(
@@ -207,6 +220,15 @@ class ChiIssueHRetrySystemTest(unittest.TestCase):
                 ),
             ),
             feature_contract=contract,
+            authority_contract=ChiCoherenceAuthorityContract(
+                authorities=(
+                    ChiHomeAuthority(
+                        self.HOME_ADDRESS_CLAIM,
+                        self.home_binding.name,
+                    ),
+                ),
+            ),
+            feature_address_claim=self.HOME_ADDRESS_CLAIM,
             participant_capabilities=(
                 ChiParticipantCapability(
                     self.requester_binding.name,

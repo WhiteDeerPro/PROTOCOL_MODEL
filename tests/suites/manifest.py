@@ -26,6 +26,7 @@ CHI_MODULES = (
     "tests.test_chi_issue_h_address_home",
     "tests.test_chi_issue_h_cache_vdut",
     "tests.test_chi_issue_h_capability",
+    "tests.test_chi_issue_h_coherence_authority",
     "tests.test_chi_issue_h_coherence_network",
     "tests.test_chi_issue_h_coherence_representation",
     "tests.test_chi_issue_h_dat_transport",
@@ -138,6 +139,7 @@ SMOKE_MODULES = (
     "tests.test_axi4_interface",
     "tests.test_virtual_dut_translation",
     "tests.test_system_protocol",
+    "tests.test_chi_issue_h_coherence_authority",
     "tests.test_chi_issue_h_transport_connection",
     "tests.test_chi_issue_h_resolved_coherence",
     "tests.test_virtual_dut_recipe_catalog",
@@ -149,6 +151,7 @@ SMOKE_MODULES = (
 INTEGRATION_MODULES = (
     "tests.test_amba_bridge_chain",
     "tests.test_chi_issue_h_capability",
+    "tests.test_chi_issue_h_coherence_authority",
     "tests.test_chi_issue_h_coherence_network",
     "tests.test_chi_issue_h_identity",
     "tests.test_chi_issue_h_resolved_coherence",

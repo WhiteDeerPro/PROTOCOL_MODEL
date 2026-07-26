@@ -34,9 +34,12 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+    ChiCoherenceAuthorityContract,
+    ChiCoherenceDomain,
     ChiCoherenceSession,
     ChiDeliverCoherencePacket,
     ChiFeatureContract,
+    ChiHomeAuthority,
     ChiSubmitCoherentRead,
     resolve_chi_system,
 )
@@ -48,7 +51,12 @@ from protocol_model.protocols.amba.chi.issue_h.transport import (
     ChiSnpChannelProfile,
     ChiTransportLinkProfile,
 )
-from protocol_model.system import SystemProtocolBuilder, VirtualDutPortRef
+from protocol_model.system import (
+    AddressClaim,
+    AddressWindow,
+    SystemProtocolBuilder,
+    VirtualDutPortRef,
+)
 from protocol_model.virtual_dut.boundary import (
     TransportDirection,
     TransportPort,
@@ -119,7 +127,16 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
             activation_observation=f"{name}.active",
         )
 
-    def build_resolved(self, *, compound_requester: bool = False):
+    def build_resolved(
+        self,
+        *,
+        compound_requester: bool = False,
+        domain_members: frozenset[str] = frozenset(
+            ("rn0", "rn1", "rn2")
+        ),
+        extra_directory_holder: int | None = None,
+        bind_manual_authority_roles: bool = False,
+    ):
         builder = SystemProtocolBuilder("chi_resolved_clean_unique")
         builder.add_dut(
             VirtualDut(
@@ -230,6 +247,14 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
                 receiver,
                 profile=self.link_profile(name, channels),
             )
+        home_address_claim = "hn0.cache_line"
+        builder.add_address_claim(
+            AddressClaim(
+                home_address_claim,
+                VirtualDutPortRef("hn0", "rx_req_ack"),
+                AddressWindow(self.ADDRESS, 0x40),
+            )
+        )
         system = builder.build().elaborate()
         duts = system.spec.virtual_duts
 
@@ -272,7 +297,15 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
                     self.ADDRESS,
                     self.DATA,
                     sharers=frozenset(
-                        (self.FIRST_PEER, self.SECOND_PEER)
+                        (
+                            self.FIRST_PEER,
+                            self.SECOND_PEER,
+                            *(
+                                ()
+                                if extra_directory_holder is None
+                                else (extra_directory_holder,)
+                            ),
+                        )
                     ),
                 ),
             ),
@@ -361,9 +394,17 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
             )
 
         contract = ChiFeatureContract(
-            {"requester": "rn0", "home": "hn0"},
+            (
+                {"requester": "rn0", "home": "hn0"}
+                if bind_manual_authority_roles
+                else {"requester": "rn0"}
+            ),
             frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE,)),
-            role_sets={"snoopee": frozenset(("rn1", "rn2"))},
+            role_sets=(
+                {"snoopee": frozenset(("rn1", "rn2"))}
+                if bind_manual_authority_roles
+                else {}
+            ),
         )
         capabilities = (
             ChiParticipantCapability(
@@ -393,6 +434,22 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
                 for binding in bindings.values()
             ),
             feature_contract=contract,
+            authority_contract=ChiCoherenceAuthorityContract(
+                authorities=(
+                    ChiHomeAuthority(
+                        home_address_claim,
+                        "hn0",
+                        "coherent_agents",
+                    ),
+                ),
+                domains=(
+                    ChiCoherenceDomain(
+                        "coherent_agents",
+                        domain_members,
+                    ),
+                ),
+            ),
+            feature_address_claim=home_address_claim,
             participant_capabilities=capabilities,
             system_capabilities=frozenset(
                 (CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,)
@@ -413,6 +470,21 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
         session = ChiCoherenceSession.from_resolved(resolved)
 
         self.assertTrue(resolved.is_closed)
+        self.assertEqual(
+            ("hn0",),
+            resolved.feature_contract.role_members("home"),
+        )
+        self.assertEqual(
+            ("rn1", "rn2"),
+            resolved.feature_contract.role_members("snoopee"),
+        )
+        self.assertEqual(
+            "hn0",
+            resolved.authority_plan.authority_for_address(
+                self.ADDRESS,
+                64,
+            ).home,
+        )
         self.assertIs(home, session.home)
         self.assertIs(requester, session.request_nodes[self.REQUESTER])
         self.assertEqual(
@@ -537,14 +609,68 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
         self.assertIsNotNone(delivered_disabled.fault)
         self.assertIn("not enabled", delivered_disabled.fault.reason)
 
-    def test_factory_rejects_compound_binding_without_runtime_identity(self) -> None:
-        resolved, _, _, _ = self.build_resolved(compound_requester=True)
+    def test_resolution_rejects_compound_coherence_domain_identity(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "must resolve to exactly one NodeID",
+        ):
+            self.build_resolved(compound_requester=True)
+
+    def test_resolution_rejects_parallel_manual_home_and_snoopee_facts(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "must not bind authority-derived roles",
+        ):
+            self.build_resolved(bind_manual_authority_roles=True)
+
+    def test_requester_must_belong_to_the_selected_coherence_domain(
+        self,
+    ) -> None:
+        with self.assertRaisesRegex(
+            ValueError,
+            "is not a member of coherence domain",
+        ):
+            self.build_resolved(
+                domain_members=frozenset(("rn1", "rn2"))
+            )
+
+    def test_session_rejects_directory_holder_outside_resolved_domain(
+        self,
+    ) -> None:
+        resolved, _, _, _ = self.build_resolved(
+            extra_directory_holder=0x0A
+        )
 
         with self.assertRaisesRegex(
             ValueError,
-            "offer exactly its component NodeID",
+            "outside the resolved coherence domain",
         ):
             ChiCoherenceSession.from_resolved(resolved)
+
+    def test_resolved_session_rejects_address_outside_selected_claim(
+        self,
+    ) -> None:
+        resolved, _, _, _ = self.build_resolved()
+        session = ChiCoherenceSession.from_resolved(resolved)
+
+        transition = session.step(
+            session.initial_state(),
+            ChiSubmitCoherentRead(
+                self.REQUESTER,
+                ChiReadUniqueMessage(
+                    transaction_id=0x12,
+                    address=self.ADDRESS + 0x40,
+                ),
+            ),
+        )
+
+        self.assertIsNotNone(transition.fault)
+        assert transition.fault is not None
+        self.assertIn("address_authority", transition.fault.rule)
 
 
 if __name__ == "__main__":

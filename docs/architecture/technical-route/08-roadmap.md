@@ -37,9 +37,14 @@ feature-flow closure 和 clean `ReadShared/ReadUnique` participant 也已落地�
 MESI no-SD 路径也已闭合：
 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck
 →Home backing/directory commit`；它把 dirty unique line 收束为两个 clean shared copy，不引入 `SD`。
-`SC→ReadUnique→UC→local write→UD` 的重取数据式 upgrade 也已闭合。
+`SC→ReadUnique→UC→local write→UD` 的重取数据式 upgrade 也已闭合。第一条 construction authority
+切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home，并从
+coherence-domain membership 派生 `eligible Snoopees = members - requester`；NodeID、逐成员 capability
+与 REQ/SNP/RSP/DAT flow 随后使用同一派生结果闭合。Home directory 仍只选择一笔事务的实际 holder，
+不取代静态 domain authority。
 
-1. 建立 address→Home authority 与 coherence-domain membership，使 eligible Snoopee 不再只能由 fixture 手工列出；
+1. 为现有显式 `UD` victim 增加经 topology/network 的完整 writeback witness，证明所选 address authority
+   也约束写回 Home；暂不同时引入 replacement policy；
 2. 在已有 `UD`/PassDirty、no-SD downgrade 和 ReadUnique upgrade 基础上补
    `CleanUnique`/`MakeUnique`、dirty eviction/writeback，继续闭合 MESI 的常用生命周期；
 3. 增加同 line transient/hazard、Retry/error 组合、多 waiter policy、多个 pending emission batch 与
@@ -47,8 +52,11 @@ MESI no-SD 路径也已闭合：
 4. 再以 `SD`/Owned、shared-dirty authority 与 forwarding/DCT 检验 MOESI-like 扩展；
 5. 第二种 packet network 提出相同接口后，再把 family scheduler 的稳定形状投影到通用 system runtime。
 
-当前 read/retry/coherence profile 仍固定单 Requester/Home、受限 opcode 与 full-line DAT；AddressTarget 路径另
-固定对齐和成功 completion。它们是上述工作的可执行起点；准确覆盖仍只在
+当前每个 resolved feature scope 显式选择一个未进入 address-router translation 的 address claim 和一个
+scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 resolver 核对；同一 runtime 按地址动态
+切换多个 Home、由 SAM route 派生 system-visible window、remap 和跨 domain 执行尚未实现。
+read/retry/coherence profile 另固定单 Requester、受限 opcode 与 full-line DAT；
+AddressTarget 路径固定对齐和成功 completion。它们是上述工作的可执行起点；准确覆盖仍只在
 [实现状态](../implementation-status.md)维护。
 
 scheduled AXI4-Lite N×M crossbar 与 direct-neighbor address closure 已形成 S3 的第一条纵向切片；因此下一阶段

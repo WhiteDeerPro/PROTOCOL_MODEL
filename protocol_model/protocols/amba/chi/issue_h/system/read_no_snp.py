@@ -21,6 +21,7 @@ from protocol_model.semantics import (
     TraceViolation,
     Verdict,
 )
+from protocol_model.system.contracts.address import AddressWindow
 from protocol_model.system.elaboration import ElaboratedSystemProtocol
 from protocol_model.system.topology.model import VirtualDutPortRef
 from protocol_model.virtual_dut.boundary import TransportDirection
@@ -87,6 +88,7 @@ class ChiReadNoSnpSystemSession(
         routers: tuple[ChiParticipantBinding, ...] = (),
         transmitter_capacity_by_connection: Mapping[str, int] | None = None,
         network: ChiTransportNetworkSession | None = None,
+        authority_window: AddressWindow | None = None,
     ) -> None:
         if not isinstance(system, ElaboratedSystemProtocol):
             raise TypeError("CHI read system session requires elaborated system")
@@ -102,6 +104,10 @@ class ChiReadNoSnpSystemSession(
             )
         if not isinstance(home.component, ChiDirectHomeNode):
             raise TypeError("CHI Home binding requires ChiDirectHomeNode")
+        if authority_window is not None and not isinstance(
+            authority_window, AddressWindow
+        ):
+            raise TypeError("CHI Home authority requires AddressWindow")
 
         router_bindings = tuple(routers)
         if any(
@@ -180,6 +186,7 @@ class ChiReadNoSnpSystemSession(
         self.requester = requester_component
         self.home = home_component
         self.profile = profile
+        self.authority_window = authority_window
         if network is None:
             self.network = ChiTransportNetworkSession(
                 system,
@@ -316,6 +323,9 @@ class ChiReadNoSnpSystemSession(
             home=resolved.role_binding("home"),
             routers=routers,
             network=resolved.network,
+            authority_window=(
+                resolved.feature_authority.address_claim.window
+            ),
         )
 
     def _build_scheduler_candidates(
@@ -661,6 +671,25 @@ class ChiReadNoSnpSystemSession(
                     action.requester,
                 ),
             )
+        if self.authority_window is not None:
+            transfer = AddressWindow(
+                action.request.address,
+                1 << action.request.size,
+            )
+            if not self.authority_window.contains(transfer):
+                return SemanticStep(
+                    state,
+                    fault=SemanticFault(
+                        f"{self.name}.address_authority",
+                        (
+                            f"address range {action.request.address:#x}+"
+                            f"{transfer.size_bytes:#x} is outside the Home "
+                            "authority selected for this construction"
+                        ),
+                        ConstraintScope.SYSTEM,
+                        self.requester_binding.name,
+                    ),
+                )
         representation_reasons: list[str] = []
         for connection in self.request_route_connections:
             path = self.network.paths[connection]

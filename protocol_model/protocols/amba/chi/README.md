@@ -111,9 +111,10 @@ facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，�
 后续扩展继续以可执行 lifecycle 为单位增加。紧邻的增量包括 `CleanUnique`/`MakeUnique`、dirty
 eviction/writeback、same-line transient/hazard，以及同一 Home/type 下多个 waiter 的具名选择与公平性合同。
 `PCrdGrant`、`RetryAck` 仍走 Home→Requester 的 RSP 路径；`PCrdReturn` 根据 CHI Issue H B2.5.6 走
-Requester→Home 的 REQ 路径，router 继续只按 `channel + TgtID` 透明转发。NodeID/home authority、
-自动 coherence-domain membership 和 MOESI shared-dirty authority 由 system construction/monitor
-扩展，不作为局部 `TransportLink` 的占位字段。
+Requester→Home 的 REQ 路径，router 继续只按 `channel + TgtID` 透明转发。NodeID ownership 与首条
+single-scope address/Home/domain authority 已由 system construction 闭合；multi-Home/SAM 选择和
+MOESI shared-dirty authority 继续由 system construction/monitor 扩展，不作为局部 `TransportLink`
+的占位字段。
 
 架构依据与作用域说明见 `docs/architecture/communication-scope-and-transport.md` 和
 `docs/architecture/ace-chi-communication-scopes.md`。

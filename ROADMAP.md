@@ -54,9 +54,10 @@ topology/runtime 表达协议定义、绑定与执行。
 - manifest、调用方选择的 run root、系统 topology/causality 投影和具名发布边界已经固定。
 
 这些能力仍会继续扩展，但后续工作不再以“重新建立 typed stage/plan、首个 serial bridge 或首个 blocked
-reason”为目标。当前主要缺口是 coherence authority、capability-backed construction、resource-aware
-runtime 闭合，以及其后的可达性、时间模型和外部观测接入。现有同步 `SystemSession` fixed-point runtime
-继续作为点到点与微型 bridge 的执行基础。
+reason”为目标。当前已经有首条 single-scope coherence authority 与 capability-backed construction；
+主要缺口转为 multi-Home/SAM 扩展、常用 coherence write 生命周期、resource-aware runtime 闭合，以及
+其后的可达性、时间模型和外部观测接入。现有同步 `SystemSession` fixed-point runtime 继续作为点到点与
+微型 bridge 的执行基础。
 
 ## 3. 工作主线
 
@@ -293,8 +294,8 @@ time domains ──► UART ──► CDC
 根 Roadmap 不再定义“下一版本 A/B/C”或复制一份近期任务清单。当前施工统一从
 [技术路线实施阶段](docs/architecture/technical-route/08-roadmap.md)中的三个入口读取：
 
-- `C1`：从已闭合的 CHI participant/network slice 推进 address→Home authority、coherence-domain
-  membership 和后续一致性生命周期；
+- `C1`：从已闭合的 CHI participant/network 与 single-scope address→Home/domain authority，推进
+  topology writeback witness、常用一致性生命周期和后续 multi-Home/SAM 扩展；
 - `S3`：从已有 address projection/direct-neighbor closure 推进 capability-backed system construction；
 - `S4`：从已有有限容量、blocked reason 和显式 advance 推进 emission-level admission、lineage、
   held/waiting resource 与 recoverable wakeup。

@@ -58,7 +58,7 @@ coherence network session
 
 | 对象 | 持有内容 | 不持有的内容 |
 |---|---|---|
-| `ResolvedChiSystem` | 静态 topology、participant binding、NodeID、feature/capability 和可执行 flow 证据 | transaction、FIFO、cache line 等运行状态 |
+| `ResolvedChiSystem` | 静态 topology、participant binding、NodeID、address→Home/domain authority、feature/capability 和可执行 flow 证据 | transaction、FIFO、cache line 等运行状态 |
 | `ChiCoherenceSession` | RN/Home 行为、cache/directory、Snoop response 聚合、稳定点 invariant | packet 经过哪些 hop、Link credit 和 router queue |
 | `ChiTransportNetworkSession` | protocol flit 的逐 hop 搬运、router store/forward、Link 资源和 hop lineage | opcode 对 participant 状态的作用、全局 coherence invariant |
 | 组合 session | 两个状态的原子推进、packet 与 route 的装配、endpoint dispatch、跨 packet 因果 join | 新的 cache policy、隐式 snoop filter、未经构造证明的 route |
@@ -71,18 +71,23 @@ coherence network session
 组合 session 只从已经闭合的 `ResolvedChiSystem` 打开。构造过程至少执行以下检查：
 
 1. `ResolvedChiSystem.require_closed()` 成功；
-2. feature contract 选择 clean ReadShared、clean ReadUnique、dirty unique-transfer、dirty writeback，
+2. feature intent 选择 requester，以及 clean ReadShared、clean ReadUnique、dirty unique-transfer、dirty writeback，
    或 `CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset；dirty unique-transfer 依赖 clean ReadUnique，
    no-SD preset 再组合 dirty unique-transfer 与独立的 ReadNotSharedDirty feature；
-3. scalar requester、scalar Home 可以解析；只有包含 Snoop flow 的 feature 才要求 finite-set Snoopee role；
-4. participant component 类型与相应角色匹配；
-5. 首版中每个角色 binding 的 NodeID 集合与 component 的单一 NodeID 相同；
-6. 每条启用 lifecycle 所需的 per-member flow 都存在唯一的有向 connection 序列；
-7. flow 的首 hop transmitter port 和末 hop receiver port 属于相应 participant binding；
-8. packet channel 受到沿途每条 transport profile 支持。
+3. 本次 feature scope 显式引用一个通用 `AddressClaim`；CHI authority contract 将该 claim 绑定到
+   scalar Home，并在需要 Snoop flow 时绑定一个 coherence domain；
+4. resolver 从 domain 派生 `Snoopee = members - requester`，拒绝调用方另行手填 Home/Snoopee role；
+5. Home、requester 与 domain member 都解析为 transaction facet；当前 coherence runtime 要求每个绑定
+   只有一个 NodeID，且 claim endpoint 属于 Home identity boundary；
+6. participant component 类型与相应角色匹配，Home 初始 directory holder 不得越出 resolved domain；
+7. 每条启用 lifecycle 所需的 per-member flow 都存在唯一的有向 connection 序列；
+8. flow 的首 hop transmitter port 和末 hop receiver port 属于相应 participant binding；
+9. packet channel 受到沿途每条 transport profile 支持，resolved runtime 拒绝越出所选 claim window 的请求。
 
-首版保留显式 Snoopee role set。coherence domain 或 Home authority 自动派生 peer membership 属于更大的
-system construction 工作，不阻塞本切片。
+当前一个 `ResolvedChiSystem` 仍只选择一个 feature address scope 和一个 scalar Home。authority plan 可以
+保存多个互不重叠的 claim，但当前只接受未进入 address-router translation 的 claim；SAM route 的 input
+window/remap 尚未投影成 CHI system-visible authority。同一 runtime 也不按每笔地址动态切换 Home；RN 中的
+`home_node_id` 是被 resolver 核对的本地配置投影，不是第二份 system authority。
 
 ### 3.1 不可变 route 与 delivery 索引
 

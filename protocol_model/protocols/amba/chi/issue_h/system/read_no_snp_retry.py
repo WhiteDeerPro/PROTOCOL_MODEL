@@ -12,6 +12,7 @@ from protocol_model.semantics import (
     SemanticFault,
     SemanticStep,
 )
+from protocol_model.system.contracts.address import AddressWindow
 from protocol_model.system.elaboration import ElaboratedSystemProtocol
 from protocol_model.virtual_dut.boundary import TransportDirection
 
@@ -142,6 +143,7 @@ class ChiReadNoSnpRetrySystemSession(ChiReadNoSnpSystemSession):
         routers: tuple[ChiParticipantBinding, ...] = (),
         transmitter_capacity_by_connection: Mapping[str, int] | None = None,
         network: ChiTransportNetworkSession | None = None,
+        authority_window: AddressWindow | None = None,
     ) -> None:
         if not isinstance(requester.component, ChiReadNoSnpRetryLedger):
             raise TypeError("retry session requires ChiReadNoSnpRetryLedger")
@@ -156,6 +158,7 @@ class ChiReadNoSnpRetrySystemSession(ChiReadNoSnpSystemSession):
                 transmitter_capacity_by_connection
             ),
             network=network,
+            authority_window=authority_window,
         )
         self.name = f"{system.spec.name}.read_no_snp_retry_system"
         self.requester = requester.component
@@ -248,6 +251,9 @@ class ChiReadNoSnpRetrySystemSession(ChiReadNoSnpSystemSession):
             home=resolved.role_binding("home"),
             routers=routers,
             network=resolved.network,
+            authority_window=(
+                resolved.feature_authority.address_claim.window
+            ),
         )
 
     def initial_state(self) -> ChiReadNoSnpRetrySystemState:

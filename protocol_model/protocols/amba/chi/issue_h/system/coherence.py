@@ -25,6 +25,7 @@ from protocol_model.semantics import (
     SemanticFault,
     SemanticStep,
 )
+from protocol_model.system.contracts.address import AddressWindow
 
 from ..participants.coherence import (
     ChiCacheState,
@@ -317,6 +318,7 @@ class ChiCoherenceSession(
         enabled_features: frozenset[ChiFeatureKey] | None = None,
         requester_node_ids: frozenset[int] | None = None,
         snoopee_node_ids: frozenset[int] | None = None,
+        authority_window: AddressWindow | None = None,
     ) -> None:
         if not isinstance(name, str) or not name:
             raise ValueError("CHI coherence session requires a name")
@@ -426,6 +428,12 @@ class ChiCoherenceSession(
                 "CHI requester and Snoopee authority must belong to the "
                 "RN registry"
             )
+        if authority_window is not None and not isinstance(
+            authority_window, AddressWindow
+        ):
+            raise TypeError(
+                "CHI coherence authority window requires AddressWindow"
+            )
         self.name = name
         self.home = home
         self.request_nodes = MappingProxyType(nodes)
@@ -433,6 +441,7 @@ class ChiCoherenceSession(
         self.enabled_features = features
         self.requester_node_ids = requesters
         self.snoopee_node_ids = snoopees
+        self.authority_window = authority_window
 
         initial = self._make_initial_state()
         profile_fault = self._profile_state_fault(initial)
@@ -493,11 +502,29 @@ class ChiCoherenceSession(
             resolved.capabilities.require(feature)
 
         requester_binding = resolved.role_binding("requester")
-        home_binding = resolved.role_binding("home")
-        try:
-            snoopee_bindings = resolved.role_bindings("snoopee")
-        except KeyError:
-            snoopee_bindings = ()
+        authority = resolved.feature_authority
+        home_binding = resolved.binding_by_name[authority.home]
+        if authority.coherence_domain is None:
+            snoopee_names: tuple[str, ...] = ()
+        else:
+            snoopee_names = resolved.authority_plan.eligible_snoopees(
+                resolved.feature_address_claim,
+                requester_binding.name,
+            )
+        snoopee_bindings = tuple(
+            resolved.binding_by_name[item] for item in snoopee_names
+        )
+        effective_snoopees = (
+            resolved.feature_contract.role_members("snoopee")
+        )
+        if effective_snoopees is not None and (
+            tuple(sorted(effective_snoopees))
+            != tuple(sorted(snoopee_names))
+        ):
+            raise ValueError(
+                "resolved Snoopee feature role disagrees with its "
+                "coherence domain"
+            )
         if any(
             item.name == requester_binding.name
             for item in snoopee_bindings
@@ -542,6 +569,10 @@ class ChiCoherenceSession(
                 raise ValueError(
                     f"CHI RN {binding.name!r} names another Home NodeID"
                 )
+        if authority.home_node_id != home.node_id:
+            raise ValueError(
+                "resolved Home authority disagrees with its component NodeID"
+            )
         if home_binding.node_ids != frozenset((home.node_id,)):
             raise ValueError(
                 "resolved coherence Home must offer exactly its component NodeID"
@@ -552,6 +583,21 @@ class ChiCoherenceSession(
                 "resolved coherence RN roles contain duplicate component "
                 "NodeIDs"
             )
+        allowed_holders = set(registry)
+        for entry in home.initial_directory:
+            line_window = AddressWindow(entry.address, 64)
+            if not authority.address_claim.window.contains(line_window):
+                continue
+            holders = set(entry.sharers)
+            if entry.unique_owner is not None:
+                holders.add(entry.unique_owner)
+            outside = holders - allowed_holders
+            if outside:
+                raise ValueError(
+                    f"Home directory line {entry.address:#x} names holders "
+                    "outside the resolved coherence domain: "
+                    f"{sorted(outside)!r}"
+                )
         session_name = (
             f"{resolved.system.spec.name}.coherence"
             if name is None
@@ -567,6 +613,7 @@ class ChiCoherenceSession(
             snoopee_node_ids=frozenset(
                 node.node_id for node in peer_nodes
             ),
+            authority_window=authority.address_claim.window,
         )
 
     def _make_initial_state(self) -> ChiCoherenceState:
@@ -646,6 +693,12 @@ class ChiCoherenceSession(
         state: ChiCoherenceState,
         action: ChiWriteUniqueCacheLine,
     ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        authority_fault = self._address_authority_fault(
+            action.address,
+            64,
+        )
+        if authority_fault is not None:
+            return SemanticStep(state, fault=authority_fault)
         node = self.request_nodes.get(action.request_node_id)
         if node is None:
             return self._fault(
@@ -695,6 +748,12 @@ class ChiCoherenceSession(
         state: ChiCoherenceState,
         action: ChiSubmitWriteBackFull,
     ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        authority_fault = self._address_authority_fault(
+            action.request.address,
+            1 << action.request.size,
+        )
+        if authority_fault is not None:
+            return SemanticStep(state, fault=authority_fault)
         node = self.request_nodes.get(action.requester_node_id)
         if node is None:
             return self._fault(
@@ -750,6 +809,12 @@ class ChiCoherenceSession(
         state: ChiCoherenceState,
         action: ChiSubmitCoherentRead,
     ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        authority_fault = self._address_authority_fault(
+            action.request.address,
+            1 << action.request.size,
+        )
+        if authority_fault is not None:
+            return SemanticStep(state, fault=authority_fault)
         node = self.request_nodes.get(action.requester_node_id)
         if node is None:
             return self._fault(
@@ -788,6 +853,22 @@ class ChiCoherenceSession(
         packet: ChiNetworkPacket,
     ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
         message = packet.message
+        address = getattr(message, "address", None)
+        if isinstance(address, int) and not isinstance(address, bool):
+            size = getattr(message, "size", 6)
+            size_bytes = (
+                1 << size
+                if isinstance(size, int)
+                and not isinstance(size, bool)
+                and 0 <= size <= 63
+                else 64
+            )
+            authority_fault = self._address_authority_fault(
+                address,
+                size_bytes,
+            )
+            if authority_fault is not None:
+                return SemanticStep(state, fault=authority_fault)
         if packet.target_id == self.home.node_id:
             if isinstance(
                 message,
@@ -957,6 +1038,28 @@ class ChiCoherenceSession(
             )
         transition = node.step(state.request_nodes[packet.target_id], action)
         return self._replace_request_node(state, packet.target_id, transition)
+
+    def _address_authority_fault(
+        self,
+        address: int,
+        size_bytes: int,
+    ) -> SemanticFault | None:
+        """Reject traffic outside this resolved feature address scope."""
+
+        if self.authority_window is None:
+            return None
+        transfer = AddressWindow(address, size_bytes)
+        if self.authority_window.contains(transfer):
+            return None
+        return SemanticFault(
+            f"{self.name}.address_authority",
+            (
+                f"address range {address:#x}+{size_bytes:#x} is outside "
+                "the Home authority selected for this construction"
+            ),
+            ConstraintScope.SYSTEM,
+            self.name,
+        )
 
     @staticmethod
     def _request_feature(

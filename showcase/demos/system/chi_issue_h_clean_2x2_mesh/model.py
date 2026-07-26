@@ -45,9 +45,12 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+    ChiCoherenceAuthorityContract,
+    ChiCoherenceDomain,
     ChiCoherenceNetworkEvent,
     ChiCoherenceNetworkSession,
     ChiFeatureContract,
+    ChiHomeAuthority,
     ChiSubmitCoherentRead,
     ResolvedChiSystem,
     resolve_chi_system,
@@ -62,6 +65,8 @@ from protocol_model.protocols.amba.chi.issue_h.transport import (
 )
 from protocol_model.semantics import Verdict
 from protocol_model.system import (
+    AddressClaim,
+    AddressWindow,
     ElaboratedSystemProtocol,
     SystemProtocol,
     SystemProtocolBuilder,
@@ -465,6 +470,14 @@ def build_clean_mesh() -> CleanMeshAssembly:
             VirtualDutPortRef(*receiver),
             profile=_link_profile(name, channels),
         )
+    home_address_claim = "hn0.cache_line"
+    builder.add_address_claim(
+        AddressClaim(
+            home_address_claim,
+            VirtualDutPortRef("hn0", "rx_req_rsp"),
+            AddressWindow(LINE_ADDRESS, 0x40),
+        )
+    )
     system = builder.build()
     elaborated = system.elaborate()
     resolved_duts = elaborated.spec.virtual_duts
@@ -571,9 +584,8 @@ def build_clean_mesh() -> CleanMeshAssembly:
         )
 
     feature_contract = ChiFeatureContract(
-        {"requester": "rn0", "home": "hn0"},
+        {"requester": "rn0"},
         frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE,)),
-        role_sets={"snoopee": frozenset(("rn1", "rn2"))},
     )
     capabilities = (
         ChiParticipantCapability(
@@ -612,6 +624,22 @@ def build_clean_mesh() -> CleanMeshAssembly:
             ),
         ),
         feature_contract=feature_contract,
+        authority_contract=ChiCoherenceAuthorityContract(
+            authorities=(
+                ChiHomeAuthority(
+                    home_address_claim,
+                    "hn0",
+                    "coherent_agents",
+                ),
+            ),
+            domains=(
+                ChiCoherenceDomain(
+                    "coherent_agents",
+                    frozenset(("rn0", "rn1", "rn2")),
+                ),
+            ),
+        ),
+        feature_address_claim=home_address_claim,
         participant_capabilities=capabilities,
         system_capabilities=frozenset(
             (CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,)

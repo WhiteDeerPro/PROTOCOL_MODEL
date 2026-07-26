@@ -6,11 +6,12 @@ have no ordinary ``TgtID``.  The interconnect chooses one or more Snoopees and
 the Network-layer packet carries each per-copy destination.  Consequently the
 protocol message below owns neither route endpoint.
 
-``SnpShared``, ``SnpNotSharedDirty``, and ``SnpUnique`` are represented
-alongside the hop-local ``SnpLCrdReturn`` form.  This module establishes the
-channel/transport boundary; cache transitions, target selection, and response
-matching are participant/system behavior, not fields silently inferred by
-this local form.  A packed SNPFLIT codec remains outside the current slice.
+``SnpShared``, ``SnpNotSharedDirty``, ``SnpUnique``, and
+``SnpCleanInvalid`` are represented alongside the hop-local
+``SnpLCrdReturn`` form.  This module establishes the channel/transport
+boundary; cache transitions, target selection, and response matching are
+participant/system behavior, not fields silently inferred by this local form.
+A packed SNPFLIT codec remains outside the current slice.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ class ChiSnpOpcode(IntEnum):
     SNP_SHARED = 0x01
     SNP_NOT_SHARED_DIRTY = 0x04
     SNP_UNIQUE = 0x07
+    SNP_CLEAN_INVALID = 0x09
 
 
 def _require_uint(name: str, value: int, width: int) -> None:
@@ -123,6 +125,18 @@ class ChiSnpUniqueMessage(_ChiCleanSnoopMessage):
 
 
 @dataclass(frozen=True)
+class ChiSnpCleanInvalidMessage(_ChiCleanSnoopMessage):
+    """Invalidate a peer and return Dirty data to Home when required."""
+
+    do_not_go_to_shared_dirty: bool = True
+    return_to_source: bool = False
+
+    @property
+    def opcode(self) -> ChiSnpOpcode:
+        return ChiSnpOpcode.SNP_CLEAN_INVALID
+
+
+@dataclass(frozen=True)
 class ChiSnpLCrdReturn:
     """SNP link flit returning one unused L-Credit to the receiver."""
 
@@ -144,6 +158,7 @@ ChiSnpProtocolMessage: TypeAlias = (
     ChiSnpSharedMessage
     | ChiSnpNotSharedDirtyMessage
     | ChiSnpUniqueMessage
+    | ChiSnpCleanInvalidMessage
 )
 ChiSnpChannelItem: TypeAlias = ChiSnpProtocolMessage | ChiSnpLCrdReturn
 
@@ -182,6 +197,7 @@ class ChiIssueHSnpProfile:
                 ChiSnpSharedMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
+                ChiSnpCleanInvalidMessage,
             ),
         ):
             return ("expected a supported clean Snoop protocol message",)
@@ -201,12 +217,24 @@ class ChiIssueHSnpProfile:
         if (
             isinstance(
                 message,
-                (ChiSnpNotSharedDirtyMessage, ChiSnpUniqueMessage),
+                (
+                    ChiSnpNotSharedDirtyMessage,
+                    ChiSnpUniqueMessage,
+                    ChiSnpCleanInvalidMessage,
+                ),
             )
             and not message.do_not_go_to_shared_dirty
         ):
             reasons.append(
-                "DoNotGoToSD must be one for SnpNotSharedDirty/SnpUnique"
+                "DoNotGoToSD must be one for "
+                "SnpNotSharedDirty/SnpUnique/SnpCleanInvalid"
+            )
+        if (
+            isinstance(message, ChiSnpCleanInvalidMessage)
+            and message.return_to_source
+        ):
+            reasons.append(
+                "RetToSrc must be zero for SnpCleanInvalid"
             )
         return tuple(reasons)
 
@@ -217,6 +245,7 @@ class ChiIssueHSnpProfile:
 __all__ = [
     "ChiIssueHSnpProfile",
     "ChiSnpChannelItem",
+    "ChiSnpCleanInvalidMessage",
     "ChiSnpLCrdReturn",
     "ChiSnpNotSharedDirtyMessage",
     "ChiSnpOpcode",

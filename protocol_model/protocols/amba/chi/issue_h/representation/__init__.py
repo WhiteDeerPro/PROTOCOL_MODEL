@@ -32,6 +32,7 @@ from .logical_fields import (
 )
 from .packet import ChiNetworkPacket
 from .req import (
+    ChiCleanUniqueMessage,
     ChiIssueHReqProfile,
     ChiPCrdReturnMessage,
     ChiReadNoSnpMessage,
@@ -48,6 +49,7 @@ from .response import ChiRespCode
 from .rsp import (
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
+    ChiCompMessage,
     ChiIssueHRspProfile,
     ChiPCrdGrantMessage,
     ChiRetryAckMessage,
@@ -59,6 +61,7 @@ from .rsp import (
 )
 from .snp import (
     ChiIssueHSnpProfile,
+    ChiSnpCleanInvalidMessage,
     ChiSnpChannelItem,
     ChiSnpLCrdReturn,
     ChiSnpNotSharedDirtyMessage,
@@ -74,8 +77,10 @@ __all__ = [
     "ChiChannelItem",
     "ChiChannelKind",
     "ChiChannelProfile",
+    "ChiCleanUniqueMessage",
     "ChiCompAckMessage",
     "ChiCompDBIDRespMessage",
+    "ChiCompMessage",
     "ChiCompDataMessage",
     "ChiCopyBackWrDataMessage",
     "ChiDatChannelItem",
@@ -116,6 +121,7 @@ __all__ = [
     "ChiRspOpcode",
     "ChiRspProtocolMessage",
     "ChiSnpChannelItem",
+    "ChiSnpCleanInvalidMessage",
     "ChiSnpLCrdReturn",
     "ChiSnpNotSharedDirtyMessage",
     "ChiSnpOpcode",

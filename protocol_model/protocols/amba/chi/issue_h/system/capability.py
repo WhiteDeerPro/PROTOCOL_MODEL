@@ -22,6 +22,9 @@ from ..participants.capability import (
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_CLEAN_PEERS_HOME_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_CLEAN_PEERS_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_CLEAN_PEERS_SNOOPEE_CAPABILITIES,
     CHI_DIRTY_UNIQUE_HOME_CAPABILITIES,
     CHI_DIRTY_UNIQUE_REQUESTER_CAPABILITIES,
     CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES,
@@ -72,6 +75,9 @@ CHI_FEATURE_CLEAN_READ_SHARED = ChiFeatureKey(
 CHI_FEATURE_CLEAN_READ_UNIQUE = ChiFeatureKey(
     "chi.feature.clean_read_unique"
 )
+CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS = ChiFeatureKey(
+    "chi.feature.clean_unique.clean_peers"
+)
 CHI_FEATURE_DIRTY_UNIQUE_TRANSFER = ChiFeatureKey(
     "chi.feature.dirty_unique_transfer"
 )
@@ -105,6 +111,9 @@ CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE = ChiCapabilityKey(
 )
 CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE = ChiCapabilityKey(
     "chi.system.clean_read_unique.lifecycle"
+)
+CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.clean_unique.clean_peers.lifecycle"
 )
 CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE = ChiCapabilityKey(
     "chi.system.dirty_unique_transfer.lifecycle"
@@ -548,6 +557,61 @@ CHI_CLEAN_READ_UNIQUE_DEFINITION = ChiFeatureDefinition(
     ),
 )
 
+CHI_CLEAN_UNIQUE_CLEAN_PEERS_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_CLEAN_UNIQUE_CLEAN_PEERS_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_CLEAN_UNIQUE_CLEAN_PEERS_HOME_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "snoopee",
+            CHI_CLEAN_UNIQUE_CLEAN_PEERS_SNOOPEE_CAPABILITIES,
+            ChiRoleCardinality.FINITE_SET,
+            minimum_members=0,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "clean_unique_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "clean_unique_snoop",
+            "home",
+            "snoopee",
+            ChiChannelKind.SNP,
+        ),
+        ChiFlowRequirement(
+            "clean_unique_snoop_response",
+            "snoopee",
+            "home",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "clean_unique_completion",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "clean_unique_completion_ack",
+            "requester",
+            "home",
+            ChiChannelKind.RSP,
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE,)
+    ),
+)
+
 CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION = ChiFeatureDefinition(
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
     dependencies=frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE,)),
@@ -689,6 +753,9 @@ CHI_BUILTIN_FEATURE_CATALOG = ChiFeatureCatalog(
         CHI_FEATURE_REQUEST_RETRY: CHI_REQUEST_RETRY_DEFINITION,
         CHI_FEATURE_CLEAN_READ_SHARED: CHI_CLEAN_READ_SHARED_DEFINITION,
         CHI_FEATURE_CLEAN_READ_UNIQUE: CHI_CLEAN_READ_UNIQUE_DEFINITION,
+        CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS: (
+            CHI_CLEAN_UNIQUE_CLEAN_PEERS_DEFINITION
+        ),
         CHI_FEATURE_DIRTY_UNIQUE_TRANSFER: (
             CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION
         ),
@@ -1298,11 +1365,13 @@ __all__ = [
     "CHI_BUILTIN_FEATURE_CATALOG",
     "CHI_CLEAN_READ_SHARED_DEFINITION",
     "CHI_CLEAN_READ_UNIQUE_DEFINITION",
+    "CHI_CLEAN_UNIQUE_CLEAN_PEERS_DEFINITION",
     "CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION",
     "CHI_DIRTY_WRITEBACK_DEFINITION",
     "CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION",
     "CHI_FEATURE_CLEAN_READ_SHARED",
     "CHI_FEATURE_CLEAN_READ_UNIQUE",
+    "CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS",
     "CHI_FEATURE_DIRTY_UNIQUE_TRANSFER",
     "CHI_FEATURE_DIRTY_WRITEBACK",
     "CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY",
@@ -1315,6 +1384,7 @@ __all__ = [
     "CHI_REQUEST_RETRY_DEFINITION",
     "CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE",
+    "CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE",
     "CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE",
     "CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE",
     "CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE",

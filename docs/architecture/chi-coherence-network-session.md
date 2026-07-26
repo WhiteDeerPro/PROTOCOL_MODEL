@@ -40,7 +40,7 @@ participant 后继续驱动协议 lifecycle，直到网络和一致性状态共�
 ResolvedChiSystem（不可变构造证据）
   ├─ requester / Home / Snoopee role bindings
   ├─ NodeID ownership
-  ├─ enabled clean-read / dirty-unique / MESI no-SD features
+  ├─ enabled clean-read / clean-peer CleanUnique / dirty-unique / MESI no-SD features
   ├─ per-member REQ / SNP / RSP / DAT flow closure
   └─ ChiTransportNetworkSession
                     │ open
@@ -71,8 +71,9 @@ coherence network session
 组合 session 只从已经闭合的 `ResolvedChiSystem` 打开。构造过程至少执行以下检查：
 
 1. `ResolvedChiSystem.require_closed()` 成功；
-2. feature intent 选择 requester，以及 clean ReadShared、clean ReadUnique、dirty unique-transfer、dirty writeback，
-   或 `CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset；dirty unique-transfer 依赖 clean ReadUnique，
+2. feature intent 选择 requester，以及 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
+   dirty unique-transfer、dirty writeback，或 `CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset；
+   dirty unique-transfer 依赖 clean ReadUnique，
    no-SD preset 再组合 dirty unique-transfer 与独立的 ReadNotSharedDirty feature；
 3. 本次 feature scope 显式引用一个通用 `AddressClaim`；CHI authority contract 将该 claim 绑定到
    scalar Home，并在需要 Snoop flow 时绑定一个 coherence domain；
@@ -153,9 +154,9 @@ scheduler 可以尝试其他候选。轮转顺序是确定性 reference policy�
 
 首版候选包含：
 
-1. **外部 read submit**
-   requester 执行 `ChiSubmitCoherentRead`，生成 REQ packet，并把完整 emission 保存为一个
-   `pending_egress` batch。
+1. **外部 operation submit**
+   requester 执行 `ChiSubmitCoherentRead`、`ChiSubmitCleanUnique` 或 writeback submit，生成 REQ
+   packet，并把完整 emission 保存为一个 `pending_egress` batch。
 
 2. **egress packet → 首 hop enqueue**
    从 batch 头取一个 packet，按静态 route 索引加入首 hop；网络背压时 batch 保持不变。
@@ -179,6 +180,11 @@ scheduler 可以尝试其他候选。轮转顺序是确定性 reference policy�
 - 存在 typed `ResourceDemand` 时返回 blocked；
 - 存在未关闭 obligation、同时没有可执行小步时，记录为 progress 分析输入；
 - `max_steps` 耗尽产生 inconclusive 诊断，不直接形成 deadlock verdict。
+
+因此调用方负责选择并提交初始 operation，并在离散模型中调用 `advance()` 或
+`run_until_quiescent()`；scheduler 负责 packet admission、Link/router 推进、endpoint dispatch 和
+participant 后续输出。调用方不需要逐包手工选择 Snoop、Comp 或 CompAck，但当前也没有后台线程或
+真实时钟自动产生业务 operation。
 
 ### 5.1 共同静止条件
 
@@ -289,6 +295,9 @@ resource；participant 才解释 Read、SNP、response 和 completion。
   都不再承担 dirty responsibility；
 - `SC` holder 可通过 `ReadUnique` 重新取得 full-line、失效其他 holder 并进入 `UC`，随后 local write
   进入 `UD`；
+- `SC` holder 可改用 clean-peer `CleanUnique` 保留已有 full-line；Home 发
+  `SnpCleanInvalid` 收齐 clean `SnpResp_I` 后返回无数据 `Comp_UC`，requester 进入 `UC` 并以 Home
+  分配的 DBID 返回 `CompAck`；
 - stable monitor 检查 directory permission；clean copy 必须匹配 backing data，`UD` copy 则必须是唯一
   owner。
 
@@ -296,21 +305,23 @@ resource；participant 才解释 Read、SNP、response 和 completion。
 modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向路径，但还没有形成完整 MESI 状态机。
 尚缺的主要行为是：
 
-- `CleanUnique`/`MakeUnique` 等不重取数据的 upgrade；
+- dirty-peer `CleanUnique` 所需的 `SnpRespData_I_PD`、Home memory update，以及 `MakeUnique`；
 - clean eviction，以及从 victim policy 自动触发 eviction/writeback；显式选择一条 `UD` line 后的
   `WriteBackFull → CompDBIDResp → CopyBackWrData` 已经闭合；
 - 普通 `ReadShared` 命中 `UD` 时的 policy；当前 no-SD 行为由显式 `ReadNotSharedDirty` 路径承担；
 - 同 line 并发目前只有 RN/Home 单 owner reservation：第二笔本地 transaction 和撞上 local pending 的
   Snoop 返回可重试的 `ResourceDemand`；等待者合并、显式 transient phase、Snoop 优先级、错误/Retry 与
   取消尚未闭合；
-- address→Home、coherence domain 和多 Home authority。
+- runtime 按地址动态选择多个 Home、SAM remap 和跨 domain 执行。
 
 MOESI-like profile 还需要 `SD`/Owned：多个 shared copy 可以共存，但其中恰有一个节点承担 dirty
 responsibility。它进一步需要 dirty `SnpShared`、owner handoff、forwarding snoop/DCT，以及 owner
 eviction/recovery。
 
-当前 feature closure 可以分别选择 clean ReadShared、clean ReadUnique、dirty-unique、dirty-writeback
-和独立的 MESI ReadNotSharedDirty 五个 feature。`CHI_MESI_NO_SD_REQUIRED_FEATURES` 是 system 侧 policy preset：
+当前 feature closure 可以分别选择 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
+dirty-unique、dirty-writeback 和独立的 MESI ReadNotSharedDirty 六个 feature。CleanUnique 的五类
+REQ/SNP/RSP flow 不含 DAT，并与会返回 CompData 的 ReadUnique 保持独立。
+`CHI_MESI_NO_SD_REQUIRED_FEATURES` 是 system 侧 policy preset：
 它组合 dirty-unique 与 ReadNotSharedDirty，前者的 dependency closure 再带入 clean ReadUnique；
 ReadNotSharedDirty feature 本身没有 dependency，也不要求 local-write capability。no-SD policy 使用
 `DoNotGoToSD=1`，并复用 dirty-data 返回能力；
@@ -405,7 +416,7 @@ Memory VirtualDut”的通用构造。引入 SN、可替换 memory policy 或独
 | Home sharer/owner、shared-dirty owner 与跨 RN invariant | Home participant + CHI SystemProtocol monitor | directory 的局部状态由 Home 持有，跨 participant 一致性由 system 判定 |
 | packet/flit、L-Credit 和 hop backpressure | CHI transport | 不解释 cache permission |
 
-当前 `coherence_transaction_capacity` 约束 RN 共享的 read/writeback pending 数量；Home 的 read 与
+当前 `coherence_transaction_capacity` 约束 RN 共享的 coherence/writeback pending 数量；Home 的 coherence 与
 writeback pending 也共享 transaction capacity 和 DBID allocation space。它们可以承担“有限 outstanding
 coherence lifecycle”的验证语义，但不宣称等于一种 RTL MSHR 组织。完整 MSHR 通常还记录同地址等待者、
 原稳定态、返回数据/ack、post-invalidate/post-downgrade 等 transient 信息；只有当场景需要验证并发接纳、
@@ -527,8 +538,8 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 
 下列能力仍在当前切片之外：
 
-- `CleanUnique`/`MakeUnique`、clean `Evict`、自动 victim selection/writeback scheduling、CMO/DVM 和
-  并发 line transient/hazard；
+- dirty-peer `CleanUnique`、`MakeUnique`、clean `Evict`、自动 victim selection/writeback scheduling、
+  CMO/DVM 和并发 line transient/hazard；
 - dirty writeback 与 RetryAck/P-Credit、错误响应或同地址 Snoop 的并发组合；
 - MOESI `SD`/Owned、shared-dirty authority、forwarding snoop 和 DCT；
 - 多 requester、多 Home、address→Home 自动 authority 和 coherence-domain 自动 membership；

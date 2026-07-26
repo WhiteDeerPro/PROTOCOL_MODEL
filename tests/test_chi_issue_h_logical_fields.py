@@ -29,6 +29,18 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiSnpUniqueMessage,
     ChiWriteBackFullMessage,
 )
+from protocol_model.protocols.amba.chi.issue_h.representation.req import (
+    ChiCleanUniqueMessage,
+    ChiReqOpcode,
+)
+from protocol_model.protocols.amba.chi.issue_h.representation.rsp import (
+    ChiCompMessage,
+    ChiRspOpcode,
+)
+from protocol_model.protocols.amba.chi.issue_h.representation.snp import (
+    ChiSnpCleanInvalidMessage,
+    ChiSnpOpcode,
+)
 
 
 class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
@@ -41,6 +53,7 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
             (ChiReadSharedMessage(2, 0x8000), None),
             (ChiReadNotSharedDirtyMessage(3, 0xA000), None),
             (ChiReadUniqueMessage(4, 0xC000), None),
+            (ChiCleanUniqueMessage(5, 0xD000), None),
             (
                 ChiWriteBackFullMessage(
                     0x12,
@@ -61,6 +74,16 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                 ChiIssueHDatProfile(data_width=512),
             ),
             (ChiCompAckMessage(5), None),
+            (
+                ChiCompMessage(
+                    0x15,
+                    0x235,
+                    qos=2,
+                    completer_busy=3,
+                    trace_tag=True,
+                ),
+                None,
+            ),
             (
                 ChiCompDBIDRespMessage(
                     0x12,
@@ -83,6 +106,7 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                 ),
                 None,
             ),
+            (ChiSnpCleanInvalidMessage(10, 0xD000), None),
             (
                 ChiCompDataMessage(
                     9,
@@ -120,6 +144,173 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                     message.chi_channel.value,
                     record.to_data()["channel"],
                 )
+
+    def test_clean_unique_forms_have_spec_opcodes_and_exact_fields(
+        self,
+    ) -> None:
+        request = ChiCleanUniqueMessage(0x15, 0xD000)
+        snoop = ChiSnpCleanInvalidMessage(0x105, 0xD000)
+        completion = ChiCompMessage(0x15, 0x235)
+        cases = (
+            (
+                request,
+                ChiReqOpcode.CLEAN_UNIQUE,
+                (
+                    "Opcode",
+                    "TxnID",
+                    "Addr",
+                    "Size",
+                    "QoS",
+                    "PAS",
+                    "LikelyShared",
+                    "AllowRetry",
+                    "Order",
+                    "PCrdType",
+                    "MemAttr",
+                    "SnpAttr",
+                    "Excl",
+                    "ExpCompAck",
+                    "TagOp",
+                    "TraceTag",
+                ),
+            ),
+            (
+                snoop,
+                ChiSnpOpcode.SNP_CLEAN_INVALID,
+                (
+                    "Opcode",
+                    "TxnID",
+                    "Addr",
+                    "QoS",
+                    "PAS",
+                    "DoNotGoToSD",
+                    "RetToSrc",
+                    "TraceTag",
+                ),
+            ),
+            (
+                completion,
+                ChiRspOpcode.COMP,
+                (
+                    "Opcode",
+                    "TxnID",
+                    "DBID",
+                    "QoS",
+                    "RespErr",
+                    "Resp",
+                    "CBusy",
+                    "TagOp",
+                    "TraceTag",
+                ),
+            ),
+        )
+
+        for message, opcode, expected_fields in cases:
+            with self.subTest(message=type(message).__name__):
+                record = self.codec.encode(message)
+
+                self.assertEqual(opcode, message.opcode)
+                self.assertEqual(expected_fields, tuple(record.fields))
+                self.assertEqual(message, self.codec.decode(record))
+
+        self.assertEqual(ChiRespCode.UC, completion.response)
+        self.assertEqual(0x15, completion.transaction_id)
+        self.assertEqual(0x235, completion.data_buffer_id)
+        self.assertTrue(snoop.do_not_go_to_shared_dirty)
+        self.assertFalse(snoop.return_to_source)
+
+    def test_clean_unique_profile_rejects_out_of_slice_fields(self) -> None:
+        invalid_cases = (
+            (
+                ChiCleanUniqueMessage(1, 0x8000, size=5),
+                "Size=6",
+            ),
+            (
+                ChiCleanUniqueMessage(
+                    1,
+                    0x8000,
+                    snoop_attribute=False,
+                ),
+                "SnpAttr=1",
+            ),
+            (
+                ChiCleanUniqueMessage(
+                    1,
+                    0x8000,
+                    expect_completion_ack=False,
+                ),
+                "ExpCompAck=1",
+            ),
+            (
+                ChiCleanUniqueMessage(
+                    1,
+                    0x8000,
+                    exclusive=True,
+                ),
+                "Excl=0",
+            ),
+            (
+                ChiCleanUniqueMessage(
+                    1,
+                    0x8000,
+                    likely_shared=True,
+                ),
+                "LikelyShared=0",
+            ),
+            (
+                ChiSnpCleanInvalidMessage(
+                    2,
+                    0x8000,
+                    do_not_go_to_shared_dirty=False,
+                ),
+                "DoNotGoToSD",
+            ),
+            (
+                ChiSnpCleanInvalidMessage(
+                    2,
+                    0x8000,
+                    return_to_source=True,
+                ),
+                "RetToSrc",
+            ),
+            (
+                ChiCompMessage(
+                    1,
+                    2,
+                    response=ChiRespCode.SC,
+                ),
+                "Resp=UC",
+            ),
+            (
+                ChiCompMessage(
+                    1,
+                    2,
+                    response_error=1,
+                ),
+                "RespErr=0",
+            ),
+            (
+                ChiCompMessage(
+                    1,
+                    2,
+                    tag_operation=1,
+                ),
+                "TagOp=0",
+            ),
+        )
+
+        for message, expected in invalid_cases:
+            with self.subTest(
+                message=type(message).__name__,
+                expected=expected,
+            ):
+                reasons = self.codec.explain_encode(message)
+
+                self.assertTrue(
+                    any(expected in reason for reason in reasons)
+                )
+                with self.assertRaises(ChiLogicalCodecError):
+                    self.codec.encode(message)
 
     def test_channel_and_opcode_jointly_select_the_message_form(self) -> None:
         request = self.codec.encode(

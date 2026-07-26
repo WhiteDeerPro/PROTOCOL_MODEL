@@ -77,9 +77,10 @@ integer/enum 字段规范化为非负整数；缺字段、额外字段、错误�
 边界得到可解释诊断。相同 opcode 数值必须与 channel 联合判别，例如 REQ、RSP 和 SNP 的 `0x07` 分别选择
 不同 message form。
 
-当前 codec 覆盖已实现的 17 个 protocol-message form，包括 read、snoop、completion、Retry/P-Credit 与
-writeback 使用的 REQ/RSP/SNP/DAT form。因此 clean ReadUnique、dirty unique responsibility transfer、
-`WriteBackFull→CompDBIDResp→CopyBackWrData`，以及
+当前 codec 覆盖已实现的 20 个 protocol-message form，包括 read、dataless permission upgrade、snoop、
+completion、Retry/P-Credit 与 writeback 使用的 REQ/RSP/SNP/DAT form。因此
+`CleanUnique→SnpCleanInvalid→SnpResp→Comp→CompAck`、clean ReadUnique、dirty unique
+responsibility transfer、`WriteBackFull→CompDBIDResp→CopyBackWrData`，以及
 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`
 都可以完整 round-trip。`SrcID/TgtID`、packet index/count 仍归 `ChiNetworkPacket`；四个 channel 的
 `LCrdReturn` 属于 hop-local maintenance flit，也不进入 message codec。SNP `Addr` 继续使用 normalized
@@ -87,7 +88,9 @@ full byte address，packed SNPFLIT 省略低位的处理留给未来 bit codec�
 
 codec 复用 channel profile 作为合法性权威。本轮同时补齐了 coherent Read 的 Issue H 属性限制：
 `Size=6`、`SnpAttr=1`、`MemAttr∈{0101,1101}`、`Order=0` 和 `ExpCompAck=1`；`ReadUnique` 还要求
-`Excl=0`、`LikelyShared=0`。非数据 `SnpResp` 拒绝所有 PassDirty 编码，PassDirty 只能由带数据的
+`Excl=0`、`LikelyShared=0`。当前 `CleanUnique` profile 同样固定 full-line、snoopable、
+`ExpCompAck=1`，`SnpCleanInvalid` 固定 `DoNotGoToSD=1/RetToSrc=0`，`Comp` 固定普通
+`Comp_UC`。非数据 `SnpResp` 拒绝所有 PassDirty 编码，PassDirty 只能由带数据的
 `SnpRespData` 携带。这些规则留在相应 message/profile，codec 不维护第二份判定逻辑。
 
 codec registry 只表示“当前能够投影哪些 typed form”。未登记的新 message 仍可由
@@ -269,9 +272,12 @@ directory owner。read 与 writeback 在 RN 共享 TxnID/capacity，在 Home 共
 具名 pending record。当前 API 提交一条已经选中的 dirty line；LRU、victim selection、自动 eviction trigger
 和 writeback queue scheduling 尚未包含在该 feature 中。
 
-`SC` 仍不能直接执行本地写；当前可先从 `SC` 发出 `ReadUnique`，重新取得 full-line 数据并失效其他
-holder，安装为 `UC` 后再以 local write 进入 `UD`。`CleanUnique`/`MakeUnique` 等不重取数据的升级形式
-尚未实现。普通 `ReadShared` 命中 `UD` 的 policy 也仍在本切片之外；调用方若需要 no-SD MESI 行为，应显式使用
+`SC` 仍不能直接执行本地写；当前可以发出 `CleanUnique`，保留本地 full-line 数据，由 Home 以
+`SnpCleanInvalid` 失效其他 clean sharer，收到无数据 `Comp_UC` 后进入 `UC`，再由 local write 进入
+`UD`。这避免了旧路径用 `ReadUnique` 重取同一行；旧路径仍保留给真正需要数据的 read lifecycle。首版
+`CleanUnique` 只覆盖 requester `SC` 和 peer `SC/I`，dirty peer 所需的
+`SnpRespData_I_PD` 与 Home memory update 明确留给后续；`MakeUnique` 也尚未实现。普通
+`ReadShared` 命中 `UD` 的 policy 仍在本切片之外；调用方若需要 no-SD MESI 行为，应显式使用
 `ReadNotSharedDirty`。resolver/session 继续拒绝 clean `ReadShared` 与任一允许 `UD` 的 feature
 组合，避免把尚未定义的 shared-dirty policy 延迟成运行时 fault；这项阶段边界不表示 CHI 协议禁止这些
 transaction 共存。
@@ -307,8 +313,10 @@ Requester→Home REQ、Home→Requester RSP 和 Requester→Home DAT 三条 flow
 dependency，也不要求 local-write capability，只声明这笔 read/snoop/completion 所需的角色和 flow。
 `CHI_MESI_NO_SD_REQUIRED_FEATURES` 是 system 侧 policy preset：它同时选择 dirty unique transfer 与
 ReadNotSharedDirty，dependency closure 再由前者带入 clean ReadUnique。它们共享实现原件，
-但一个 feature 的可用性不推导另一个 opcode 的行为。clean coherent read 合同检查三种参与角色和五种有向
-flow schema：
+但一个 feature 的可用性不推导另一个 opcode 的行为。独立
+`CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS` 合同闭合 Requester→Home `REQ`、Home→Snoopee `SNP`、
+Snoopee→Home `RSP`、Home→Requester `RSP` 和 Requester→Home CompAck `RSP`，不声明 DAT flow。
+clean coherent read 合同则检查三种参与角色和五种有向 flow schema：
 Requester→Home REQ、Home→Snoopee SNP、Snoopee→Home RSP、Home→Requester DAT，以及
 Requester→Home CompAck RSP。dirty-data 路径再增加 Snoopee→Home DAT；RSP 与 DAT 回程不会因目标相同
 而合并成一条虚构 channel。两个 RSP 方向分别闭合。独立 capability API 仍允许用 `role_sets` 检查任意
@@ -328,7 +336,8 @@ role authority，不能绕过构造期边界。当前窄 profile 要求每个绑
 等 flow evidence 保存所选 identity 后才适合放宽 compound binding。
 
 packet-delivery session 继续作为较小的 participant runtime；topology-driven 组合 session 已闭合
-clean `ReadUnique` 经 XP 的七 packet witness，也已闭合 dirty owner 经 XP 返回
+clean-peer `CleanUnique` 经 direct 与单 XP topology 的五 packet witness，以及 clean `ReadUnique`
+经 XP 的七 packet witness；它也已闭合 dirty owner 经 XP 返回
 `SnpRespData_I_PD`、再以 `CompData_UD_PD` 转移责任的五 packet witness。第三条五 packet witness
 执行 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`，
 并检查 Home
@@ -343,8 +352,8 @@ direct topology、调用方组装的一个或多个 router topology 和具体 FI
 不属于 CHI 核心 API。因此“尚未保存一份经 router 的完整 retry 演示”是实验覆盖缺口；RSP 已经进入
 network/router 执行分支。
 
-仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、`CleanUnique`/`MakeUnique`、clean
-`Evict`、自动 victim/writeback scheduling、writeback 与 Retry/error/Snoop 的并发组合、
+仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、dirty-peer `CleanUnique`、
+`MakeUnique`、clean `Evict`、自动 victim/writeback scheduling、writeback 与 Retry/error/Snoop 的并发组合、
 same-line transient/hazard、`SD`/Owned、forwarding snoop、真实 snoop filter、WriteNoSnp、
 multi-packet DAT、同一 runtime 的 multi-Home/SAM 选择、跨 domain 执行，以及跨 hop wait-for/deadlock
 分析。准确状态只在

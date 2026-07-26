@@ -9,7 +9,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiCacheLine,
     ChiCacheState,
     ChiCoherentHomeNode,
-    ChiCoherentReadPending,
+    ChiCoherentTransactionPending,
     ChiHomeDirectoryEntry,
     ChiRnAcceptSnoop,
     ChiRnWriteCacheLine,
@@ -349,7 +349,7 @@ class ChiIssueHDirtyUniqueCoherenceTest(unittest.TestCase):
 
     def test_one_transaction_cannot_collect_two_dirty_owners(self) -> None:
         with self.assertRaisesRegex(ValueError, "two dirty owners"):
-            ChiCoherentReadPending(
+            ChiCoherentTransactionPending(
                 requester_id=self.REQUESTER,
                 request=ChiReadUniqueMessage(0x12, self.ADDRESS),
                 snoop_transaction_id=0x100,

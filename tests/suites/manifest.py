@@ -26,6 +26,8 @@ CHI_MODULES = (
     "tests.test_chi_issue_h_address_home",
     "tests.test_chi_issue_h_cache_vdut",
     "tests.test_chi_issue_h_capability",
+    "tests.test_chi_issue_h_clean_unique_participants",
+    "tests.test_chi_issue_h_clean_unique_system",
     "tests.test_chi_issue_h_coherence_authority",
     "tests.test_chi_issue_h_coherence_network",
     "tests.test_chi_issue_h_coherence_representation",
@@ -140,6 +142,7 @@ SMOKE_MODULES = (
     "tests.test_virtual_dut_translation",
     "tests.test_system_protocol",
     "tests.test_chi_issue_h_coherence_authority",
+    "tests.test_chi_issue_h_clean_unique_system",
     "tests.test_chi_issue_h_transport_connection",
     "tests.test_chi_issue_h_resolved_coherence",
     "tests.test_virtual_dut_recipe_catalog",
@@ -151,6 +154,7 @@ SMOKE_MODULES = (
 INTEGRATION_MODULES = (
     "tests.test_amba_bridge_chain",
     "tests.test_chi_issue_h_capability",
+    "tests.test_chi_issue_h_clean_unique_system",
     "tests.test_chi_issue_h_coherence_authority",
     "tests.test_chi_issue_h_coherence_network",
     "tests.test_chi_issue_h_identity",
@@ -267,6 +271,17 @@ LIMITATION_NEGATIVES = (
             "test_read_shared_waits_for_a_dirty_shared_policy"
         ),
         turn_positive_when="the dirty-shared transition policy is explicitly modeled",
+    ),
+    LimitationNegative(
+        test_id=(
+            "tests.test_chi_issue_h_clean_unique_participants."
+            "ChiIssueHCleanUniqueParticipantTest."
+            "test_snp_clean_invalid_rejects_a_dirty_peer_without_mutation"
+        ),
+        turn_positive_when=(
+            "the CleanUnique feature carries SnpRespData_I_PD and closes "
+            "the Home memory-update obligation"
+        ),
     ),
 )
 

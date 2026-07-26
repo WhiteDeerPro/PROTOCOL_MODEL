@@ -1,9 +1,9 @@
 """Typed forms for the first executable CHI Issue H RSP-channel slice.
 
-The current forms cover Request Retry, non-data Snoop response, completion
-acknowledgement, and the combined completion/data-buffer grant used by a
-CopyBack Write.  Routing NodeIDs are added by the Network packet rather than
-repeated in each message form.
+The current forms cover Request Retry, non-data Snoop response, completion,
+completion acknowledgement, and the combined completion/data-buffer grant
+used by a CopyBack Write.  Routing NodeIDs are added by the Network packet
+rather than repeated in each message form.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ class ChiRspOpcode(IntEnum):
     SNP_RESP = 0x01
     COMP_ACK = 0x02
     RETRY_ACK = 0x03
+    COMP = 0x04
     COMP_DBID_RESP = 0x05
     PROTOCOL_CREDIT_GRANT = 0x07
 
@@ -149,6 +150,65 @@ class ChiCompAckMessage:
 
 
 @dataclass(frozen=True)
+class ChiCompMessage:
+    """Completion carrying the original TxnID and a Home-owned DBID.
+
+    The generic RSP form keeps the legal completion-state encodings distinct
+    from the current executable profile.  That profile deliberately accepts
+    only ``Comp_UC`` for the first ``CleanUnique`` lifecycle; cross-message
+    TxnID/DBID correlation remains a transaction contract.
+    """
+
+    chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.RSP
+    chi_item_kind: ClassVar[ChiChannelItemKind] = (
+        ChiChannelItemKind.PROTOCOL_MESSAGE
+    )
+
+    transaction_id: int
+    data_buffer_id: int
+    qos: int = 0
+    response_error: int = 0
+    response: ChiRespCode | int = ChiRespCode.UC
+    completer_busy: int = 0
+    tag_operation: int = 0
+    trace_tag: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value, width in (
+            ("transaction_id", self.transaction_id, 12),
+            ("data_buffer_id", self.data_buffer_id, 12),
+            ("qos", self.qos, 4),
+            ("response_error", self.response_error, 2),
+            ("response", self.response, 3),
+            ("completer_busy", self.completer_busy, 3),
+            ("tag_operation", self.tag_operation, 2),
+        ):
+            _require_uint(name, value, width)
+        _require_bool("trace_tag", self.trace_tag)
+        try:
+            response = ChiRespCode(self.response)
+        except ValueError as error:
+            raise ValueError("Comp contains a reserved Resp encoding") from error
+        if response in (
+            ChiRespCode.SD,
+            ChiRespCode.I_PD,
+            ChiRespCode.SC_PD,
+        ):
+            raise ValueError("Comp contains a reserved Resp encoding")
+        object.__setattr__(self, "response", response)
+
+    @property
+    def opcode(self) -> ChiRspOpcode:
+        return ChiRspOpcode.COMP
+
+    @property
+    def semantic_key(self) -> int:
+        """Return the original Requester-owned transaction identifier."""
+
+        return self.transaction_id
+
+
+@dataclass(frozen=True)
 class ChiCompDBIDRespMessage:
     """Combined completion and data-buffer grant for a Write transaction.
 
@@ -251,6 +311,7 @@ class ChiRspLCrdReturn:
 ChiRspProtocolMessage: TypeAlias = (
     ChiSnpRespMessage
     | ChiCompAckMessage
+    | ChiCompMessage
     | ChiCompDBIDRespMessage
     | ChiRetryAckMessage
     | ChiPCrdGrantMessage
@@ -282,20 +343,32 @@ class ChiIssueHRspProfile:
             (
                 ChiSnpRespMessage,
                 ChiCompAckMessage,
+                ChiCompMessage,
                 ChiCompDBIDRespMessage,
                 ChiRetryAckMessage,
                 ChiPCrdGrantMessage,
             ),
         ):
             return ("expected a supported RSP protocol message",)
-        if (
-            isinstance(message, ChiCompDBIDRespMessage)
-            and message.response != 0
-        ):
-            return (
+        reasons: list[str] = []
+        if isinstance(message, ChiCompDBIDRespMessage) and message.response != 0:
+            reasons.append(
                 "CompDBIDResp requires Resp=0 for a Write completion",
             )
-        return ()
+        if isinstance(message, ChiCompMessage):
+            if message.response is not ChiRespCode.UC:
+                reasons.append(
+                    "the current Comp profile requires Resp=UC"
+                )
+            if message.response_error != 0:
+                reasons.append(
+                    "the current Comp profile requires RespErr=0"
+                )
+            if message.tag_operation != 0:
+                reasons.append(
+                    "the current Comp profile requires TagOp=0"
+                )
+        return tuple(reasons)
 
     def contains(self, message: ChiRspProtocolMessage) -> bool:
         return not self.explain(message)
@@ -304,6 +377,7 @@ class ChiIssueHRspProfile:
 __all__ = [
     "ChiIssueHRspProfile",
     "ChiCompAckMessage",
+    "ChiCompMessage",
     "ChiCompDBIDRespMessage",
     "ChiPCrdGrantMessage",
     "ChiRetryAckMessage",

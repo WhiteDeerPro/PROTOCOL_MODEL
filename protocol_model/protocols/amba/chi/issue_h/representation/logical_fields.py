@@ -38,6 +38,7 @@ from .domain import (
     ChiProtocolMessage,
 )
 from .req import (
+    ChiCleanUniqueMessage,
     ChiPCrdReturnMessage,
     ChiReadNoSnpMessage,
     ChiReadNotSharedDirtyMessage,
@@ -48,6 +49,7 @@ from .req import (
 )
 from .rsp import (
     ChiCompAckMessage,
+    ChiCompMessage,
     ChiCompDBIDRespMessage,
     ChiPCrdGrantMessage,
     ChiRetryAckMessage,
@@ -55,6 +57,7 @@ from .rsp import (
     ChiSnpRespMessage,
 )
 from .snp import (
+    ChiSnpCleanInvalidMessage,
     ChiSnpOpcode,
     ChiSnpNotSharedDirtyMessage,
     ChiSnpSharedMessage,
@@ -412,6 +415,13 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
     ),
     _schema(
         ChiChannelKind.REQ,
+        ChiReqOpcode.CLEAN_UNIQUE,
+        7,
+        ChiCleanUniqueMessage,
+        _READ_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
         ChiReqOpcode.WRITE_BACK_FULL,
         7,
         ChiWriteBackFullMessage,
@@ -449,6 +459,22 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
             _integer("TxnID", "transaction_id", 12),
             _integer("QoS", "qos", 4),
             _integer("Resp", "response", 3),
+            _boolean("TraceTag", "trace_tag"),
+        ),
+    ),
+    _schema(
+        ChiChannelKind.RSP,
+        ChiRspOpcode.COMP,
+        5,
+        ChiCompMessage,
+        (
+            _integer("TxnID", "transaction_id", 12),
+            _integer("DBID", "data_buffer_id", 12),
+            _integer("QoS", "qos", 4),
+            _integer("RespErr", "response_error", 2),
+            _integer("Resp", "response", 3),
+            _integer("CBusy", "completer_busy", 3),
+            _integer("TagOp", "tag_operation", 2),
             _boolean("TraceTag", "trace_tag"),
         ),
     ),
@@ -510,6 +536,13 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
         ChiSnpOpcode.SNP_UNIQUE,
         5,
         ChiSnpUniqueMessage,
+        _SNOOP_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.SNP,
+        ChiSnpOpcode.SNP_CLEAN_INVALID,
+        5,
+        ChiSnpCleanInvalidMessage,
         _SNOOP_FIELDS,
     ),
     _schema(

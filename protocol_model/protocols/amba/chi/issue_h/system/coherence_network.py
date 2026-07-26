@@ -6,11 +6,11 @@ between those boundaries.  One participant transition can emit several
 packets, so its output is saved atomically as an explicit egress batch and
 admitted to the network one packet at a time.
 
-The current feature set includes clean ReadShared/ReadUnique, the UD
-ReadUnique owner-transfer path, the MESI no-SharedDirty downgrade path, and
-explicit dirty WriteBackFull.  Retry, automatic victim selection,
-shared-dirty ownership, forwarding snoops, and a cycle-accurate Network
-Interface remain separate extensions.
+The current feature set includes clean ReadShared/ReadUnique, clean-peer
+CleanUnique, the UD ReadUnique owner-transfer path, the MESI no-SharedDirty
+downgrade path, and explicit dirty WriteBackFull.  Retry, dirty-peer
+CleanUnique, automatic victim selection, shared-dirty ownership, forwarding
+snoops, and a cycle-accurate Network Interface remain separate extensions.
 """
 
 from __future__ import annotations
@@ -40,6 +40,7 @@ from .coherence import (
     ChiCoherenceSession,
     ChiCoherenceState,
     ChiDeliverCoherencePacket,
+    ChiSubmitCleanUnique,
     ChiSubmitCoherentRead,
     ChiSubmitWriteBackFull,
     ChiWriteUniqueCacheLine,
@@ -64,6 +65,7 @@ class ChiAdvanceCoherenceNetwork:
 
 ChiCoherenceNetworkAction = (
     ChiSubmitCoherentRead
+    | ChiSubmitCleanUnique
     | ChiSubmitWriteBackFull
     | ChiWriteUniqueCacheLine
     | ChiAdvanceCoherenceNetwork
@@ -420,7 +422,11 @@ class ChiCoherenceNetworkSession(
             return SemanticStep(state, fault=fault)
         if isinstance(
             action,
-            (ChiSubmitCoherentRead, ChiSubmitWriteBackFull),
+            (
+                ChiSubmitCoherentRead,
+                ChiSubmitCleanUnique,
+                ChiSubmitWriteBackFull,
+            ),
         ):
             return self._submit(state, action)
         if isinstance(action, ChiWriteUniqueCacheLine):

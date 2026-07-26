@@ -6,9 +6,10 @@ Request Node that owns the corresponding protocol state.  Emitted packets can
 then be passed back through any compatible ``ChiTransportNetworkSession``.
 
 The profile is intentionally narrow.  It closes clean ``ReadShared`` and
-``ReadUnique`` lifecycles, the ``UD`` owner-transfer path for ``ReadUnique``,
-the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path, and explicit
-``UD`` ``WriteBackFull``.  Retry, automatic victim selection, forwarding
+``ReadUnique`` lifecycles, a clean-peer ``CleanUnique`` permission upgrade,
+the ``UD`` owner-transfer path for ``ReadUnique``, the MESI no-SharedDirty
+``ReadNotSharedDirty`` downgrade path, and explicit ``UD`` ``WriteBackFull``.
+Retry, dirty-peer ``CleanUnique``, automatic victim selection, forwarding
 snoops, and packed pin observations remain separate extensions.
 """
 
@@ -33,14 +34,17 @@ from ..participants.coherence import (
     ChiCoherentHomeState,
     ChiCoherentRnNode,
     ChiCoherentRnState,
+    ChiHomeAcceptCleanUnique,
     ChiHomeAcceptCompAck,
     ChiHomeAcceptCopyBackData,
     ChiHomeAcceptCoherentRead,
     ChiHomeAcceptSnoopResponse,
     ChiHomeAcceptWriteBackFull,
+    ChiRnAcceptComp,
     ChiRnAcceptCompDBIDResp,
     ChiRnAcceptCompData,
     ChiRnAcceptSnoop,
+    ChiRnIssueCleanUnique,
     ChiRnIssueCoherentRead,
     ChiRnIssueWriteBackFull,
     ChiRnWriteCacheLine,
@@ -52,6 +56,7 @@ from ..representation.dat import (
 )
 from ..representation.packet import ChiNetworkPacket
 from ..representation.req import (
+    ChiCleanUniqueMessage,
     ChiReadNotSharedDirtyMessage,
     ChiReadSharedMessage,
     ChiReadUniqueMessage,
@@ -60,9 +65,11 @@ from ..representation.req import (
 from ..representation.rsp import (
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
+    ChiCompMessage,
     ChiSnpRespMessage,
 )
 from ..representation.snp import (
+    ChiSnpCleanInvalidMessage,
     ChiSnpNotSharedDirtyMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
@@ -70,6 +77,7 @@ from ..representation.snp import (
 from .capability import (
     CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
     CHI_FEATURE_DIRTY_WRITEBACK,
     CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
@@ -86,6 +94,7 @@ _CLEAN_READ_FEATURES = frozenset(
 _COHERENCE_FEATURES = frozenset(
     (
         *_CLEAN_READ_FEATURES,
+        CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
         CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
         CHI_FEATURE_DIRTY_WRITEBACK,
         CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
@@ -122,6 +131,26 @@ class ChiSubmitCoherentRead:
             raise TypeError(
                 "coherent read submission requires ReadShared, "
                 "ReadNotSharedDirty, or ReadUnique"
+            )
+
+
+@dataclass(frozen=True)
+class ChiSubmitCleanUnique:
+    """Ask one registered Request Node to upgrade a resident ``SC`` line."""
+
+    requester_node_id: int
+    request: ChiCleanUniqueMessage
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.requester_node_id, int)
+            or isinstance(self.requester_node_id, bool)
+            or self.requester_node_id < 0
+        ):
+            raise ValueError("CHI requester NodeID must be non-negative")
+        if not isinstance(self.request, ChiCleanUniqueMessage):
+            raise TypeError(
+                "CleanUnique submission requires CleanUnique"
             )
 
 
@@ -180,6 +209,7 @@ class ChiSubmitWriteBackFull:
 
 ChiCoherenceAction = (
     ChiSubmitCoherentRead
+    | ChiSubmitCleanUnique
     | ChiSubmitWriteBackFull
     | ChiDeliverCoherencePacket
     | ChiWriteUniqueCacheLine
@@ -221,7 +251,7 @@ class ChiCoherenceInvariantMonitor:
                 "stable coherence check requires an empty Home transaction table"
             )
         for node_id, state in request_nodes.items():
-            if state.pending_reads or state.pending_writebacks:
+            if state.pending_transactions or state.pending_writebacks:
                 reasons.append(
                     f"RN {node_id} still owns pending coherent transactions"
                 )
@@ -635,7 +665,7 @@ class ChiCoherenceSession(
             not state.home.pending
             and not state.home.pending_writebacks
             and all(
-                not item.pending_reads
+                not item.pending_transactions
                 and not item.pending_writebacks
                 for item in state.request_nodes.values()
             )
@@ -655,6 +685,8 @@ class ChiCoherenceSession(
             return SemanticStep(state, fault=profile_fault)
         if isinstance(action, ChiSubmitCoherentRead):
             return self._issue(state, action)
+        if isinstance(action, ChiSubmitCleanUnique):
+            return self._issue_clean_unique(state, action)
         if isinstance(action, ChiSubmitWriteBackFull):
             return self._issue_writeback(state, action)
         if isinstance(action, ChiDeliverCoherencePacket):
@@ -804,6 +836,71 @@ class ChiCoherenceSession(
             transition,
         )
 
+    def _issue_clean_unique(
+        self,
+        state: ChiCoherenceState,
+        action: ChiSubmitCleanUnique,
+    ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        authority_fault = self._address_authority_fault(
+            action.request.address,
+            1 << action.request.size,
+        )
+        if authority_fault is not None:
+            return SemanticStep(state, fault=authority_fault)
+        node = self.request_nodes.get(action.requester_node_id)
+        if node is None:
+            return self._fault(
+                state,
+                "requester_identity",
+                f"NodeID {action.requester_node_id} is not a registered RN",
+            )
+        if action.requester_node_id not in self.requester_node_ids:
+            return self._fault(
+                state,
+                "requester_authority",
+                f"NodeID {action.requester_node_id} is registered only as "
+                "a Snoopee in this construction",
+            )
+        if (
+            CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+            not in self.enabled_features
+        ):
+            return self._fault(
+                state,
+                "feature_enablement",
+                "CleanUnique is not enabled by the resolved feature contract",
+            )
+        entry = state.home.directory.get(action.request.address)
+        if entry is not None:
+            if entry.unique_owner is not None:
+                return self._fault(
+                    state,
+                    "clean_unique_dirty_peer",
+                    "the clean-peer CleanUnique slice requires a shared "
+                    "directory state without a Unique owner",
+                )
+            for peer_id in entry.sharers - {action.requester_node_id}:
+                peer = state.request_nodes.get(peer_id)
+                line = None if peer is None else peer.line_at(
+                    action.request.address
+                )
+                if line is not None and line.state is ChiCacheState.UD:
+                    return self._fault(
+                        state,
+                        "clean_unique_dirty_peer",
+                        f"RN {peer_id} holds a dirty peer copy; this "
+                        "CleanUnique slice has no DAT return flow",
+                    )
+        transition = node.step(
+            state.request_nodes[action.requester_node_id],
+            ChiRnIssueCleanUnique(action.request),
+        )
+        return self._replace_request_node(
+            state,
+            action.requester_node_id,
+            transition,
+        )
+
     def _issue(
         self,
         state: ChiCoherenceState,
@@ -870,7 +967,26 @@ class ChiCoherenceSession(
             if authority_fault is not None:
                 return SemanticStep(state, fault=authority_fault)
         if packet.target_id == self.home.node_id:
-            if isinstance(
+            if isinstance(message, ChiCleanUniqueMessage):
+                if packet.source_id not in self.requester_node_ids:
+                    return self._fault(
+                        state,
+                        "requester_authority",
+                        f"NodeID {packet.source_id} is not the requester "
+                        "of this construction",
+                    )
+                if (
+                    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+                    not in self.enabled_features
+                ):
+                    return self._fault(
+                        state,
+                        "feature_enablement",
+                        "CleanUnique is not enabled by the resolved feature "
+                        "contract",
+                    )
+                action = ChiHomeAcceptCleanUnique(packet)
+            elif isinstance(
                 message,
                 (
                     ChiReadSharedMessage,
@@ -969,6 +1085,7 @@ class ChiCoherenceSession(
         if isinstance(
             message,
             (
+                ChiSnpCleanInvalidMessage,
                 ChiSnpSharedMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
@@ -1005,6 +1122,24 @@ class ChiCoherenceSession(
                     "Snoop packet does not match one Home-issued target",
                 )
             action = ChiRnAcceptSnoop(packet)
+        elif isinstance(message, ChiCompMessage):
+            if packet.target_id not in self.requester_node_ids:
+                return self._fault(
+                    state,
+                    "requester_authority",
+                    f"NodeID {packet.target_id} cannot receive Comp "
+                    "in this construction",
+                )
+            if (
+                CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+                not in self.enabled_features
+            ):
+                return self._fault(
+                    state,
+                    "feature_enablement",
+                    "Comp_UC is not enabled by the resolved feature contract",
+                )
+            action = ChiRnAcceptComp(packet)
         elif isinstance(message, ChiCompDataMessage):
             if packet.target_id not in self.requester_node_ids:
                 return self._fault(
@@ -1078,11 +1213,14 @@ class ChiCoherenceSession(
     @staticmethod
     def _snoop_feature(
         snoop: (
-            ChiSnpSharedMessage
+            ChiSnpCleanInvalidMessage
+            | ChiSnpSharedMessage
             | ChiSnpNotSharedDirtyMessage
             | ChiSnpUniqueMessage
         ),
     ) -> ChiFeatureKey:
+        if isinstance(snoop, ChiSnpCleanInvalidMessage):
+            return CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
         if isinstance(snoop, ChiSnpUniqueMessage):
             return CHI_FEATURE_CLEAN_READ_UNIQUE
         if isinstance(snoop, ChiSnpNotSharedDirtyMessage):
@@ -1153,6 +1291,7 @@ __all__ = [
     "ChiCoherenceSession",
     "ChiCoherenceState",
     "ChiDeliverCoherencePacket",
+    "ChiSubmitCleanUnique",
     "ChiSubmitCoherentRead",
     "ChiSubmitWriteBackFull",
     "ChiWriteUniqueCacheLine",

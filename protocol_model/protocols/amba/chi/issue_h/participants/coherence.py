@@ -34,6 +34,7 @@ from ..representation.dat import (
 )
 from ..representation.packet import ChiNetworkPacket
 from ..representation.req import (
+    ChiCleanUniqueMessage,
     ChiReadNotSharedDirtyMessage,
     ChiReadSharedMessage,
     ChiReadUniqueMessage,
@@ -41,11 +42,13 @@ from ..representation.req import (
 )
 from ..representation.response import ChiRespCode
 from ..representation.rsp import (
+    ChiCompMessage,
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
     ChiSnpRespMessage,
 )
 from ..representation.snp import (
+    ChiSnpCleanInvalidMessage,
     ChiSnpNotSharedDirtyMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
@@ -107,8 +110,13 @@ ChiCoherentReadMessage = (
     | ChiReadNotSharedDirtyMessage
     | ChiReadUniqueMessage
 )
+ChiCoherenceRequestMessage = (
+    ChiCoherentReadMessage
+    | ChiCleanUniqueMessage
+)
 ChiCoherentSnoopMessage = (
-    ChiSnpSharedMessage
+    ChiSnpCleanInvalidMessage
+    | ChiSnpSharedMessage
     | ChiSnpNotSharedDirtyMessage
     | ChiSnpUniqueMessage
 )
@@ -134,6 +142,17 @@ class ChiRnIssueCoherentRead:
 
 
 @dataclass(frozen=True)
+class ChiRnIssueCleanUnique:
+    """Request a data-less ``SC`` to ``UC`` permission upgrade."""
+
+    request: ChiCleanUniqueMessage
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, ChiCleanUniqueMessage):
+            raise TypeError("RN CleanUnique issue requires CleanUnique")
+
+
+@dataclass(frozen=True)
 class ChiRnAcceptSnoop:
     packet: ChiNetworkPacket
 
@@ -141,6 +160,7 @@ class ChiRnAcceptSnoop:
         if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
             self.packet.message,
             (
+                ChiSnpCleanInvalidMessage,
                 ChiSnpSharedMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
@@ -149,6 +169,19 @@ class ChiRnAcceptSnoop:
             raise TypeError(
                 "RN snoop action requires a supported clean Snoop packet"
             )
+
+
+@dataclass(frozen=True)
+class ChiRnAcceptComp:
+    """Accept one data-less completion from the configured Home."""
+
+    packet: ChiNetworkPacket
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
+            self.packet.message, ChiCompMessage
+        ):
+            raise TypeError("RN data-less completion action requires Comp")
 
 
 @dataclass(frozen=True)
@@ -213,7 +246,9 @@ class ChiRnAcceptCompDBIDResp:
 
 ChiCoherentRnAction = (
     ChiRnIssueCoherentRead
+    | ChiRnIssueCleanUnique
     | ChiRnAcceptSnoop
+    | ChiRnAcceptComp
     | ChiRnAcceptCompData
     | ChiRnWriteCacheLine
     | ChiRnIssueWriteBackFull
@@ -235,7 +270,7 @@ class ChiCoherentRnState:
         default_factory=CacheLineStoreState
     )
     permissions: Mapping[int, ChiCacheState] = field(default_factory=dict)
-    pending_reads: Mapping[int, ChiCoherentReadMessage] = field(
+    pending_transactions: Mapping[int, ChiCoherenceRequestMessage] = field(
         default_factory=dict
     )
     pending_writebacks: Mapping[int, ChiWriteBackFullMessage] = field(
@@ -268,11 +303,12 @@ class ChiCoherentRnState:
                 "resident cache data must have exactly one non-I CHI "
                 "permission"
             )
-        pending = dict(self.pending_reads)
+        pending = dict(self.pending_transactions)
         if any(
             not isinstance(
                 item,
                 (
+                    ChiCleanUniqueMessage,
                     ChiReadSharedMessage,
                     ChiReadNotSharedDirtyMessage,
                     ChiReadUniqueMessage,
@@ -282,7 +318,7 @@ class ChiCoherentRnState:
             for transaction_id, item in pending.items()
         ):
             raise ValueError(
-                "RN pending-read mapping key must match request TxnID"
+                "RN pending-transaction mapping key must match request TxnID"
             )
         object.__setattr__(
             self,
@@ -291,7 +327,7 @@ class ChiCoherentRnState:
         )
         object.__setattr__(
             self,
-            "pending_reads",
+            "pending_transactions",
             MappingProxyType(pending),
         )
         writebacks = dict(self.pending_writebacks)
@@ -305,7 +341,7 @@ class ChiCoherentRnState:
             )
         if set(pending) & set(writebacks):
             raise ValueError(
-                "RN read and writeback transactions share one TxnID space"
+                "RN coherence and writeback transactions share one TxnID space"
             )
         reserved_addresses = tuple(
             request.address for request in pending.values()
@@ -325,6 +361,15 @@ class ChiCoherentRnState:
         ):
             raise ValueError(
                 "RN pending WriteBackFull requires a resident UD line"
+            )
+        if any(
+            request.address not in resident
+            or permissions.get(request.address) is not ChiCacheState.SC
+            for request in pending.values()
+            if isinstance(request, ChiCleanUniqueMessage)
+        ):
+            raise ValueError(
+                "RN pending CleanUnique requires a resident SC line"
             )
         object.__setattr__(
             self,
@@ -359,7 +404,7 @@ class ChiCoherentRnState:
         self,
         address: int,
     ) -> tuple[
-        ChiCoherentReadMessage | ChiWriteBackFullMessage,
+        ChiCoherenceRequestMessage | ChiWriteBackFullMessage,
         ...,
     ]:
         """Return local coherent transactions reserving one cache line."""
@@ -367,7 +412,7 @@ class ChiCoherentRnState:
         _require_line_address(address)
         return tuple(
             request
-            for request in self.pending_reads.values()
+            for request in self.pending_transactions.values()
             if request.address == address
         ) + tuple(
             request
@@ -383,7 +428,7 @@ class ChiCoherentRnNode(
         ChiNetworkPacket,
     ]
 ):
-    """Restricted RN-F behavior for coherent reads and Unique dirtying."""
+    """Restricted RN-F behavior for coherent requests and Unique dirtying."""
 
     def __init__(
         self,
@@ -453,7 +498,7 @@ class ChiCoherentRnNode(
     def is_quiescent(self, state: ChiCoherentRnState) -> bool:
         return (
             isinstance(state, ChiCoherentRnState)
-            and not state.pending_reads
+            and not state.pending_transactions
             and not state.pending_writebacks
         )
 
@@ -466,8 +511,12 @@ class ChiCoherentRnNode(
             raise TypeError("coherent RN requires ChiCoherentRnState")
         if isinstance(action, ChiRnIssueCoherentRead):
             return self._issue(state, action.request)
+        if isinstance(action, ChiRnIssueCleanUnique):
+            return self._issue_clean_unique(state, action.request)
         if isinstance(action, ChiRnAcceptSnoop):
             return self._accept_snoop(state, action.packet)
+        if isinstance(action, ChiRnAcceptComp):
+            return self._accept_comp(state, action.packet)
         if isinstance(action, ChiRnAcceptCompData):
             return self._accept_comp_data(state, action.packet)
         if isinstance(action, ChiRnWriteCacheLine):
@@ -492,7 +541,7 @@ class ChiCoherentRnNode(
             return self._fault(
                 state,
                 "local_write_hazard",
-                "local write conflicts with an RN-local coherent read",
+                "local write conflicts with an RN-local coherent transaction",
             )
         line = state.line_at(address)
         if line is None or line.state is ChiCacheState.I:
@@ -517,7 +566,7 @@ class ChiCoherentRnNode(
             ChiCoherentRnState(
                 cache,
                 permissions,
-                state.pending_reads,
+                state.pending_transactions,
                 state.pending_writebacks,
             )
         )
@@ -558,7 +607,7 @@ class ChiCoherentRnNode(
                 "coherent reads in this RN-F profile require ExpCompAck",
             )
         if (
-            request.transaction_id in state.pending_reads
+            request.transaction_id in state.pending_transactions
             or request.transaction_id in state.pending_writebacks
         ):
             return self._fault(
@@ -582,7 +631,7 @@ class ChiCoherentRnNode(
                 ),
             )
         if (
-            len(state.pending_reads) + len(state.pending_writebacks)
+            len(state.pending_transactions) + len(state.pending_writebacks)
             >= self.outstanding_capacity
         ):
             return SemanticStep(
@@ -613,7 +662,7 @@ class ChiCoherentRnNode(
                 "the current coherent-read profile issues from I, or uses "
                 "ReadUnique to upgrade an existing SC line",
             )
-        pending = dict(state.pending_reads)
+        pending = dict(state.pending_transactions)
         pending[request.transaction_id] = request
         candidate = ChiCoherentRnState(
             state.cache,
@@ -627,6 +676,121 @@ class ChiCoherentRnNode(
             target_id=self.home_node_id,
         )
         return SemanticStep(candidate, (packet,))
+
+    def _issue_clean_unique(
+        self,
+        state: ChiCoherentRnState,
+        request: ChiCleanUniqueMessage,
+    ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
+        """Reserve one resident Shared line while permission is upgraded."""
+
+        if request.size != 6 or request.address % _CACHE_LINE_BYTES:
+            return self._fault(
+                state,
+                "clean_unique_shape",
+                "CleanUnique requires one aligned 64-byte cache line",
+            )
+        if (
+            not request.allow_retry
+            or request.protocol_credit_type != 0
+            or not request.expect_completion_ack
+            or request.memory_attributes not in (0b0101, 0b1101)
+        ):
+            return self._fault(
+                state,
+                "clean_unique_attributes",
+                "initial CleanUnique requires Normal-memory attributes, "
+                "AllowRetry=1, PCrdType=0, and ExpCompAck=1",
+            )
+        unsupported = tuple(
+            name
+            for name, enabled in (
+                ("likely shared", request.likely_shared),
+                ("non-snoopable", not request.snoop_attribute),
+                ("exclusive", request.exclusive),
+                ("ordered", request.order != 0),
+                ("tag operation", request.tag_operation != 0),
+                ("trace tag", request.trace_tag),
+            )
+            if enabled
+        )
+        if unsupported:
+            return self._fault(
+                state,
+                "clean_unique_attributes",
+                "first CleanUnique profile does not implement "
+                + ", ".join(unsupported),
+            )
+        if (
+            request.transaction_id in state.pending_transactions
+            or request.transaction_id in state.pending_writebacks
+        ):
+            return self._fault(
+                state,
+                "duplicate_transaction",
+                "RN already owns this coherence TxnID",
+            )
+        if state.pending_for_address(request.address):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    f"{self.name}.line[{request.address:#x}]",
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    capacity=1,
+                    reason=(
+                        "another RN-local coherent transaction reserves "
+                        "this cache line"
+                    ),
+                    location=self.name,
+                ),
+            )
+        if (
+            len(state.pending_transactions) + len(state.pending_writebacks)
+            >= self.outstanding_capacity
+        ):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    f"{self.name}.coherence_transaction_slot",
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    capacity=self.outstanding_capacity,
+                    reason="RN coherence transaction table is full",
+                    location=self.name,
+                ),
+            )
+        line = state.line_at(request.address)
+        if line is not None and line.state is ChiCacheState.UD:
+            return self._fault(
+                state,
+                "clean_unique_dirty_requester",
+                "the clean-only CleanUnique slice rejects a dirty requester",
+            )
+        if line is None or line.state is not ChiCacheState.SC:
+            return self._fault(
+                state,
+                "clean_unique_permission",
+                "CleanUnique requires a resident SC line at the requester",
+            )
+        pending = dict(state.pending_transactions)
+        pending[request.transaction_id] = request
+        candidate = ChiCoherentRnState(
+            state.cache,
+            state.permissions,
+            pending,
+            state.pending_writebacks,
+        )
+        return SemanticStep(
+            candidate,
+            (
+                ChiNetworkPacket.request(
+                    request,
+                    source_id=self.node_id,
+                    target_id=self.home_node_id,
+                ),
+            ),
+        )
 
     def _accept_snoop(
         self,
@@ -649,6 +813,7 @@ class ChiCoherentRnNode(
         assert isinstance(
             snoop,
             (
+                ChiSnpCleanInvalidMessage,
                 ChiSnpSharedMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
@@ -676,23 +841,46 @@ class ChiCoherentRnNode(
                     location=self.name,
                 ),
             )
-        if isinstance(snoop, ChiSnpUniqueMessage):
+        if isinstance(
+            snoop,
+            (ChiSnpCleanInvalidMessage, ChiSnpUniqueMessage),
+        ):
             if not snoop.do_not_go_to_shared_dirty:
                 return self._fault(
                     state,
                     "snoop_profile",
-                    "SnpUnique requires DoNotGoToSD",
+                    "invalidating Snoop requires DoNotGoToSD",
                 )
+        if (
+            isinstance(snoop, ChiSnpCleanInvalidMessage)
+            and snoop.return_to_source
+        ):
+            return self._fault(
+                state,
+                "snoop_profile",
+                "SnpCleanInvalid requires RetToSrc=0",
+            )
         cache = state.cache
         permissions = dict(state.permissions)
         line = state.line_at(snoop.address)
         response_message: (
             ChiSnpRespMessage | ChiSnpRespDataMessage | None
         ) = None
-        if isinstance(snoop, ChiSnpUniqueMessage):
+        if isinstance(
+            snoop,
+            (ChiSnpCleanInvalidMessage, ChiSnpUniqueMessage),
+        ):
             response = ChiRespCode.I
             if line is not None and line.state is not ChiCacheState.I:
                 if line.state is ChiCacheState.UD:
+                    if isinstance(snoop, ChiSnpCleanInvalidMessage):
+                        return self._fault(
+                            state,
+                            "clean_unique_dirty_peer",
+                            "the clean-only CleanUnique slice rejects a "
+                            "dirty peer; SnpRespData_I_PD memory update is "
+                            "not implemented",
+                        )
                     assert line.data is not None
                     response_message = ChiSnpRespDataMessage(
                         transaction_id=snoop.transaction_id,
@@ -700,7 +888,10 @@ class ChiCoherentRnNode(
                         response=ChiRespCode.I_PD,
                     )
                 else:
-                    if snoop.return_to_source:
+                    if (
+                        isinstance(snoop, ChiSnpUniqueMessage)
+                        and snoop.return_to_source
+                    ):
                         assert line.data is not None
                         response_message = ChiSnpRespDataMessage(
                             transaction_id=snoop.transaction_id,
@@ -777,10 +968,75 @@ class ChiCoherentRnNode(
             ChiCoherentRnState(
                 cache,
                 permissions,
-                state.pending_reads,
+                state.pending_transactions,
                 state.pending_writebacks,
             ),
             (response_packet,),
+        )
+
+    def _accept_comp(
+        self,
+        state: ChiCoherentRnState,
+        packet: ChiNetworkPacket,
+    ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
+        """Install Unique permission and acknowledge the Home-owned DBID."""
+
+        if packet.target_id != self.node_id:
+            return self._fault(
+                state,
+                "clean_unique_completion_target",
+                "Comp packet targets another Request Node",
+            )
+        if packet.source_id != self.home_node_id:
+            return self._fault(
+                state,
+                "clean_unique_completion_home",
+                "Comp does not come from the configured Home",
+            )
+        response = packet.message
+        assert isinstance(response, ChiCompMessage)
+        request = state.pending_transactions.get(response.transaction_id)
+        if not isinstance(request, ChiCleanUniqueMessage):
+            return self._fault(
+                state,
+                "clean_unique_completion_identity",
+                "Comp does not match an outstanding CleanUnique TxnID",
+            )
+        if (
+            response.response_error != 0
+            or response.response is not ChiRespCode.UC
+            or response.tag_operation != 0
+        ):
+            return self._fault(
+                state,
+                "clean_unique_completion_state",
+                "the CleanUnique completion must be Comp_UC without error "
+                "or tag operation",
+            )
+        line = state.line_at(request.address)
+        if line is None or line.state is not ChiCacheState.SC:
+            return self._fault(
+                state,
+                "clean_unique_reserved_line",
+                "the reserved CleanUnique line is no longer resident in SC",
+            )
+        permissions = dict(state.permissions)
+        permissions[request.address] = ChiCacheState.UC
+        pending = dict(state.pending_transactions)
+        del pending[request.transaction_id]
+        ack = ChiNetworkPacket.response(
+            ChiCompAckMessage(transaction_id=response.data_buffer_id),
+            source_id=self.node_id,
+            target_id=self.home_node_id,
+        )
+        return SemanticStep(
+            ChiCoherentRnState(
+                state.cache,
+                permissions,
+                pending,
+                state.pending_writebacks,
+            ),
+            (ack,),
         )
 
     def _accept_comp_data(
@@ -796,8 +1052,8 @@ class ChiCoherentRnNode(
             )
         response = packet.message
         assert isinstance(response, ChiCompDataMessage)
-        request = state.pending_reads.get(response.transaction_id)
-        if request is None:
+        request = state.pending_transactions.get(response.transaction_id)
+        if request is None or isinstance(request, ChiCleanUniqueMessage):
             return self._fault(
                 state,
                 "completion_identity",
@@ -844,7 +1100,7 @@ class ChiCoherentRnNode(
         ).state
         permissions = dict(state.permissions)
         permissions[request.address] = installed_state
-        pending = dict(state.pending_reads)
+        pending = dict(state.pending_transactions)
         del pending[response.transaction_id]
         ack = ChiNetworkPacket.response(
             ChiCompAckMessage(
@@ -908,7 +1164,7 @@ class ChiCoherentRnNode(
                 + ", ".join(unsupported),
             )
         if (
-            request.transaction_id in state.pending_reads
+            request.transaction_id in state.pending_transactions
             or request.transaction_id in state.pending_writebacks
         ):
             return self._fault(
@@ -932,7 +1188,7 @@ class ChiCoherentRnNode(
                 ),
             )
         if (
-            len(state.pending_reads) + len(state.pending_writebacks)
+            len(state.pending_transactions) + len(state.pending_writebacks)
             >= self.outstanding_capacity
         ):
             return SemanticStep(
@@ -958,7 +1214,7 @@ class ChiCoherentRnNode(
         candidate = ChiCoherentRnState(
             state.cache,
             state.permissions,
-            state.pending_reads,
+            state.pending_transactions,
             pending,
         )
         return SemanticStep(
@@ -1036,7 +1292,7 @@ class ChiCoherentRnNode(
             ChiCoherentRnState(
                 cache,
                 permissions,
-                state.pending_reads,
+                state.pending_transactions,
                 pending,
             ),
             (
@@ -1125,11 +1381,11 @@ class ChiSnoopResult:
 
 
 @dataclass(frozen=True)
-class ChiCoherentReadPending:
-    """Home-private transaction record; none of its grouping is a wire field."""
+class ChiCoherentTransactionPending:
+    """Home-private coherent transaction; grouping is not a wire field."""
 
     requester_id: int
-    request: ChiCoherentReadMessage
+    request: ChiCoherenceRequestMessage
     snoop_transaction_id: int
     data_buffer_id: int
     snoop_targets: frozenset[int]
@@ -1141,13 +1397,14 @@ class ChiCoherentReadPending:
         if not isinstance(
             self.request,
             (
+                ChiCleanUniqueMessage,
                 ChiReadSharedMessage,
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
             ),
         ):
             raise TypeError(
-                "Home pending transaction requires a coherent Read"
+                "Home pending transaction requires a coherent request"
             )
         for name, value in (
             ("snoop_transaction_id", self.snoop_transaction_id),
@@ -1175,6 +1432,14 @@ class ChiCoherentReadPending:
         if sum(result.passes_dirty for result in results.values()) > 1:
             raise ValueError(
                 "one coherent transaction cannot collect two dirty owners"
+            )
+        if (
+            isinstance(self.request, ChiCleanUniqueMessage)
+            and any(result.data is not None for result in results.values())
+        ):
+            raise ValueError(
+                "the clean-only CleanUnique pending profile cannot collect "
+                "Snoop data"
             )
         if type(self.completion_sent) is not bool:
             raise TypeError("completion_sent must be bool")
@@ -1240,6 +1505,19 @@ class ChiHomeAcceptCoherentRead:
 
 
 @dataclass(frozen=True)
+class ChiHomeAcceptCleanUnique:
+    packet: ChiNetworkPacket
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
+            self.packet.message, ChiCleanUniqueMessage
+        ):
+            raise TypeError(
+                "Home CleanUnique action requires a CleanUnique packet"
+            )
+
+
+@dataclass(frozen=True)
 class ChiHomeAcceptSnoopResponse:
     packet: ChiNetworkPacket
 
@@ -1292,6 +1570,7 @@ class ChiHomeAcceptCopyBackData:
 
 ChiCoherentHomeAction = (
     ChiHomeAcceptCoherentRead
+    | ChiHomeAcceptCleanUnique
     | ChiHomeAcceptSnoopResponse
     | ChiHomeAcceptCompAck
     | ChiHomeAcceptWriteBackFull
@@ -1302,7 +1581,7 @@ ChiCoherentHomeAction = (
 @dataclass(frozen=True)
 class ChiCoherentHomeState:
     directory: Mapping[int, ChiHomeDirectoryEntry]
-    pending: Mapping[int, ChiCoherentReadPending] = field(
+    pending: Mapping[int, ChiCoherentTransactionPending] = field(
         default_factory=dict
     )
     next_snoop_transaction_id: int = 0x100
@@ -1323,7 +1602,7 @@ class ChiCoherentHomeState:
             )
         pending = dict(self.pending)
         if any(
-            not isinstance(item, ChiCoherentReadPending)
+            not isinstance(item, ChiCoherentTransactionPending)
             or data_buffer_id != item.data_buffer_id
             for data_buffer_id, item in pending.items()
         ):
@@ -1355,7 +1634,7 @@ class ChiCoherentHomeState:
             )
         if set(pending) & set(writebacks):
             raise ValueError(
-                "Home reads and writebacks share one DBID allocation space"
+                "Home coherence and writebacks share one DBID allocation space"
             )
         reserved_addresses = tuple(
             item.request.address for item in pending.values()
@@ -1488,7 +1767,9 @@ class ChiCoherentHomeNode(
         if not isinstance(state, ChiCoherentHomeState):
             raise TypeError("coherent Home requires ChiCoherentHomeState")
         if isinstance(action, ChiHomeAcceptCoherentRead):
-            return self._accept_read(state, action.packet)
+            return self._accept_coherence_request(state, action.packet)
+        if isinstance(action, ChiHomeAcceptCleanUnique):
+            return self._accept_coherence_request(state, action.packet)
         if isinstance(action, ChiHomeAcceptSnoopResponse):
             return self._accept_snoop_response(state, action.packet)
         if isinstance(action, ChiHomeAcceptCompAck):
@@ -1499,7 +1780,7 @@ class ChiCoherentHomeNode(
             return self._accept_copyback_data(state, action.packet)
         raise TypeError("unknown coherent Home action")
 
-    def _accept_read(
+    def _accept_coherence_request(
         self,
         state: ChiCoherentHomeState,
         packet: ChiNetworkPacket,
@@ -1508,6 +1789,7 @@ class ChiCoherentHomeNode(
         assert isinstance(
             request,
             (
+                ChiCleanUniqueMessage,
                 ChiReadSharedMessage,
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
@@ -1517,7 +1799,7 @@ class ChiCoherentHomeNode(
             return self._fault(
                 state,
                 "request_target",
-                "coherent Read packet targets another Home",
+                "coherent request packet targets another Home",
             )
         if (
             request.size != 6
@@ -1527,8 +1809,20 @@ class ChiCoherentHomeNode(
             return self._fault(
                 state,
                 "request_profile",
-                "coherent Home profile requires an aligned 64-byte read "
+                "coherent Home profile requires an aligned 64-byte request "
                 "with ExpCompAck",
+            )
+        if isinstance(request, ChiCleanUniqueMessage) and (
+            not request.allow_retry
+            or request.protocol_credit_type != 0
+            or request.memory_attributes not in (0b0101, 0b1101)
+            or request.likely_shared
+        ):
+            return self._fault(
+                state,
+                "clean_unique_profile",
+                "initial CleanUnique requires Normal-memory attributes, "
+                "AllowRetry=1, PCrdType=0, and LikelyShared=0",
             )
         unsupported = tuple(
             name
@@ -1555,6 +1849,20 @@ class ChiCoherentHomeNode(
                 "address_home",
                 "Home has no backing entry for this address",
             )
+        if isinstance(request, ChiCleanUniqueMessage):
+            if entry.unique_owner is not None:
+                return self._fault(
+                    state,
+                    "clean_unique_directory_state",
+                    "the clean-peer CleanUnique profile cannot consume an "
+                    "existing Unique owner",
+                )
+            if packet.source_id not in entry.sharers:
+                return self._fault(
+                    state,
+                    "clean_unique_requester_state",
+                    "CleanUnique requester must already be a directory sharer",
+                )
         if any(
             item.request.address == request.address
             for item in state.pending.values()
@@ -1618,7 +1926,7 @@ class ChiCoherentHomeNode(
             state.next_data_buffer_id,
             set(state.pending) | set(state.pending_writebacks),
         )
-        pending_item = ChiCoherentReadPending(
+        pending_item = ChiCoherentTransactionPending(
             packet.source_id,
             request,
             snoop_id,
@@ -1630,8 +1938,19 @@ class ChiCoherentHomeNode(
         pending[data_buffer_id] = pending_item
         emissions: tuple[ChiNetworkPacket, ...]
         if targets:
-            if isinstance(request, ChiReadUniqueMessage):
-                snoop: ChiCoherentSnoopMessage = ChiSnpUniqueMessage(
+            if isinstance(request, ChiCleanUniqueMessage):
+                snoop: ChiCoherentSnoopMessage = (
+                    ChiSnpCleanInvalidMessage(
+                        transaction_id=snoop_id,
+                        address=request.address,
+                        qos=request.qos,
+                        pas=request.pas,
+                        do_not_go_to_shared_dirty=True,
+                        return_to_source=False,
+                    )
+                )
+            elif isinstance(request, ChiReadUniqueMessage):
+                snoop = ChiSnpUniqueMessage(
                     transaction_id=snoop_id,
                     address=request.address,
                     qos=request.qos,
@@ -1725,13 +2044,27 @@ class ChiCoherentHomeNode(
                 "Home already consumed this Snoopee RSP or DAT result",
             )
         is_data = isinstance(response, ChiSnpRespDataMessage)
+        if (
+            is_data
+            and isinstance(pending_item.request, ChiCleanUniqueMessage)
+        ):
+            return self._fault(
+                state,
+                "clean_unique_dirty_data",
+                "the clean-only CleanUnique slice rejects dirty Snoop data; "
+                "Home memory update is not implemented",
+            )
         if is_data and not self.allow_dirty_data_transfer:
             return self._fault(
                 state,
                 "snoop_data_profile",
                 "Home dirty-data transfer profile is not enabled",
             )
-        if isinstance(pending_item.request, ChiReadUniqueMessage):
+        if isinstance(pending_item.request, ChiCleanUniqueMessage):
+            allowed_responses = (
+                () if is_data else (ChiRespCode.I,)
+            )
+        elif isinstance(pending_item.request, ChiReadUniqueMessage):
             allowed_responses = (
                 (ChiRespCode.I, ChiRespCode.I_PD)
                 if is_data
@@ -1760,7 +2093,7 @@ class ChiCoherentHomeNode(
                 state,
                 "snoop_response_state",
                 "snoop response form/state is incompatible with its "
-                "coherent Read profile",
+                "coherence-request profile",
             )
         result = ChiSnoopResult(
             response.response,
@@ -1774,7 +2107,7 @@ class ChiCoherentHomeNode(
             )
         results = dict(pending_item.snoop_results)
         results[packet.source_id] = result
-        updated = ChiCoherentReadPending(
+        updated = ChiCoherentTransactionPending(
             pending_item.requester_id,
             pending_item.request,
             pending_item.snoop_transaction_id,
@@ -1831,9 +2164,22 @@ class ChiCoherentHomeNode(
                 "early_completion_ack",
                 "CompAck arrived before all selected snoops completed",
             )
+        if (
+            isinstance(pending_item.request, ChiCleanUniqueMessage)
+            and (ack.response != 0 or ack.trace_tag)
+        ):
+            return self._fault(
+                state,
+                "clean_unique_completion_ack_state",
+                "the CleanUnique profile requires CompAck Resp=0 and "
+                "TraceTag=0",
+            )
         entry = state.directory[pending_item.request.address]
         directory = dict(state.directory)
-        if isinstance(pending_item.request, ChiReadUniqueMessage):
+        if isinstance(
+            pending_item.request,
+            (ChiCleanUniqueMessage, ChiReadUniqueMessage),
+        ):
             directory[entry.address] = ChiHomeDirectoryEntry(
                 entry.address,
                 entry.data,
@@ -2086,8 +2432,18 @@ class ChiCoherentHomeNode(
     def _completion_packet(
         self,
         entry: ChiHomeDirectoryEntry,
-        pending: ChiCoherentReadPending,
+        pending: ChiCoherentTransactionPending,
     ) -> ChiNetworkPacket:
+        if isinstance(pending.request, ChiCleanUniqueMessage):
+            return ChiNetworkPacket.response(
+                ChiCompMessage(
+                    transaction_id=pending.request.transaction_id,
+                    data_buffer_id=pending.data_buffer_id,
+                    response=ChiRespCode.UC,
+                ),
+                source_id=self.node_id,
+                target_id=pending.requester_id,
+            )
         data_results = tuple(
             result
             for result in pending.snoop_results.values()
@@ -2156,7 +2512,8 @@ class ChiCoherentHomeNode(
 __all__ = [
     "ChiCacheLine",
     "ChiCacheState",
-    "ChiCoherentReadPending",
+    "ChiCoherentTransactionPending",
+    "ChiCoherenceRequestMessage",
     "ChiHomeWriteBackPending",
     "ChiCoherentHomeAction",
     "ChiCoherentHomeNode",
@@ -2166,14 +2523,17 @@ __all__ = [
     "ChiCoherentRnNode",
     "ChiCoherentRnState",
     "ChiHomeAcceptCompAck",
+    "ChiHomeAcceptCleanUnique",
     "ChiHomeAcceptCopyBackData",
     "ChiHomeAcceptCoherentRead",
     "ChiHomeAcceptSnoopResponse",
     "ChiHomeAcceptWriteBackFull",
     "ChiHomeDirectoryEntry",
+    "ChiRnAcceptComp",
     "ChiRnAcceptCompData",
     "ChiRnAcceptCompDBIDResp",
     "ChiRnAcceptSnoop",
+    "ChiRnIssueCleanUnique",
     "ChiRnIssueCoherentRead",
     "ChiRnIssueWriteBackFull",
     "ChiRnWriteCacheLine",

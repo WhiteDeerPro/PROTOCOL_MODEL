@@ -37,7 +37,9 @@ feature-flow closure 和 clean `ReadShared/ReadUnique` participant 也已落地�
 MESI no-SD 路径也已闭合：
 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck
 →Home backing/directory commit`；它把 dirty unique line 收束为两个 clean shared copy，不引入 `SD`。
-`SC→ReadUnique→UC→local write→UD` 的重取数据式 upgrade 也已闭合。第一条 construction authority
+`SC→ReadUnique→UC→local write→UD` 的重取数据式 upgrade 也已闭合；clean-peer
+`SC→CleanUnique→SnpCleanInvalid→Comp_UC→UC` 现可保留 requester 已有数据，不再为取得权限重取整行。
+第一条 construction authority
 切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home，并从
 coherence-domain membership 派生 `eligible Snoopees = members - requester`；NodeID、逐成员 capability
 与 REQ/SNP/RSP/DAT flow 随后使用同一派生结果闭合。Home directory 仍只选择一笔事务的实际 holder，
@@ -45,8 +47,8 @@ coherence-domain membership 派生 `eligible Snoopees = members - requester`；N
 
 1. 在已闭合的显式 `UD` topology writeback 基础上，增加 Retry/error/Snoop 并发与可选的
    victim/writeback scheduling；replacement policy 保持独立 refinement；
-2. 在已有 `UD`/PassDirty、no-SD downgrade 和 ReadUnique upgrade 基础上补
-   `CleanUnique`/`MakeUnique` 与 clean `Evict`，继续闭合 MESI 的常用生命周期；
+2. 在已闭合 clean-peer `CleanUnique` 的基础上，分别补 dirty-peer
+   `SnpRespData_I_PD`/Home memory-update 分支、`MakeUnique` 与 clean `Evict`，继续闭合 MESI 的常用生命周期；
 3. 增加同 line transient/hazard、Retry/error 组合、多 waiter policy、多个 pending emission batch 与
    wait-for projection；
 4. 再以 `SD`/Owned、shared-dirty authority 与 forwarding/DCT 检验 MOESI-like 扩展；

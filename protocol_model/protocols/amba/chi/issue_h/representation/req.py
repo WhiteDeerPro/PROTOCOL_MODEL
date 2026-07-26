@@ -2,8 +2,9 @@
 
 This module deliberately represents fields by meaning rather than packing a
 REQFLIT bit vector.  ``ReadNoSnp``, ``ReadShared``,
-``ReadNotSharedDirty``, ``ReadUnique``, ``WriteBackFull``, and
-``PCrdReturn`` are the currently implemented protocol messages;
+``ReadNotSharedDirty``, ``ReadUnique``, ``CleanUnique``,
+``WriteBackFull``, and ``PCrdReturn`` are the currently implemented
+protocol messages;
 ``LCrdReturn`` is the REQ-channel link-maintenance flit.  Routing NodeIDs are
 added by the Network packet.
 """
@@ -25,6 +26,7 @@ class ChiReqOpcode(IntEnum):
     READ_NO_SNP = 0x04
     PROTOCOL_CREDIT_RETURN = 0x05
     READ_UNIQUE = 0x07
+    CLEAN_UNIQUE = 0x0B
     WRITE_BACK_FULL = 0x1B
     READ_NOT_SHARED_DIRTY = 0x26
 
@@ -110,8 +112,8 @@ class ChiReadNoSnpMessage:
 
 
 @dataclass(frozen=True)
-class _ChiCoherentReadMessage:
-    """Fields shared by the currently represented coherent Read requests.
+class _ChiCoherentRequestMessage:
+    """Fields shared by the currently represented coherent requests.
 
     Node identities remain on the containing Network packet.  Defaults select
     the ordinary RN-F shape used by the clean coherence reference profile; a
@@ -152,7 +154,7 @@ class _ChiCoherentReadMessage:
         ):
             _require_uint(name, value, width)
         if self.size == 7:
-            raise ValueError("coherent Read size encoding 7 is reserved")
+            raise ValueError("coherent request size encoding 7 is reserved")
         for name, value in (
             ("likely_shared", self.likely_shared),
             ("allow_retry", self.allow_retry),
@@ -175,7 +177,7 @@ class _ChiCoherentReadMessage:
 
 
 @dataclass(frozen=True)
-class ChiReadSharedMessage(_ChiCoherentReadMessage):
+class ChiReadSharedMessage(_ChiCoherentRequestMessage):
     """Semantic fields of one coherent ``ReadShared`` request."""
 
     @property
@@ -184,7 +186,7 @@ class ChiReadSharedMessage(_ChiCoherentReadMessage):
 
 
 @dataclass(frozen=True)
-class ChiReadNotSharedDirtyMessage(_ChiCoherentReadMessage):
+class ChiReadNotSharedDirtyMessage(_ChiCoherentRequestMessage):
     """Coherent read for a MESI requester that cannot install ``SD``."""
 
     @property
@@ -193,12 +195,26 @@ class ChiReadNotSharedDirtyMessage(_ChiCoherentReadMessage):
 
 
 @dataclass(frozen=True)
-class ChiReadUniqueMessage(_ChiCoherentReadMessage):
+class ChiReadUniqueMessage(_ChiCoherentRequestMessage):
     """Semantic fields of one coherent ``ReadUnique`` request."""
 
     @property
     def opcode(self) -> ChiReqOpcode:
         return ChiReqOpcode.READ_UNIQUE
+
+
+@dataclass(frozen=True)
+class ChiCleanUniqueMessage(_ChiCoherentRequestMessage):
+    """Dataless request to upgrade an existing line to Unique permission.
+
+    The first executable profile uses the ordinary non-Exclusive, full-line
+    form.  Cache-state eligibility and the later local store are participant
+    lifecycle concerns rather than fields of this REQ message.
+    """
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.CLEAN_UNIQUE
 
 
 @dataclass(frozen=True)
@@ -326,6 +342,7 @@ ChiReqProtocolMessage: TypeAlias = (
     | ChiReadSharedMessage
     | ChiReadNotSharedDirtyMessage
     | ChiReadUniqueMessage
+    | ChiCleanUniqueMessage
     | ChiWriteBackFullMessage
     | ChiPCrdReturnMessage
 )
@@ -367,6 +384,7 @@ class ChiIssueHReqProfile:
                 ChiReadSharedMessage,
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
+                ChiCleanUniqueMessage,
                 ChiWriteBackFullMessage,
                 ChiPCrdReturnMessage,
             ),
@@ -380,6 +398,7 @@ class ChiIssueHReqProfile:
                 ChiReadSharedMessage,
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
+                ChiCleanUniqueMessage,
                 ChiWriteBackFullMessage,
             ),
         ):
@@ -417,23 +436,24 @@ class ChiIssueHReqProfile:
             else:
                 if message.size != 6:
                     reasons.append(
-                        "coherent Read profile requires Size=6 (64 bytes)"
+                        "coherent request profile requires Size=6 (64 bytes)"
                     )
                 if not message.snoop_attribute:
                     reasons.append(
-                        "coherent Read profile requires SnpAttr=1"
+                        "coherent request profile requires SnpAttr=1"
                     )
                 if message.memory_attributes not in (0b0101, 0b1101):
                     reasons.append(
-                        "coherent Read profile requires MemAttr 0101 or 1101"
+                        "coherent request profile requires "
+                        "MemAttr 0101 or 1101"
                     )
                 if message.order != 0:
                     reasons.append(
-                        "coherent Read profile requires Order=0"
+                        "coherent request profile requires Order=0"
                     )
                 if not message.expect_completion_ack:
                     reasons.append(
-                        "coherent Read profile requires ExpCompAck=1"
+                        "coherent request profile requires ExpCompAck=1"
                     )
                 if isinstance(message, ChiReadUniqueMessage):
                     if message.exclusive:
@@ -441,6 +461,13 @@ class ChiIssueHReqProfile:
                     if message.likely_shared:
                         reasons.append(
                             "ReadUnique requires LikelyShared=0"
+                        )
+                if isinstance(message, ChiCleanUniqueMessage):
+                    if message.exclusive:
+                        reasons.append("CleanUnique requires Excl=0")
+                    if message.likely_shared:
+                        reasons.append(
+                            "CleanUnique requires LikelyShared=0"
                         )
             if message.pas >= 6:
                 reasons.append("PAS encodings 6 and 7 are reserved")
@@ -458,6 +485,7 @@ class ChiIssueHReqProfile:
 
 
 __all__ = [
+    "ChiCleanUniqueMessage",
     "ChiIssueHReqProfile",
     "ChiPCrdReturnMessage",
     "ChiReadNoSnpMessage",

@@ -7,6 +7,15 @@ back into itself.
 
 from .advance import ExplicitlyAdvanceableBackend
 from .base import VirtualDutBackend
+from .backing import (
+    BackingCommitConflict,
+    BackingLine,
+    BackingLineRecord,
+    BackingMutation,
+    FullLineBackingCore,
+    LineBackingState,
+    PreparedBackingWrite,
+)
 from .cache import (
     CacheCore,
     CacheLinePayload,
@@ -37,6 +46,10 @@ from .stepped_emission import (
 from .transition import DutEffect, DutTransition, PortEmission, PortInput
 
 __all__ = [
+    "BackingCommitConflict",
+    "BackingLine",
+    "BackingLineRecord",
+    "BackingMutation",
     "CaptureBackend",
     "CaptureState",
     "CacheCore",
@@ -55,9 +68,12 @@ __all__ = [
     "ExplicitlyAdvanceableBackend",
     "FunctionBackend",
     "FunctionBackendState",
+    "FullLineBackingCore",
+    "LineBackingState",
     "NoOpBackend",
     "PortEmission",
     "PortInput",
+    "PreparedBackingWrite",
     "SteppedEmissionBackend",
     "SteppedEmissionProfile",
     "SteppedEmissionState",

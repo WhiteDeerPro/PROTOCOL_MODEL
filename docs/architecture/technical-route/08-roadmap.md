@@ -41,9 +41,10 @@ MESI no-SD 路径也已闭合：
 `SC→CleanUnique→SnpCleanInvalid→Comp_UC→UC` 现可保留 requester 已有数据，不再为取得权限重取整行。
 受限 shared-dirty 扩展也已闭合：预置的唯一
 `SD`/`shared_dirty_owner` 经 `SnpCleanInvalid→SnpRespData_I_PD→I` 把最新数据交给 Home pending，
-Home 保持同址 reservation 到 `CompAck`，再更新融合式 reference backing 并提交 requester 为 unique
-owner。这里没有建立一般 `SD` 生成/维持 policy，也没有把 reference update 冒充独立 Memory/SN physical
-commit。
+Home 在 completion 前准备 line-local backing write，保持同址 reservation 到 `CompAck`，再以 versioned
+commit 与 directory transition 提交 requester 为 unique owner。Home payload 已从 directory entry 拆入
+协议中立 `FullLineBackingCore`，公开 attach/canonical binder 也已落地。这里没有建立一般 `SD`
+生成/维持 policy，也没有把 reference update 冒充独立 Memory/SN physical commit。
 第一条 construction authority
 切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home，并从
 coherence-domain membership 派生 `eligible Snoopees = members - requester`；NodeID、逐成员 capability
@@ -52,9 +53,9 @@ coherence-domain membership 派生 `eligible Snoopees = members - requester`；N
 
 1. 在已闭合的显式 `UD` topology writeback 基础上，增加 Retry/error/Snoop 并发与可选的
    victim/writeback scheduling；replacement policy 保持独立 refinement；
-2. 在已闭合 clean/shared-dirty-peer `CleanUnique` 的基础上，补 `MakeUnique` 与 clean `Evict`；同时把
-   Home 融合式 reference backing 拆到协议中立 target，并建立 coherent Home/main-memory 的 canonical
-   binder；只有验证目标需要观察 physical commit 时，再增加 topology-visible HN→SN flow；
+2. 在已闭合 clean/shared-dirty-peer `CleanUnique`、协议中立 Home backing 与 canonical Home binder
+   基础上，按实际场景补 `MakeUnique` 与 clean `Evict`；只有验证目标需要观察 physical commit 时，再增加
+   topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；
 3. 增加同 line transient/hazard、Retry/error 组合、多 waiter policy、多个 pending emission batch 与
    wait-for projection；
 4. 将当前只供 CleanUnique 消费的预置 `SD` 扩展为可生成、可维持的 Owned lifecycle，再以 dirty
@@ -65,8 +66,8 @@ coherence-domain membership 派生 `eligible Snoopees = members - requester`；N
 scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 resolver 核对；同一 runtime 按地址动态
 切换多个 Home、由 SAM route 派生 system-visible window、remap 和跨 domain 执行尚未实现。
 read/retry/coherence profile 另固定单 Requester、受限 opcode 与 full-line DAT；
-AddressTarget 路径固定对齐和成功 completion，coherent Home backing 则仍融合在 reference participant
-state。它们是上述工作的可执行起点；准确覆盖仍只在
+AddressTarget 路径固定对齐和成功 completion；coherent Home backing 是 fixed-resident、同步、无 blocked
+的 line-local commit profile，尚未等价于独立 SN physical memory。它们是上述工作的可执行起点；准确覆盖仍只在
 [实现状态](../implementation-status.md)维护。
 
 scheduled AXI4-Lite N×M crossbar 与 direct-neighbor address closure 已形成 S3 的第一条纵向切片；因此下一阶段

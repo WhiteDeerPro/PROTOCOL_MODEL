@@ -55,6 +55,13 @@ connect      在 SystemProtocol 中用 InterfaceConnection 连接不同模块
 
 使用同一个 `attach` 动词表示两者，会把局部实现和全局 topology 混在一起。
 
+CHI participant recipe 中的 `attach_chi_issue_h_{coherence,home}` 是一个具名 composition helper：
+输入是协议中立 `CacheCore` 或 `FullLineBackingCore`，输出是第一个新的 VirtualDut assembly；调用前不存在
+“待修改的 bare VirtualDut”。如果调用方已经构造了最终 boundary，则使用 `bind_chi_issue_h_*_vdut()`，
+返回的 facet 引用同一个 canonical object。当前不提供 CHI 私有的
+`bare VirtualDut → copied/refined VirtualDut` 变换；这种不可变 boundary refinement 若出现，应先由通用
+VirtualDut construction 定义 lineage 与加入 topology 前的 replacement 语义。
+
 <a id="attachment"></a>
 ## 3. Attachment：单端口翻译器
 

@@ -2,11 +2,12 @@
 
 The components operate at a delivered-Network-packet boundary.  RN behavior
 uses an injected protocol-neutral cache core and owns CHI permission and
-transaction state.  Home behavior owns directory and transaction state in the
-current slice.  ``SD`` is present only as the minimum shared-dirty authority
-needed by dirty-peer CleanUnique; it is not a general MOESI profile.  Neither
-participant decides how a packet crosses a topology; output is another
-explicit ``ChiNetworkPacket`` that a transport runtime can enqueue.
+transaction state.  Home behavior uses an injected protocol-neutral full-line
+backing core and separately owns directory and transaction state.  ``SD`` is
+present only as the minimum shared-dirty authority needed by dirty-peer
+CleanUnique; it is not a general MOESI profile.  Neither participant decides
+how a packet crosses a topology; output is another explicit
+``ChiNetworkPacket`` that a transport runtime can enqueue.
 """
 
 from __future__ import annotations
@@ -22,6 +23,12 @@ from protocol_model.semantics import (
     SemanticComponent,
     SemanticFault,
     SemanticStep,
+)
+from protocol_model.virtual_dut.backend.backing import (
+    BackingCommitConflict,
+    FullLineBackingCore,
+    LineBackingState,
+    PreparedBackingWrite,
 )
 from protocol_model.virtual_dut.backend.cache import (
     CacheCore,
@@ -1335,31 +1342,23 @@ class ChiCoherentRnNode(
 
 @dataclass(frozen=True)
 class ChiHomeDirectoryEntry:
-    """Stable holder authority plus the Home backing copy for one line.
-
-    ``data`` is current when no cache owns dirty responsibility.  It can be
-    stale while the unique owner is ``UD`` or ``shared_dirty_owner`` is
-    ``SD``; the latest value then travels with PassDirty.
+    """Stable holder authority for one line.
 
     ``shared_dirty_owner`` is a deliberately narrow authority needed by the
     dirty-peer CleanUnique profile.  It does not claim general MOESI/Owned,
     forwarding, or shared-dirty replacement behavior.
+
+    Line payload is deliberately absent.  The injected protocol-neutral
+    backing core is the sole Home-local owner of the reference copy.
     """
 
     address: int
-    data: int
     sharers: frozenset[int] = frozenset()
     unique_owner: int | None = None
     shared_dirty_owner: int | None = None
 
     def __post_init__(self) -> None:
         _require_line_address(self.address)
-        if (
-            not isinstance(self.data, int)
-            or isinstance(self.data, bool)
-            or not 0 <= self.data < _CACHE_LINE_DATA_LIMIT
-        ):
-            raise ValueError("Home backing data must fit one 512-bit line")
         sharers = frozenset(self.sharers)
         for node_id in sharers:
             _require_node_id("directory sharer", node_id)
@@ -1422,6 +1421,7 @@ class ChiCoherentTransactionPending:
     snoop_targets: frozenset[int]
     snoop_results: Mapping[int, ChiSnoopResult] = field(default_factory=dict)
     completion_sent: bool = False
+    prepared_backing_write: PreparedBackingWrite | None = None
 
     def __post_init__(self) -> None:
         _require_node_id("pending requester", self.requester_id)
@@ -1466,6 +1466,34 @@ class ChiCoherentTransactionPending:
             )
         if type(self.completion_sent) is not bool:
             raise TypeError("completion_sent must be bool")
+        prepared = self.prepared_backing_write
+        if prepared is not None:
+            if not isinstance(prepared, PreparedBackingWrite):
+                raise TypeError(
+                    "Home prepared backing write requires "
+                    "PreparedBackingWrite"
+                )
+            dirty = tuple(
+                result for result in results.values() if result.passes_dirty
+            )
+            if (
+                not self.completion_sent
+                or set(results) != set(targets)
+                or len(dirty) != 1
+                or not isinstance(
+                    self.request,
+                    (
+                        ChiCleanUniqueMessage,
+                        ChiReadNotSharedDirtyMessage,
+                    ),
+                )
+                or prepared.address != self.request.address
+                or prepared.data != dirty[0].data
+            ):
+                raise ValueError(
+                    "prepared backing write must match one completed "
+                    "dirty-data absorption lifecycle"
+                )
         object.__setattr__(self, "snoop_targets", targets)
         object.__setattr__(
             self,
@@ -1488,7 +1516,7 @@ class ChiCoherentTransactionPending:
 
     @property
     def memory_update_data(self) -> int | None:
-        """Latest line retained by Home for a CleanUnique memory update.
+        """Latest line retained by Home for a prepared backing update.
 
         A non-``None`` value is an explicit reference-backing obligation
         owned by this pending transaction.  It remains live after ``Comp``
@@ -1497,14 +1525,9 @@ class ChiCoherentTransactionPending:
         commit.
         """
 
-        dirty = self.dirty_result
-        if (
-            not isinstance(self.request, ChiCleanUniqueMessage)
-            or dirty is None
-        ):
+        if self.prepared_backing_write is None:
             return None
-        assert dirty.data is not None
-        return dirty.data
+        return self.prepared_backing_write.data
 
 
 @dataclass(frozen=True)
@@ -1624,6 +1647,7 @@ ChiCoherentHomeAction = (
 @dataclass(frozen=True)
 class ChiCoherentHomeState:
     directory: Mapping[int, ChiHomeDirectoryEntry]
+    backing: LineBackingState
     pending: Mapping[int, ChiCoherentTransactionPending] = field(
         default_factory=dict
     )
@@ -1634,6 +1658,10 @@ class ChiCoherentHomeState:
     )
 
     def __post_init__(self) -> None:
+        if not isinstance(self.backing, LineBackingState):
+            raise TypeError(
+                "coherent Home backing requires LineBackingState"
+            )
         directory = dict(self.directory)
         if any(
             not isinstance(entry, ChiHomeDirectoryEntry)
@@ -1642,6 +1670,12 @@ class ChiCoherentHomeState:
         ):
             raise ValueError(
                 "Home directory mapping key must match entry address"
+            )
+        missing_backing = set(directory) - set(self.backing.lines)
+        if missing_backing:
+            raise ValueError(
+                "Home directory addresses require backing lines: "
+                f"{sorted(missing_backing)!r}"
             )
         pending = dict(self.pending)
         if any(
@@ -1730,7 +1764,7 @@ class ChiCoherentHomeNode(
         ChiNetworkPacket,
     ]
 ):
-    """Restricted backing state, directory, and coherence transaction tables.
+    """Restricted directory and coherence transactions over one backing core.
 
     Until DAT fragmentation is implemented, the emitted full-line CompData
     requires a 512-bit DAT representation profile.
@@ -1741,6 +1775,7 @@ class ChiCoherentHomeNode(
         name: str,
         node_id: int,
         *,
+        backing_core: FullLineBackingCore,
         initial_directory: tuple[ChiHomeDirectoryEntry, ...],
         transaction_capacity: int = 4,
         initial_snoop_transaction_id: int = 0x100,
@@ -1750,6 +1785,14 @@ class ChiCoherentHomeNode(
         if not isinstance(name, str) or not name:
             raise ValueError("coherent Home requires a name")
         _require_node_id("Home node_id", node_id)
+        if not isinstance(backing_core, FullLineBackingCore):
+            raise TypeError(
+                "coherent Home requires FullLineBackingCore"
+            )
+        if backing_core.line_bytes != _CACHE_LINE_BYTES:
+            raise ValueError(
+                "CHI Issue H coherent Home requires 64-byte backing lines"
+            )
         entries = tuple(initial_directory)
         if any(not isinstance(item, ChiHomeDirectoryEntry) for item in entries):
             raise TypeError(
@@ -1757,6 +1800,15 @@ class ChiCoherentHomeNode(
             )
         if len({item.address for item in entries}) != len(entries):
             raise ValueError("Home initial directory addresses must be unique")
+        initial_backing = backing_core.initial_state()
+        missing_backing = {
+            item.address for item in entries
+        } - set(initial_backing.lines)
+        if missing_backing:
+            raise ValueError(
+                "Home initial directory requires matching backing lines: "
+                f"{sorted(missing_backing)!r}"
+            )
         if (
             not isinstance(transaction_capacity, int)
             or isinstance(transaction_capacity, bool)
@@ -1779,6 +1831,7 @@ class ChiCoherentHomeNode(
             raise TypeError("allow_dirty_data_transfer must be bool")
         self.name = name
         self.node_id = node_id
+        self.backing_core = backing_core
         self.initial_directory = entries
         self.transaction_capacity = transaction_capacity
         self.initial_snoop_transaction_id = initial_snoop_transaction_id
@@ -1787,10 +1840,11 @@ class ChiCoherentHomeNode(
 
     def initial_state(self) -> ChiCoherentHomeState:
         return ChiCoherentHomeState(
-            {
+            directory={
                 entry.address: entry
                 for entry in self.initial_directory
             },
+            backing=self.backing_core.initial_state(),
             next_snoop_transaction_id=self.initial_snoop_transaction_id,
             next_data_buffer_id=self.initial_data_buffer_id,
         )
@@ -2044,13 +2098,18 @@ class ChiCoherentHomeNode(
                 for target in sorted(targets)
             )
         else:
-            emissions = (self._completion_packet(entry, pending_item),)
+            emissions = (self._completion_packet(state, pending_item),)
         candidate = ChiCoherentHomeState(
-            state.directory,
-            pending,
-            (snoop_id + 1) % _TRANSACTION_ID_LIMIT,
-            (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT,
-            state.pending_writebacks,
+            directory=state.directory,
+            backing=state.backing,
+            pending=pending,
+            next_snoop_transaction_id=(
+                (snoop_id + 1) % _TRANSACTION_ID_LIMIT
+            ),
+            next_data_buffer_id=(
+                (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT
+            ),
+            pending_writebacks=state.pending_writebacks,
         )
         return SemanticStep(candidate, emissions)
 
@@ -2177,6 +2236,38 @@ class ChiCoherentHomeNode(
             )
         results = dict(pending_item.snoop_results)
         results[packet.source_id] = result
+        all_snoops_complete = set(results) == set(
+            pending_item.snoop_targets
+        )
+        prepared_backing_write: PreparedBackingWrite | None = None
+        if all_snoops_complete and isinstance(
+            pending_item.request,
+            (
+                ChiCleanUniqueMessage,
+                ChiReadNotSharedDirtyMessage,
+            ),
+        ):
+            dirty_results = tuple(
+                item for item in results.values() if item.passes_dirty
+            )
+            if dirty_results:
+                dirty_data = dirty_results[0].data
+                assert dirty_data is not None
+                try:
+                    prepared_backing_write = (
+                        self.backing_core.prepare_write(
+                            state.backing,
+                            pending_item.request.address,
+                            dirty_data,
+                        )
+                    )
+                except (KeyError, ValueError) as error:
+                    return self._fault(
+                        state,
+                        "backing_prepare",
+                        "Home could not prepare the absorbed dirty line: "
+                        f"{error}",
+                    )
         updated = ChiCoherentTransactionPending(
             pending_item.requester_id,
             pending_item.request,
@@ -2184,23 +2275,24 @@ class ChiCoherentHomeNode(
             pending_item.data_buffer_id,
             pending_item.snoop_targets,
             results,
-            completion_sent=(
-                set(results) == set(pending_item.snoop_targets)
-            ),
+            completion_sent=all_snoops_complete,
+            prepared_backing_write=prepared_backing_write,
         )
         pending = dict(state.pending)
         pending[updated.data_buffer_id] = updated
         emissions: tuple[ChiNetworkPacket, ...] = ()
         if updated.completion_sent:
-            entry = state.directory[updated.request.address]
-            emissions = (self._completion_packet(entry, updated),)
+            emissions = (self._completion_packet(state, updated),)
         return SemanticStep(
             ChiCoherentHomeState(
-                state.directory,
-                pending,
-                state.next_snoop_transaction_id,
-                state.next_data_buffer_id,
-                state.pending_writebacks,
+                directory=state.directory,
+                backing=state.backing,
+                pending=pending,
+                next_snoop_transaction_id=(
+                    state.next_snoop_transaction_id
+                ),
+                next_data_buffer_id=state.next_data_buffer_id,
+                pending_writebacks=state.pending_writebacks,
             ),
             emissions,
         )
@@ -2245,12 +2337,26 @@ class ChiCoherentHomeNode(
                 "TraceTag=0",
             )
         entry = state.directory[pending_item.request.address]
+        backing = state.backing
+        if pending_item.prepared_backing_write is not None:
+            try:
+                backing = self.backing_core.commit_write(
+                    state.backing,
+                    pending_item.prepared_backing_write,
+                ).state
+            except (BackingCommitConflict, ValueError) as error:
+                return self._fault(
+                    state,
+                    "backing_commit_conflict",
+                    "Home backing changed after completion preparation: "
+                    f"{error}",
+                )
         directory = dict(state.directory)
         if isinstance(
             pending_item.request,
             (ChiCleanUniqueMessage, ChiReadUniqueMessage),
         ):
-            directory[entry.address] = self._commit_unique_authority(
+            directory[entry.address] = self._commit_unique_directory(
                 entry,
                 pending_item,
             )
@@ -2269,23 +2375,21 @@ class ChiCoherentHomeNode(
             sharers.add(pending_item.requester_id)
             directory[entry.address] = ChiHomeDirectoryEntry(
                 entry.address,
-                (
-                    pending_item.dirty_result.data
-                    if pending_item.dirty_result is not None
-                    else entry.data
-                ),
-                frozenset(sharers),
+                sharers=frozenset(sharers),
                 unique_owner=None,
             )
         pending = dict(state.pending)
         del pending[pending_item.data_buffer_id]
         return SemanticStep(
             ChiCoherentHomeState(
-                directory,
-                pending,
-                state.next_snoop_transaction_id,
-                state.next_data_buffer_id,
-                state.pending_writebacks,
+                directory=directory,
+                backing=backing,
+                pending=pending,
+                next_snoop_transaction_id=(
+                    state.next_snoop_transaction_id
+                ),
+                next_data_buffer_id=state.next_data_buffer_id,
+                pending_writebacks=state.pending_writebacks,
             )
         )
 
@@ -2423,11 +2527,16 @@ class ChiCoherentHomeNode(
         )
         return SemanticStep(
             ChiCoherentHomeState(
-                state.directory,
-                state.pending,
-                state.next_snoop_transaction_id,
-                (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT,
-                writebacks,
+                directory=state.directory,
+                backing=state.backing,
+                pending=state.pending,
+                next_snoop_transaction_id=(
+                    state.next_snoop_transaction_id
+                ),
+                next_data_buffer_id=(
+                    (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT
+                ),
+                pending_writebacks=writebacks,
             ),
             (response,),
         )
@@ -2480,27 +2589,46 @@ class ChiCoherentHomeNode(
                 "copyback_owner",
                 "directory owner changed before CopyBackWrData arrived",
             )
+        try:
+            prepared = self.backing_core.prepare_write(
+                state.backing,
+                entry.address,
+                message.data,
+            )
+            backing = self.backing_core.commit_write(
+                state.backing,
+                prepared,
+            ).state
+        except (BackingCommitConflict, KeyError, ValueError) as error:
+            return self._fault(
+                state,
+                "copyback_backing_commit",
+                "Home could not atomically commit CopyBack data: "
+                f"{error}",
+            )
         directory = dict(state.directory)
         directory[entry.address] = ChiHomeDirectoryEntry(
             entry.address,
-            message.data,
             unique_owner=None,
         )
         writebacks = dict(state.pending_writebacks)
         del writebacks[pending.data_buffer_id]
         return SemanticStep(
             ChiCoherentHomeState(
-                directory,
-                state.pending,
-                state.next_snoop_transaction_id,
-                state.next_data_buffer_id,
-                writebacks,
+                directory=directory,
+                backing=backing,
+                pending=state.pending,
+                next_snoop_transaction_id=(
+                    state.next_snoop_transaction_id
+                ),
+                next_data_buffer_id=state.next_data_buffer_id,
+                pending_writebacks=writebacks,
             )
         )
 
     def _completion_packet(
         self,
-        entry: ChiHomeDirectoryEntry,
+        state: ChiCoherentHomeState,
         pending: ChiCoherentTransactionPending,
     ) -> ChiNetworkPacket:
         if isinstance(pending.request, ChiCleanUniqueMessage):
@@ -2525,7 +2653,10 @@ class ChiCoherentHomeNode(
             else (
                 data_results[0].data
                 if data_results
-                else entry.data
+                else self.backing_core.read_line(
+                    state.backing,
+                    pending.request.address,
+                )
             )
         )
         assert completion_data is not None
@@ -2552,28 +2683,20 @@ class ChiCoherentHomeNode(
         )
 
     @staticmethod
-    def _commit_unique_authority(
+    def _commit_unique_directory(
         entry: ChiHomeDirectoryEntry,
         pending: ChiCoherentTransactionPending,
     ) -> ChiHomeDirectoryEntry:
-        """Commit one completed Unique lifecycle at the reference backing seam.
+        """Commit the holder-authority half of one Unique lifecycle.
 
-        CleanUnique absorbs ``PassDirty`` into the Home reference backing
-        before the requester becomes the directory Unique owner.  ReadUnique
-        instead passes dirty responsibility to the requester and therefore
-        retains the previous (possibly stale) backing value.
-
-        This seam is deliberately local to the fused reference Home.  A later
-        protocol-neutral backing target/SN attachment can replace the write
-        without moving directory authority into the memory implementation.
+        A prepared backing write, when present, is committed separately before
+        this candidate is installed in the same immutable Home-state step.
+        ``ReadUnique`` has no such write because dirty responsibility passes to
+        the requester.
         """
 
-        backing_data = entry.data
-        if pending.memory_update_data is not None:
-            backing_data = pending.memory_update_data
         return ChiHomeDirectoryEntry(
             entry.address,
-            backing_data,
             unique_owner=pending.requester_id,
         )
 

@@ -27,6 +27,10 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     ChiDeliverCoherencePacket,
     ChiSubmitWriteBackFull,
 )
+from protocol_model.virtual_dut.backend import (
+    BackingLine,
+    FullLineBackingCore,
+)
 
 
 class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
@@ -52,10 +56,16 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(
+                    BackingLine(self.ADDRESS, self.STALE_BACKING),
+                ),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.STALE_BACKING,
                     unique_owner=self.RN,
                 ),
             ),
@@ -100,7 +110,10 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         dbid = dbid_response_packet.message.data_buffer_id
         self.assertIn(dbid, accepted.state.pending_writebacks)
         entry_before_data = accepted.state.directory[self.ADDRESS]
-        self.assertEqual(self.STALE_BACKING, entry_before_data.data)
+        self.assertEqual(
+            self.STALE_BACKING,
+            accepted.state.backing.line_at(self.ADDRESS).data,
+        )
         self.assertEqual(self.RN, entry_before_data.unique_owner)
 
         copied = self.apply(
@@ -129,7 +142,10 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             ChiHomeAcceptCopyBackData(copyback_packet),
         )
         entry = committed.state.directory[self.ADDRESS]
-        self.assertEqual(self.DIRTY_DATA, entry.data)
+        self.assertEqual(
+            self.DIRTY_DATA,
+            committed.state.backing.line_at(self.ADDRESS).data,
+        )
         self.assertIsNone(entry.unique_owner)
         self.assertFalse(entry.sharers)
         self.assertFalse(committed.state.pending_writebacks)
@@ -165,10 +181,16 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "clean_only_home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "clean_only_home.backing",
+                line_bytes=64,
+                initial_lines=(
+                    BackingLine(self.ADDRESS, self.STALE_BACKING),
+                ),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.STALE_BACKING,
                     unique_owner=self.RN,
                 ),
             ),
@@ -233,7 +255,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         self.assertTrue(session.is_quiescent(committed.state))
         self.assertEqual(
             self.DIRTY_DATA,
-            committed.state.home.directory[self.ADDRESS].data,
+            committed.state.home.backing.line_at(self.ADDRESS).data,
         )
         self.assertIsNone(
             committed.state.home.directory[self.ADDRESS].unique_owner

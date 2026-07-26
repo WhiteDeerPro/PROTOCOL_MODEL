@@ -28,6 +28,7 @@ from .address import (
 )
 from .arbitration import round_robin_grant, round_robin_select
 from .backend.advance import ExplicitlyAdvanceableBackend
+from .backend.backing import BackingLine, FullLineBackingCore
 from .backend.base import VirtualDutBackend
 from .backend.cache import CacheCore, CacheLinePayload, CacheLineStore
 from .backend.simple import (
@@ -96,6 +97,7 @@ __all__ = [
     "AddressTarget",
     "AddressWrite",
     "ByteOrder",
+    "BackingLine",
     "CacheCore",
     "CacheLinePayload",
     "CacheLineStore",
@@ -109,6 +111,7 @@ __all__ = [
     "EmissionWaitPolicy",
     "ExplicitlyAdvanceableBackend",
     "FunctionBackend",
+    "FullLineBackingCore",
     "MemoryRegion",
     "MemoryCopyDescriptor",
     "NoOpBackend",

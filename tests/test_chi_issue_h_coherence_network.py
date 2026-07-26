@@ -85,6 +85,10 @@ from protocol_model.system import (
     SystemProtocolBuilder,
     VirtualDutPortRef,
 )
+from protocol_model.virtual_dut.backend import (
+    BackingLine,
+    FullLineBackingCore,
+)
 from protocol_model.virtual_dut.boundary import (
     DutBehaviorTag,
     TransportDirection,
@@ -513,10 +517,14 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.DATA,
                     sharers=(
                         frozenset()
                         if snoop_uses_dirty_data or writeback
@@ -1092,7 +1100,10 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         self.assertEqual(dirty_data, final_line.data)
         entry = state.coherence.home.directory[self.ADDRESS]
         self.assertEqual(self.REQUESTER, entry.unique_owner)
-        self.assertEqual(self.DATA, entry.data)
+        self.assertEqual(
+            self.DATA,
+            state.coherence.home.backing.line_at(self.ADDRESS).data,
+        )
 
     def test_writeback_full_closes_req_rsp_dat_through_the_xp(self) -> None:
         resolved = self.build_resolved(writeback=True)
@@ -1267,7 +1278,10 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         home_state = state.coherence.home
         rn_state = state.coherence.request_nodes[self.REQUESTER]
         entry = home_state.directory[self.ADDRESS]
-        self.assertEqual(self.DIRTY_DATA, entry.data)
+        self.assertEqual(
+            self.DIRTY_DATA,
+            home_state.backing.line_at(self.ADDRESS).data,
+        )
         self.assertIsNone(entry.unique_owner)
         self.assertFalse(entry.sharers)
         self.assertFalse(home_state.pending_writebacks)
@@ -1345,9 +1359,26 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                     dirty_data,
                     pending[0].dirty_result.data,
                 )
+                self.assertIsNotNone(
+                    pending[0].prepared_backing_write
+                )
+                prepared = pending[0].prepared_backing_write
+                assert prepared is not None
+                self.assertEqual(
+                    0,
+                    prepared.expected_version,
+                )
                 self.assertEqual(
                     self.DATA,
-                    state.coherence.home.directory[self.ADDRESS].data,
+                    state.coherence.home.backing.line_at(
+                        self.ADDRESS
+                    ).data,
+                )
+                self.assertEqual(
+                    0,
+                    state.coherence.home.backing.line_at(
+                        self.ADDRESS
+                    ).version,
                 )
                 observed_pending_dirty_responsibility = True
         else:
@@ -1404,7 +1435,14 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
             frozenset((self.REQUESTER, self.FIRST_SNOOPEE)),
             entry.sharers,
         )
-        self.assertEqual(dirty_data, entry.data)
+        self.assertEqual(
+            dirty_data,
+            state.coherence.home.backing.line_at(self.ADDRESS).data,
+        )
+        self.assertEqual(
+            1,
+            state.coherence.home.backing.line_at(self.ADDRESS).version,
+        )
 
     def test_full_line_coherence_rejects_a_narrow_dat_path(self) -> None:
         resolved = self.build_resolved(data_width=256)

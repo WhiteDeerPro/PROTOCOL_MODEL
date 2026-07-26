@@ -264,6 +264,8 @@ class ChiCoherenceInvariantMonitor:
 
         directory_addresses = set(home.directory)
         for address, entry in home.directory.items():
+            backing_line = home.backing.line_at(address)
+            assert backing_line is not None
             holders: dict[int, object] = {}
             for node_id, state in request_nodes.items():
                 line = state.lines.get(address)
@@ -322,7 +324,7 @@ class ChiCoherenceInvariantMonitor:
                 for node_id, line in holders.items():
                     if (
                         line.state is not ChiCacheState.UD
-                        and line.data != entry.data
+                        and line.data != backing_line.data
                     ):
                         reasons.append(
                             f"line {address:#x} data at RN {node_id} "

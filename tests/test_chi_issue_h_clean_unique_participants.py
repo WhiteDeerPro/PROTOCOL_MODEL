@@ -9,6 +9,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants.coherence import (
     ChiCacheLine,
     ChiCacheState,
     ChiCoherentHomeNode,
+    ChiCoherentHomeState,
     ChiHomeAcceptCleanUnique,
     ChiHomeAcceptCompAck,
     ChiHomeAcceptSnoopResponse,
@@ -36,6 +37,10 @@ from protocol_model.protocols.amba.chi.issue_h.representation.rsp import (
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.snp import (
     ChiSnpCleanInvalidMessage,
+)
+from protocol_model.virtual_dut.backend import (
+    BackingLine,
+    FullLineBackingCore,
 )
 
 
@@ -96,10 +101,14 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         return ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.DATA,
                     sharers=sharers,
                     unique_owner=unique_owner,
                     shared_dirty_owner=shared_dirty_owner,
@@ -222,6 +231,11 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         self.assertTrue(
             collected.state.pending[self.DBID].completion_sent
         )
+        self.assertIsNone(
+            collected.state.pending[
+                self.DBID
+            ].prepared_backing_write
+        )
         self.assertEqual(
             home_state.directory,
             collected.state.directory,
@@ -252,7 +266,14 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
             ChiHomeAcceptCompAck(completion_ack),
         )
         entry = retired.state.directory[self.ADDRESS]
-        self.assertEqual(self.DATA, entry.data)
+        self.assertEqual(
+            self.DATA,
+            retired.state.backing.line_at(self.ADDRESS).data,
+        )
+        self.assertEqual(
+            0,
+            retired.state.backing.line_at(self.ADDRESS).version,
+        )
         self.assertEqual(self.REQUESTER, entry.unique_owner)
         self.assertFalse(entry.sharers)
         self.assertTrue(requester.is_quiescent(installed.state))
@@ -344,7 +365,14 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         )
 
         before_ack = collected.state.directory[self.ADDRESS]
-        self.assertEqual(self.DATA, before_ack.data)
+        self.assertEqual(
+            self.DATA,
+            collected.state.backing.line_at(self.ADDRESS).data,
+        )
+        self.assertEqual(
+            0,
+            collected.state.backing.line_at(self.ADDRESS).version,
+        )
         self.assertEqual(
             frozenset((self.REQUESTER, self.PEER)),
             before_ack.sharers,
@@ -354,6 +382,13 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         pending = collected.state.pending[self.DBID]
         self.assertEqual(self.DIRTY_DATA, pending.dirty_result.data)
         self.assertEqual(self.DIRTY_DATA, pending.memory_update_data)
+        self.assertIsNotNone(pending.prepared_backing_write)
+        prepared = pending.prepared_backing_write
+        assert prepared is not None
+        self.assertEqual(
+            0,
+            prepared.expected_version,
+        )
         completion = collected.emissions[0]
         self.assertIsInstance(completion.message, ChiCompMessage)
         self.assertIs(ChiRespCode.UC, completion.message.response)
@@ -370,11 +405,87 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         )
 
         entry = retired.state.directory[self.ADDRESS]
-        self.assertEqual(self.DIRTY_DATA, entry.data)
+        self.assertEqual(
+            self.DIRTY_DATA,
+            retired.state.backing.line_at(self.ADDRESS).data,
+        )
+        self.assertEqual(
+            1,
+            retired.state.backing.line_at(self.ADDRESS).version,
+        )
         self.assertEqual(self.REQUESTER, entry.unique_owner)
         self.assertFalse(entry.sharers)
         self.assertIsNone(entry.shared_dirty_owner)
         self.assertFalse(retired.state.pending)
+
+    def test_stale_prepared_backing_write_preserves_directory_and_pending(
+        self,
+    ) -> None:
+        home = self.build_home(
+            sharers=frozenset((self.REQUESTER, self.PEER)),
+            shared_dirty_owner=self.PEER,
+            allow_dirty_data_transfer=True,
+        )
+        accepted = self.apply(
+            home,
+            home.initial_state(),
+            ChiHomeAcceptCleanUnique(self.request_packet()),
+        )
+        collected = self.apply(
+            home,
+            accepted.state,
+            ChiHomeAcceptSnoopResponse(
+                ChiNetworkPacket.data(
+                    ChiSnpRespDataMessage(
+                        transaction_id=self.SNOOP_ID,
+                        data=self.DIRTY_DATA,
+                        response=ChiRespCode.I_PD,
+                    ),
+                    source_id=self.PEER,
+                    target_id=self.HOME,
+                )
+            ),
+        )
+        competing = home.backing_core.prepare_write(
+            collected.state.backing,
+            self.ADDRESS,
+            self.DATA ^ 1,
+        )
+        changed_backing = home.backing_core.commit_write(
+            collected.state.backing,
+            competing,
+        ).state
+        conflicting_state = ChiCoherentHomeState(
+            directory=collected.state.directory,
+            backing=changed_backing,
+            pending=collected.state.pending,
+            next_snoop_transaction_id=(
+                collected.state.next_snoop_transaction_id
+            ),
+            next_data_buffer_id=collected.state.next_data_buffer_id,
+            pending_writebacks=collected.state.pending_writebacks,
+        )
+        ack = ChiNetworkPacket.response(
+            ChiCompAckMessage(transaction_id=self.DBID),
+            source_id=self.REQUESTER,
+            target_id=self.HOME,
+        )
+
+        rejected = home.step(
+            conflicting_state,
+            ChiHomeAcceptCompAck(ack),
+        )
+
+        self.assert_fault_rule(rejected, "backing_commit_conflict")
+        self.assertIs(conflicting_state, rejected.state)
+        self.assertIn(self.DBID, rejected.state.pending)
+        entry = rejected.state.directory[self.ADDRESS]
+        self.assertIsNone(entry.unique_owner)
+        self.assertEqual(self.PEER, entry.shared_dirty_owner)
+        self.assertEqual(
+            self.DATA ^ 1,
+            rejected.state.backing.line_at(self.ADDRESS).data,
+        )
 
     def test_home_collects_mixed_clean_rsp_and_shared_dirty_dat(
         self,
@@ -493,14 +604,12 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             ChiHomeDirectoryEntry(
                 self.ADDRESS,
-                self.DATA,
                 sharers=frozenset((self.REQUESTER,)),
                 shared_dirty_owner=self.PEER,
             )
         with self.assertRaises(ValueError):
             ChiHomeDirectoryEntry(
                 self.ADDRESS,
-                self.DATA,
                 sharers=frozenset((self.REQUESTER, self.PEER)),
                 unique_owner=self.CLEAN_PEER,
                 shared_dirty_owner=self.PEER,

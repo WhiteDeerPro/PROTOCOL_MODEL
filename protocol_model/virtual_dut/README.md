@@ -32,6 +32,14 @@ permission、pending transaction、具名
 顺序组合两步的便捷入口。当前 CHI runtime 直接执行 participant/facet，尚未把 packet 输入接到通用
 `VirtualDutBackend`，也尚未声明 CPU-side port、replacement policy 或 MMU。
 
+coherent Home 使用相同的构造方向，但 payload contract 不与 directory 混合：
+`FullLineBackingCore` 保存固定 resident line，并提供 pure `prepare_write()` 与 line-local versioned
+`commit_write()`；CHI participant 只保存 directory、pending transaction 和 prepared write obligation。
+`attach_chi_issue_h_home()` 从 core 创建第一个 Home VirtualDut，
+`bind_chi_issue_h_home_vdut()` 则把 core/participant facet 绑定到调用方已有的同一个 canonical boundary。
+当前 binder 拒绝带独立 executable backend 的 Vdut，因为通用 backend runtime 与 CHI participant runtime
+尚未共享一个 module state；可观察的 HN→SN physical commit 需要后续显式协议路径。
+
 本目录中的 [`recipes/`](recipes/README.md) 是协议无关的构造基础，主要供 integration 开发者使用。某个
 SystemProtocol 中已经构造出的 `VirtualDut` 实例由该 system/scenario/project 持有；test 只验证构造方法，
 showcase 只给出实例用法，两者都不是 VirtualDut 产品清单。
@@ -69,6 +77,7 @@ virtual_dut/
 │   ├── memory_copy.py      单 outstanding、固定 descriptor copy engine
 │   ├── interrupt.py        edge 汇聚、priority、target EOI fixture
 │   ├── cache.py            resident-line store；协议 permission 由 attachment/facet 持有
+│   ├── backing.py          fixed full-line backing；pure prepare + line-local commit
 │   └── stream.py           ordered stream capture
 ├── address/
 │   ├── access.py           AddressRead/Write/Result

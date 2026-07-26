@@ -80,6 +80,10 @@ from protocol_model.system import (
     SystemProtocolBuilder,
     VirtualDutPortRef,
 )
+from protocol_model.virtual_dut.backend import (
+    BackingLine,
+    FullLineBackingCore,
+)
 from protocol_model.virtual_dut.boundary import (
     DutBehaviorTag,
     TransportDirection,
@@ -288,10 +292,14 @@ class ChiIssueHCleanUniqueSystemTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.DATA,
                     sharers=(
                         frozenset((self.REQUESTER, self.PEER))
                         if peer_state
@@ -823,7 +831,10 @@ class ChiIssueHCleanUniqueSystemTest(unittest.TestCase):
         requester_state = state.coherence.request_nodes[self.REQUESTER]
         peer_state = state.coherence.request_nodes[self.PEER]
         entry = home_state.directory[self.ADDRESS]
-        self.assertEqual(self.DATA, entry.data)
+        self.assertEqual(
+            self.DATA,
+            home_state.backing.line_at(self.ADDRESS).data,
+        )
         self.assertEqual(self.REQUESTER, entry.unique_owner)
         self.assertFalse(entry.sharers)
         self.assertIs(
@@ -893,7 +904,10 @@ class ChiIssueHCleanUniqueSystemTest(unittest.TestCase):
         requester_state = state.coherence.request_nodes[self.REQUESTER]
         peer_state = state.coherence.request_nodes[self.PEER]
         entry = home_state.directory[self.ADDRESS]
-        self.assertEqual(self.DIRTY_DATA, entry.data)
+        self.assertEqual(
+            self.DIRTY_DATA,
+            home_state.backing.line_at(self.ADDRESS).data,
+        )
         self.assertEqual(self.REQUESTER, entry.unique_owner)
         self.assertFalse(entry.sharers)
         self.assertIsNone(entry.shared_dirty_owner)

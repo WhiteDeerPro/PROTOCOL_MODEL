@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from protocol_model.integrations.recipes.amba.chi import (
     bind_chi_issue_h_cache_lines,
+    bind_chi_issue_h_home_vdut,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
@@ -24,7 +25,6 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiBehaviorFacet,
     ChiCacheLine,
     ChiCacheState,
-    ChiCoherentHomeNode,
     ChiExactNodeRoute,
     ChiFacetKind,
     ChiHomeDirectoryEntry,
@@ -71,6 +71,10 @@ from protocol_model.system import (
     SystemProtocol,
     SystemProtocolBuilder,
     VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.backend import (
+    BackingLine,
+    FullLineBackingCore,
 )
 from protocol_model.virtual_dut.boundary import (
     DutBehaviorTag,
@@ -412,25 +416,6 @@ def _connection_specs():
     )
 
 
-def _participant_binding(
-    name: str,
-    dut: VirtualDut,
-    component,
-    ports: tuple[tuple[str, frozenset[ChiChannelKind]], ...],
-    node_id: int,
-) -> ChiParticipantBinding:
-    return ChiParticipantBinding(
-        name,
-        dut,
-        component,
-        tuple(
-            ChiParticipantPortBinding(dut.port(port_name), channels)
-            for port_name, channels in ports
-        ),
-        frozenset((node_id,)),
-    )
-
-
 def _router_binding(
     dut: VirtualDut,
     router: ChiStoreForwardRouterNode,
@@ -529,18 +514,28 @@ def build_clean_mesh() -> CleanMeshAssembly:
         participant_name="rn2",
         binding_name="rn2",
     )
-    home = ChiCoherentHomeNode(
-        "hn0",
+    home = bind_chi_issue_h_home_vdut(
+        resolved_duts["hn0"],
+        FullLineBackingCore(
+            "hn0.backing",
+            line_bytes=64,
+            initial_lines=(BackingLine(LINE_ADDRESS, LINE_DATA),),
+        ),
         HOME_NODE_ID,
+        port_channels={
+            "rx_req_rsp": REQ_RSP,
+            "tx_dat_snp": DAT_SNP,
+        },
         initial_directory=(
             ChiHomeDirectoryEntry(
                 LINE_ADDRESS,
-                LINE_DATA,
                 sharers=frozenset(
                     (FIRST_SNOOPEE_NODE_ID, SECOND_SNOOPEE_NODE_ID)
                 ),
             ),
         ),
+        participant_name="hn0",
+        binding_name="hn0",
         initial_snoop_transaction_id=0x100,
         initial_data_buffer_id=0x200,
     )
@@ -549,16 +544,7 @@ def build_clean_mesh() -> CleanMeshAssembly:
         "rn0": requester.binding,
         "rn1": first_snoopee.binding,
         "rn2": second_snoopee.binding,
-        "hn0": _participant_binding(
-            "hn0",
-            resolved_duts["hn0"],
-            home,
-            (
-                ("rx_req_rsp", REQ_RSP),
-                ("tx_dat_snp", DAT_SNP),
-            ),
-            HOME_NODE_ID,
-        ),
+        "hn0": home.binding,
     }
     routers = _routers()
     for name, local_rx, local_tx in (
@@ -602,10 +588,7 @@ def build_clean_mesh() -> CleanMeshAssembly:
             *requester.facets.facets,
             *first_snoopee.facets.facets,
             *second_snoopee.facets.facets,
-            ChiBehaviorFacet.from_binding(
-                bindings["hn0"],
-                ChiFacetKind.TRANSACTION,
-            ),
+            *home.facets.facets,
             *(
                 ChiBehaviorFacet.from_binding(
                     bindings[name],
@@ -668,7 +651,9 @@ def _coherence_snapshot(coherence_state) -> dict[str, object]:
         "home": {
             "sharers": sorted(directory.sharers),
             "unique_owner": directory.unique_owner,
-            "data": directory.data,
+            "data": coherence_state.home.backing.line_at(
+                LINE_ADDRESS
+            ).data,
         },
     }
 

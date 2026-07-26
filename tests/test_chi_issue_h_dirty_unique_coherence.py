@@ -35,6 +35,10 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     ChiSubmitCoherentRead,
     ChiWriteUniqueCacheLine,
 )
+from protocol_model.virtual_dut.backend import (
+    BackingLine,
+    FullLineBackingCore,
+)
 
 
 class ChiIssueHDirtyUniqueCoherenceTest(unittest.TestCase):
@@ -66,10 +70,16 @@ class ChiIssueHDirtyUniqueCoherenceTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(
+                    BackingLine(self.ADDRESS, self.BACKING_DATA),
+                ),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.BACKING_DATA,
                     unique_owner=self.OWNER,
                 ),
             ),
@@ -120,7 +130,7 @@ class ChiIssueHDirtyUniqueCoherenceTest(unittest.TestCase):
         self.assertEqual(self.DIRTY_DATA, owner_line.data)
         self.assertEqual(
             self.BACKING_DATA,
-            dirtied.state.home.directory[self.ADDRESS].data,
+            dirtied.state.home.backing.line_at(self.ADDRESS).data,
         )
 
         request = ChiReadUniqueMessage(0x12, self.ADDRESS)
@@ -196,7 +206,10 @@ class ChiIssueHDirtyUniqueCoherenceTest(unittest.TestCase):
         )
         entry = retired.state.home.directory[self.ADDRESS]
         self.assertEqual(self.REQUESTER, entry.unique_owner)
-        self.assertEqual(self.BACKING_DATA, entry.data)
+        self.assertEqual(
+            self.BACKING_DATA,
+            retired.state.home.backing.line_at(self.ADDRESS).data,
+        )
         self.assertTrue(session.is_quiescent(retired.state))
         self.assertFalse(
             ChiCoherenceInvariantMonitor().explain(
@@ -258,10 +271,16 @@ class ChiIssueHDirtyUniqueCoherenceTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(
+                    BackingLine(self.ADDRESS, self.BACKING_DATA),
+                ),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.BACKING_DATA,
                     sharers=frozenset((self.REQUESTER, self.OWNER)),
                 ),
             ),
@@ -417,10 +436,16 @@ class ChiIssueHDirtyUniqueCoherenceTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(
+                    BackingLine(self.ADDRESS, self.BACKING_DATA),
+                ),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.BACKING_DATA,
                     unique_owner=self.OWNER,
                 ),
             ),

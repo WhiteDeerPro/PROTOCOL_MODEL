@@ -27,3 +27,14 @@ Backend 不导入 recipe，也不在运行中搜索或隐式插入 bridge。面�
 每个文件暂时共置其 profile、immutable state records 和 controller，以便完整阅读同一生命周期。只有两个
 切片确认 key、取得、释放和错误语义一致后，才提取 common helper；read/write 都使用映射或 ID 并不足以建立
 通用 owner-table 基类。
+
+`amba/` 当前只有 AXI4 不是 APB/AHB 的实现缺口，也不要求按协议名称补齐目录。APB 的 SETUP/ACCESS context
+和 AHB 的 address/data phase context 都属于单端口 attachment state；其 endpoint、单入口 fabric 和 serial
+bridge 目前分别可复用协议中立的 address、fabric 或 translation backend。AXI4 则有 burst、多 outstanding
+ID、AW/W join、same-ID ordering 与跨端口 return owner，这些协议规则直接塑造 controller 生命周期，才达到
+本目录的准入条件。
+
+如果后续 AHB exclusive/atomic、协议保持型 burst/lock 或多端口仲裁形成不能由 attachment 与通用 operation
+表达的跨事务状态，再建立 `amba/ahb/` backend。APB 当前没有同等级需求。CHI coherent Home 的
+directory/transaction behavior 仍是 family participant/facet；它注入的 full-line backing prepare/commit
+core 是协议中立状态，因此也不为目录对称建立 `backends/amba/chi/`。

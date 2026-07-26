@@ -57,6 +57,10 @@ from protocol_model.system import (
     SystemProtocolBuilder,
     VirtualDutPortRef,
 )
+from protocol_model.virtual_dut.backend import (
+    BackingLine,
+    FullLineBackingCore,
+)
 from protocol_model.virtual_dut.boundary import (
     TransportDirection,
     TransportPort,
@@ -317,10 +321,14 @@ class ChiIssueHResolvedCoherenceTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.DATA,
                     sharers=frozenset(
                         (
                             self.FIRST_PEER,

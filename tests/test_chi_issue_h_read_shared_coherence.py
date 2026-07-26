@@ -26,6 +26,10 @@ from protocol_model.protocols.amba.chi.issue_h.system.coherence import (
     ChiDeliverCoherencePacket,
     ChiSubmitCoherentRead,
 )
+from protocol_model.virtual_dut.backend import (
+    BackingLine,
+    FullLineBackingCore,
+)
 
 
 class ChiIssueHReadSharedCoherenceTest(unittest.TestCase):
@@ -57,10 +61,14 @@ class ChiIssueHReadSharedCoherenceTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.DATA,
                     unique_owner=self.OWNER,
                 ),
             ),
@@ -207,10 +215,14 @@ class ChiIssueHReadSharedCoherenceTest(unittest.TestCase):
         home = ChiCoherentHomeNode(
             "home",
             self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
+            ),
             initial_directory=(
                 ChiHomeDirectoryEntry(
                     self.ADDRESS,
-                    self.DATA,
                     sharers=frozenset(holders),
                 ),
             ),

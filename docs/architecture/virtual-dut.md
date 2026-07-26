@@ -164,6 +164,13 @@ descriptor 正向逐拍读取再写入，不为重叠区域提供 `memmove` 快�
 completion/effect 到 notification 的组合关系连接。
 容量接纳、丢弃和错误完成的公共语义见[容量、接纳与背压](capacity-admission-and-backpressure.md)。
 
+`CacheCore` 与 `FullLineBackingCore` 是另一种较小的协议中立 state core：它们先于 CHI facet 存在，但本身
+不是 topology-visible `VirtualDutBackend`。CHI participant state 只嵌入一次相应 storage snapshot；
+cache directory permission 与 Home holder directory 不复制 payload。Home backing 另以 pure
+`prepare_write()` 和 line-local versioned `commit_write()` 支持跨 completion/ack 的延迟提交。当前
+canonical Home binder 因而拒绝同时带独立 executable backend 的 Vdut，直到通用 runtime 能表达同 module
+多 facet 共用一份动态 state，或显式 HN→SN 事务把两份 state 连接起来。
+
 该层关注：
 
 - input/output 调用边界；

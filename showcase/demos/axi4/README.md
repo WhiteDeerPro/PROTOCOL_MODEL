@@ -14,7 +14,7 @@ deep dives. They are not extra scenarios: `hero_cases.py` replaces the two
 equivalent catalog inputs with richer `AtomicFrame` observations before the
 same executor runs them. The total remains 24.
 
-The executor calls the repository's `LinkSession` or
+The executor calls the repository's `InterfaceSession` or
 `Axi4ObservationSession`; there is no example-specific AXI checker. The
 presentation code derives JSON, waveforms, and causality graphs from those run
 results. Event-level waveforms explicitly represent sequential

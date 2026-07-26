@@ -4,30 +4,30 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 
-from ..attachments.base import ProtocolAttachment
-from ..boundary.port import ProtocolPort
+from ..attachments.base import InterfaceAttachment
+from ..boundary.port import InterfacePort
 
 
 @dataclass(frozen=True)
-class PortAttachmentBinding:
+class InterfaceAttachmentBinding:
     """Immutable local implementation binding; runtime state lives elsewhere."""
 
-    port: ProtocolPort
-    attachment: ProtocolAttachment
+    port: InterfacePort
+    attachment: InterfaceAttachment
 
     def __post_init__(self) -> None:
-        if not isinstance(self.port, ProtocolPort):
-            raise TypeError("attachment binding requires a ProtocolPort")
-        if not isinstance(self.attachment, ProtocolAttachment):
-            raise TypeError("attachment binding requires a ProtocolAttachment")
+        if not isinstance(self.port, InterfacePort):
+            raise TypeError("attachment binding requires an InterfacePort")
+        if not isinstance(self.attachment, InterfaceAttachment):
+            raise TypeError("attachment binding requires an InterfaceAttachment")
         attachment_protocol = self.attachment.protocol
-        if not isinstance(attachment_protocol, LinkProtocol):
-            raise TypeError("attachment must declare a LinkProtocol")
+        if not isinstance(attachment_protocol, InterfaceProtocol):
+            raise TypeError("attachment must declare an InterfaceProtocol")
         if not isinstance(self.attachment.role, str) or not self.attachment.role:
             raise TypeError("attachment must declare a non-empty protocol role")
-        if not attachment_protocol.has_same_transport_as(self.port.protocol):
+        if not attachment_protocol.has_same_interface_shape_as(self.port.protocol):
             raise ValueError(
                 f"attachment protocol {attachment_protocol.name!r} does not match "
                 f"port protocol {self.port.protocol.name!r}"

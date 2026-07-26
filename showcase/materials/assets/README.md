@@ -6,6 +6,8 @@
 
 当前人工维护资源：
 
+- [`brand/protocol-model-mark.svg`](brand/protocol-model-mark.svg) / [`PNG`](brand/protocol-model-mark.png)：
+  Protocol Model 唯一项目标志；早期探索保留在 `brand/studies/`，不构成不同应用版本；
 - [`overview/protocol-model-overview.zh.svg`](overview/protocol-model-overview.zh.svg)：中文 16:9 项目总览；
 - [`overview/protocol-model-overview.en.svg`](overview/protocol-model-overview.en.svg)：English 16:9 project overview。
 - [`overview/protocol-model-overview.zh.png`](overview/protocol-model-overview.zh.png) / [`overview/protocol-model-overview.en.png`](overview/protocol-model-overview.en.png)：

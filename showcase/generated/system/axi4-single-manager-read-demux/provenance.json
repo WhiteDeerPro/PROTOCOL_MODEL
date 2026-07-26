@@ -1,0 +1,20 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "axi4-single-manager-read-demux",
+  "source": "showcase/demos/system/axi4_single_manager_read_demux/run.py",
+  "command": "python3 showcase/demos/system/axi4_single_manager_read_demux/run.py",
+  "protocol_model_version": "0.4.0",
+  "execution_models": [
+    "SystemSession",
+    "Axi4ReadCrossbarBackend (one ingress)",
+    "SteppedEmissionBackend",
+    "PassiveAddressSpaceBackend"
+  ],
+  "renderers": {
+    "topology": "Graphviz + shared system projection",
+    "model_steps": "WaveDrom + demo-local semantic post-state projection",
+    "causality": "Graphviz + shared SystemTrace projection"
+  },
+  "presentation_boundary": "canonical AXI4 AR/R events and model steps; not AXI pins, cycle timing, RTL, VCD, or exhaustive compliance",
+  "construction_boundary": "one AddressRouterContract constructs and validates the single-ingress AXI4 read fabric boundary"
+}

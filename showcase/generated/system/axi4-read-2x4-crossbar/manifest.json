@@ -1,0 +1,262 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "vdut-axi4-read-2x4-crossbar",
+  "run_id": "axi4-read-2x4-crossbar",
+  "generated_at": "2026-07-26T19:09:53.490162+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "system",
+      "identity": "axi4_read_two_by_four_crossbar",
+      "definition": "axi4_read_two_by_four_crossbar",
+      "parameters": {},
+      "lineage": [],
+      "metadata": {
+        "virtual_duts": [
+          "crossbar",
+          "manager0",
+          "manager1",
+          "target0",
+          "target1",
+          "target2",
+          "target3"
+        ],
+        "connections": [
+          "manager0_bus",
+          "manager1_bus",
+          "target0_bus",
+          "target1_bus",
+          "target2_bus",
+          "target3_bus"
+        ],
+        "boundary": []
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "axi4_read_only",
+      "definition": "axi4_read_only",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 32,
+        "id_width": 3
+      },
+      "lineage": [
+        "axi4"
+      ],
+      "metadata": {
+        "interface_family": "amba.axi4",
+        "roles": [
+          "manager",
+          "subordinate"
+        ],
+        "event_kinds": [
+          "AR",
+          "AW",
+          "B",
+          "R",
+          "W"
+        ],
+        "monitors": [
+          "axi4.exclusive",
+          "axi4.read",
+          "axi4.write",
+          "axi4_read_only.forbidden_events"
+        ],
+        "resources": [
+          {
+            "name": "axi4.read.pending_transactions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AR"
+            ],
+            "released_by": [
+              "R[last=True]",
+              "reset"
+            ],
+            "description": "accepted AR transactions awaiting their final R beat"
+          },
+          {
+            "name": "axi4.exclusive.reservations",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "R[last=True, resp=EXOKAY]"
+            ],
+            "released_by": [
+              "matching AW[lock=1]",
+              "later same-ID AR[lock=1]",
+              "reset"
+            ],
+            "description": "completed exclusive reads that can make one matching write eligible for EXOKAY"
+          },
+          {
+            "name": "axi4.write.assembling_data",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "first W[last=False] of burst"
+            ],
+            "released_by": [
+              "W[last=True]",
+              "reset"
+            ],
+            "description": "a partially observed W burst awaiting WLAST"
+          },
+          {
+            "name": "axi4.write.pending_descriptors",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW without available complete W burst"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "accepted AW descriptors awaiting a FIFO-matched W burst"
+          },
+          {
+            "name": "axi4.write.pending_data_bursts",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "W[last=True] without available AW"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "complete W bursts observed before their FIFO-matched AW"
+          },
+          {
+            "name": "axi4.write.pending_completions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW/W FIFO join"
+            ],
+            "released_by": [
+              "B",
+              "reset"
+            ],
+            "description": "joined AW/W transactions awaiting B"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "same-raw-rid-return-owner",
+      "expected": "two managers sharing one downstream RID receive their responses in downstream acceptance order",
+      "observed": "PASS",
+      "artifacts": []
+    },
+    {
+      "name": "same-manager-destination-lock",
+      "expected": "one manager cannot redirect an active RID until its prior RLAST, then retry succeeds",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "event_count": 22,
+    "causal_edge_count": 23,
+    "manager0_response_count": 4,
+    "manager1_response_count": 2,
+    "final_quiescent": true
+  },
+  "metadata": {
+    "publication": "showcase/generated/system/axi4-read-2x4-crossbar",
+    "network_scope": "non-coherent AXI4 read-only AR/R two-manager/four-subordinate crossbar",
+    "implemented_channels": [
+      "AR",
+      "R"
+    ],
+    "id_policy": "raw-id-serialized",
+    "raw_pin_capture": false,
+    "time_basis": "model_step"
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "causality.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "interconnect_interface_map",
+      "path": "interconnect-interface-map.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_step_view",
+      "path": "model-steps.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "interconnect_interface_map_source",
+      "path": "sources/interconnect-interface-map.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "execution_step_view_source",
+      "path": "sources/model-steps.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

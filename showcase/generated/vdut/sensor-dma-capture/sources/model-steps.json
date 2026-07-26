@@ -1,0 +1,209 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP · not ACLK",
+      "wave": "===========",
+      "data": [
+        "S0",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7",
+        "S8",
+        "S9",
+        "S10"
+      ]
+    },
+    [
+      "scheduler",
+      {
+        "name": "service action",
+        "wave": "===========",
+        "data": [
+          "produce×4 · keep2/drop2",
+          "b0 · DMA read",
+          "b0 · sensor path",
+          "b0 · DMA write",
+          "b0 · memory path",
+          "b0 · memory complete",
+          "b1 · DMA read",
+          "b1 · sensor path",
+          "b1 · DMA write",
+          "b1 · memory path",
+          "b1 · memory complete"
+        ]
+      }
+    ],
+    [
+      "accepted canonical events",
+      {
+        "name": "DMA → crossbar",
+        "wave": "===========",
+        "data": [
+          "—",
+          "e0 AR @0x1000",
+          "—",
+          "e4 AW @0x2000 + e5 W D=10203040",
+          "—",
+          "—",
+          "e10 AR @0x1000",
+          "—",
+          "e14 AW @0x2004 + e15 W D=10203041",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "crossbar ↔ sensor",
+        "wave": "===========",
+        "data": [
+          "—",
+          "—",
+          "e1 AR @0x0000 + e2 R D=10203040",
+          "—",
+          "—",
+          "—",
+          "—",
+          "e11 AR @0x0000 + e12 R D=10203041",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "crossbar ↔ memory",
+        "wave": "===========",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "—",
+          "e6 AW @0x0000 + e7 W D=10203040",
+          "e8 B OKAY",
+          "—",
+          "—",
+          "—",
+          "e16 AW @0x0004 + e17 W D=10203041",
+          "e18 B OKAY"
+        ]
+      },
+      {
+        "name": "crossbar → DMA",
+        "wave": "===========",
+        "data": [
+          "—",
+          "—",
+          "e3 R D=10203040",
+          "—",
+          "—",
+          "e9 B OKAY",
+          "—",
+          "e13 R D=10203041",
+          "—",
+          "—",
+          "e19 B OKAY"
+        ]
+      }
+    ],
+    [
+      "post-state",
+      {
+        "name": "sensor FIFO",
+        "wave": "===========",
+        "data": [
+          "2/2",
+          "2/2",
+          "1/2",
+          "1/2",
+          "1/2",
+          "1/2",
+          "1/2",
+          "0/2",
+          "0/2",
+          "0/2",
+          "0/2"
+        ]
+      },
+      {
+        "name": "sensor overruns",
+        "wave": "===========",
+        "data": [
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2",
+          "2"
+        ]
+      },
+      {
+        "name": "DMA phase",
+        "wave": "===========",
+        "data": [
+          "need_read",
+          "read_pending",
+          "need_write",
+          "write_pending",
+          "write_pending",
+          "need_read",
+          "read_pending",
+          "need_write",
+          "write_pending",
+          "write_pending",
+          "done"
+        ]
+      },
+      {
+        "name": "DMA bytes copied",
+        "wave": "===========",
+        "data": [
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "4",
+          "4",
+          "4",
+          "4",
+          "4",
+          "8"
+        ]
+      },
+      {
+        "name": "memory request FIFO",
+        "wave": "===========",
+        "data": [
+          "0",
+          "0",
+          "0",
+          "0",
+          "1",
+          "0",
+          "0",
+          "0",
+          "0",
+          "1",
+          "0"
+        ]
+      }
+    ]
+  ],
+  "head": {
+    "text": "Sensor FIFO → serialized DMA → memory · transaction-semantic execution"
+  },
+  "foot": {
+    "text": "1 column = 1 accepted SystemSession action/service opportunity · POST-STATE · not AXI pins or cycle timing"
+  },
+  "config": {
+    "hscale": 6
+  }
+}

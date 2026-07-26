@@ -1,0 +1,24 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "chi-issue-h-clean-2x2-mesh",
+  "source": "showcase/demos/system/chi_issue_h_clean_2x2_mesh/run.py",
+  "command": ".venv/bin/python showcase/demos/system/chi_issue_h_clean_2x2_mesh/run.py",
+  "protocol_model_version": "0.4.0",
+  "time_basis": "committed semantic microsteps and per-hop transport ticks",
+  "construction": [
+    "SystemProtocolBuilder",
+    "DirectedTransportConnection",
+    "ChiStoreForwardRouterNode[xp00,xp10,xp11,xp01]",
+    "ChiParticipantBinding[requester,home,snoopee]",
+    "ChiCoherenceNetworkSession",
+    "CleanCoherenceDomain"
+  ],
+  "topology_projection": "demo projection of the executed SystemProtocol topology; fixed 2x2 XP positions preserve the visible ring",
+  "renderers": {
+    "topology": "Graphviz neato; fixed semantic positions",
+    "transaction_sequence": "Graphviz dot; participant-level causal ordering",
+    "coherence_state": "Graphviz dot; before/after state projection"
+  },
+  "presentation_boundary": "the diagrams project executed packet paths and clean coherence state transitions; they are not raw pin waveforms and do not prescribe RTL cycle spacing",
+  "model_boundary": "clean-only I/SC/UC ReadUnique witness on a caller-built four-XP mesh; no dirty owner, full MESI/MOESI, arbitrary adaptive routing, QoS/fairness, or deadlock proof"
+}

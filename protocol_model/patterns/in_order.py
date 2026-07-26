@@ -89,7 +89,7 @@ class InOrderCompletionMonitor(
         return SemanticStep(
             state,
             fault=SemanticFault(
-                f"{self.name}.{rule}", reason, ConstraintScope.LINK
+                f"{self.name}.{rule}", reason, ConstraintScope.INTERFACE
             ),
         )
 
@@ -100,7 +100,7 @@ class InOrderCompletionMonitor(
             return self._fault(
                 state,
                 "trace_index",
-                "request/completion events must be normalized by a LinkSession",
+                "request/completion events must be normalized by an InterfaceSession",
             )
         if event.kind in self.completions:
             if (

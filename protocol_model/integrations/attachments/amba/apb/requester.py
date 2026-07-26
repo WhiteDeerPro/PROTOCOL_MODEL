@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import (
     CanonicalEvent,
     ConstraintScope,
@@ -39,16 +39,16 @@ class ApbRequesterAttachment(AddressRequesterAttachment):
 
     role = "requester"
 
-    def __init__(self, protocol: LinkProtocol) -> None:
+    def __init__(self, protocol: InterfaceProtocol) -> None:
         require_apb_role(protocol, self.role)
         self.protocol = protocol
         self.data_width = int(protocol.parameters["data_width"])
         self.bytes_per_transfer = self.data_width // 8
         self.read_request_fields = frozenset(
-            protocol.channels["READ"].event.fields
+            protocol.event_kinds["READ"].schema.fields
         )
         self.write_request_fields = frozenset(
-            protocol.channels["WRITE"].event.fields
+            protocol.event_kinds["WRITE"].schema.fields
         )
 
     def initial_state(self) -> ApbRequesterState:
@@ -107,7 +107,7 @@ class ApbRequesterAttachment(AddressRequesterAttachment):
                     state,
                     fault=self._fault(
                         "byte_enable",
-                        "this APB link cannot encode a partial write without PSTRB",
+                        "this APB interface cannot encode a partial write without PSTRB",
                     ),
                 )
         event = CanonicalEvent(kind, None, payload)

@@ -6,7 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Mapping, Sequence
 
-from .model import CONSTRAINT_SCHEMA, ConstraintEvidence, ProtocolRecord
+from .model import CONSTRAINT_SCHEMA, ConstraintRecord, ProtocolRecord
 from .store import RunArtifactStore
 
 
@@ -57,7 +57,7 @@ class RunBundle:
         return self.visuals.render_wave(*args, **kwargs)
 
     def write_constraints(
-        self, constraints: Sequence[ConstraintEvidence]
+        self, constraints: Sequence[ConstraintRecord]
     ) -> tuple[Path, Path]:
         payload = {
             "schema": CONSTRAINT_SCHEMA,

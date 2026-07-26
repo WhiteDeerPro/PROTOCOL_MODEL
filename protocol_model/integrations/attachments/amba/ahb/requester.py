@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import log2
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import CanonicalEvent, ConstraintScope, SemanticFault
 from protocol_model.virtual_dut.address.access import (
     AccessResult,
@@ -50,7 +50,7 @@ class AhbRequesterAttachment(AddressRequesterAttachment):
 
     def __init__(
         self,
-        protocol: LinkProtocol,
+        protocol: InterfaceProtocol,
         *,
         byte_order: ByteOrder | str = ByteOrder.LITTLE,
     ) -> None:
@@ -60,9 +60,9 @@ class AhbRequesterAttachment(AddressRequesterAttachment):
         self.protocol = protocol
         self.data_width = int(protocol.parameters["data_width"])
         self.bus_bytes = self.data_width // 8
-        self.read_fields = protocol.channels["READ"].event.fields
-        self.write_fields = protocol.channels["WRITE"].event.fields
-        self.write_data_fields = protocol.channels["WRITE_DATA"].event.fields
+        self.read_fields = protocol.event_kinds["READ"].schema.fields
+        self.write_fields = protocol.event_kinds["WRITE"].schema.fields
+        self.write_data_fields = protocol.event_kinds["WRITE_DATA"].schema.fields
 
     def initial_state(self) -> AhbRequesterState:
         return AhbRequesterState()
@@ -137,7 +137,7 @@ class AhbRequesterAttachment(AddressRequesterAttachment):
                     state,
                     fault=self._fault(
                         "byte_enable",
-                        "this AHB link cannot encode a partial write without HWSTRB",
+                        "this AHB interface cannot encode a partial write without HWSTRB",
                     ),
                 )
             for name in sorted(data_attributes):

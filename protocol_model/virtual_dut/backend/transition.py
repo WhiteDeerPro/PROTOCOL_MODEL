@@ -6,7 +6,11 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
 
-from protocol_model.semantics import CanonicalEvent, SemanticFault
+from protocol_model.semantics import (
+    CanonicalEvent,
+    ResourceDemand,
+    SemanticFault,
+)
 
 
 @dataclass(frozen=True)
@@ -39,3 +43,10 @@ class DutTransition:
     state: object
     emissions: tuple[PortEmission, ...] = ()
     fault: SemanticFault | None = None
+    blocked: ResourceDemand | None = None
+
+    def __post_init__(self) -> None:
+        if self.fault is not None and self.blocked is not None:
+            raise ValueError("a DUT transition cannot be both faulted and blocked")
+        if self.blocked is not None and self.emissions:
+            raise ValueError("a blocked DUT transition cannot emit accepted events")

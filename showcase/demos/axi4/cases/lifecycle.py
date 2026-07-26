@@ -1,7 +1,7 @@
 """Read/write obligation and completion lifecycle examples."""
 
-from protocol_model import Verdict
-from protocol_model.link.amba.axi.axi4 import build_axi4_link
+from protocol_model.protocols.amba.axi.axi4 import build_axi4_interface
+from protocol_model.semantics import Verdict
 
 from common import (
     ExecutionMode,
@@ -14,7 +14,7 @@ from common import (
 
 
 def lifecycle_cases() -> tuple[ExampleCase, ...]:
-    protocol = build_axi4_link()
+    protocol = build_axi4_interface()
     single_read = address("AR", key=1, addr=0x100)
     single_write = address("AW", key=2, addr=0x200)
     before_address = address("AW", key=3, addr=0x208)
@@ -31,7 +31,7 @@ def lifecycle_cases() -> tuple[ExampleCase, ...]:
             "AR creates one pending read; the matching final R releases it.",
             "AR 建立一个待读资源，匹配的末拍 R 将其释放。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (single_read, read_data(key=1, last=True, data=0x11223344)),
             Verdict.PASS,
         ),
@@ -43,7 +43,7 @@ def lifecycle_cases() -> tuple[ExampleCase, ...]:
             "A response with no pending request is rejected locally.",
             "没有待读请求的响应会在单链路范围内被拒绝。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (read_data(key=7, last=True),),
             Verdict.FAIL,
             "axi4.read.orphan_beat",
@@ -56,7 +56,7 @@ def lifecycle_cases() -> tuple[ExampleCase, ...]:
             "The joined write owns one completion resource until B arrives.",
             "关联后的写事务占用一个 completion 资源，直到 B 到达。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 single_write,
                 write_data(last=True, strobe=0x0F, data=0xAABBCCDD),
@@ -72,7 +72,7 @@ def lifecycle_cases() -> tuple[ExampleCase, ...]:
             "The ID-less W burst waits in FIFO order and joins the later AW.",
             "无 ID 的 W burst 按 FIFO 顺序等待并关联后续 AW。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 write_data(last=True, strobe=0x0F, data=0x55),
                 before_address,
@@ -88,7 +88,7 @@ def lifecycle_cases() -> tuple[ExampleCase, ...]:
             "AWLEN=3 requires four W transfers, so WLAST on beat one is early.",
             "AWLEN=3 表示四拍，因此首拍置 WLAST 属于过早结束。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (long_write, write_data(last=True, strobe=0x0F)),
             Verdict.FAIL,
             "axi4.write.final_marker",
@@ -101,7 +101,7 @@ def lifecycle_cases() -> tuple[ExampleCase, ...]:
             "A single-beat AW requires WLAST on its only W transfer.",
             "单拍 AW 要求唯一的 W 传输同时也是末拍。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 single_for_missing_last,
                 write_data(last=False, strobe=0x0F),
@@ -118,7 +118,7 @@ def lifecycle_cases() -> tuple[ExampleCase, ...]:
             "A B response for ID 13 cannot complete the joined write for ID 12.",
             "ID 13 的 B 响应不能完成 ID 12 的已关联写事务。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 wrong_bid,
                 write_data(last=True, strobe=0x0F),

@@ -2,25 +2,28 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
-    AddressRoute,
-    AddressSpace,
-    CanonicalEvent,
-    CaptureModel,
-    MemoryRegion,
-    ProtocolLink,
-    ProtocolPort,
-    SystemAction,
-    SystemProtocol,
-    VirtualDut,
-    VirtualDutPortRef,
+from protocol_model.integrations.recipes.amba.endpoints import (
     build_apb_address_space_vdut,
 )
+from protocol_model.semantics import CanonicalEvent
+from protocol_model.system import (
+    InterfaceConnection,
+    SystemAction,
+    SystemProtocol,
+    VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.address import (
+    AddressSpace,
+    MemoryRegion,
+)
+from protocol_model.virtual_dut.backend import CaptureBackend
+from protocol_model.virtual_dut.boundary import InterfacePort, VirtualDut
+from protocol_model.virtual_dut.fabric import AddressRoute
 from protocol_model.integrations.recipes.amba.bridges import (
     build_axi4_to_apb_bridge_vdut,
 )
-from protocol_model.link.amba.apb.apb4 import build_apb4_link
-from protocol_model.link.amba.axi.axi4 import Axi4Config, build_axi4_link
+from protocol_model.protocols.amba.apb.apb4 import build_apb4_interface
+from protocol_model.protocols.amba.axi.axi4 import Axi4Config, build_axi4_interface
 
 
 def _address_event(
@@ -50,12 +53,12 @@ def _address_event(
 class Axi4ToApbBridgeTest(unittest.TestCase):
     @staticmethod
     def _system(*, capture_apb: bool = False) -> SystemProtocol:
-        axi = build_axi4_link(Axi4Config(data_width=32))
-        apb = build_apb4_link(data_width=32)
+        axi = build_axi4_interface(Axi4Config(data_width=32))
+        apb = build_apb4_interface(data_width=32)
         manager = VirtualDut(
             "manager",
-            {"axi": ProtocolPort("axi", axi, "manager")},
-            model=CaptureModel(),
+            {"axi": InterfacePort("axi", axi, "manager")},
+            backend=CaptureBackend(),
         )
         bridge = build_axi4_to_apb_bridge_vdut(
             "bridge",
@@ -74,8 +77,8 @@ class Axi4ToApbBridgeTest(unittest.TestCase):
         if capture_apb:
             peripheral = VirtualDut(
                 "peripheral",
-                {"apb": ProtocolPort("apb", apb, "completer")},
-                model=CaptureModel(),
+                {"apb": InterfacePort("apb", apb, "completer")},
+                backend=CaptureBackend(),
             )
         else:
             peripheral = build_apb_address_space_vdut(
@@ -95,7 +98,7 @@ class Axi4ToApbBridgeTest(unittest.TestCase):
                 ),
             )
         links = (
-            ProtocolLink(
+            InterfaceConnection(
                 "axi",
                 axi,
                 {
@@ -103,7 +106,7 @@ class Axi4ToApbBridgeTest(unittest.TestCase):
                     "subordinate": VirtualDutPortRef("bridge", "s_axi"),
                 },
             ),
-            ProtocolLink(
+            InterfaceConnection(
                 "apb",
                 apb,
                 {
@@ -136,12 +139,12 @@ class Axi4ToApbBridgeTest(unittest.TestCase):
         apb_requests = tuple(
             item.event
             for item in transition.emissions
-            if item.link == "apb" and item.event.kind == "READ"
+            if item.connection == "apb" and item.event.kind == "READ"
         )
         responses = tuple(
             item.event
             for item in transition.emissions
-            if item.link == "axi" and item.event.kind == "R"
+            if item.connection == "axi" and item.event.kind == "R"
         )
         self.assertEqual(
             (0x1000, 0x1004, 0x1008),
@@ -298,7 +301,7 @@ class Axi4ToApbBridgeTest(unittest.TestCase):
         )
 
         self.assertIsNone(transition.fault)
-        self.assertFalse(any(item.link == "apb" for item in transition.emissions))
+        self.assertFalse(any(item.connection == "apb" for item in transition.emissions))
         responses = tuple(
             item.event
             for item in transition.emissions

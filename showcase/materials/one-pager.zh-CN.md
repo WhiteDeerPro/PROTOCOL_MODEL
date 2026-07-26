@@ -17,7 +17,7 @@ Protocol Model 的核心尝试是从小型、可组合的通信事实逐层构�
 ```text
 基础事件、关系与资源
         ↓ 组合与细化
-LinkProtocol：一条逻辑连接上允许怎样通信
+InterfaceProtocol：一条逻辑连接上允许怎样通信
         ↓ 绑定到具名模块端口
 VirtualDut：一个虚拟 module 的通信相关行为
         ↓ 连接并加入全局契约
@@ -30,10 +30,10 @@ SystemProtocol：多条 link 与多个 module 组成的通信系统
 
 当前源码树已经包含组合式语义单元、`AtomicFrame` 观察边界、ready/valid 与 reset 处理，以及 AXI4、
 AXI4-Lite、AXI4-Stream、AHB-Lite/AHB5 profile、APB3/APB4/APB5 和 ACE-Lite ordinary-data subset 的
-LinkProtocol 实现。AXI4 当前覆盖的非平凡行为包括 burst、narrow/unaligned、read interleave、AW/W/B
+InterfaceProtocol 实现。AXI4 当前覆盖的非平凡行为包括 burst、narrow/unaligned、read interleave、AW/W/B
 correlation、单 link 可判断的 exclusive eligibility 和状态驱动生成。
 
-项目也已经提供具名 `VirtualDut`、typed protocol ports、AMBA attachment、地址空间 endpoint、同步
+项目也已经提供具名 `VirtualDut`、typed interface ports、AMBA attachment、地址空间 endpoint、同步
 `SystemProtocol` session，以及 AXI4→APB 等 bridge witness。类型化事务转译内核已经具备 operation
 signature、stage contract、plan closure、fan-out lifecycle 和 serial capacity lease；现有 full AXI bridge
 仍在接入这个公共内核。
@@ -61,7 +61,7 @@ raw RTL/VCD adapter 和 wait-for/deadlock 分析属于后续阶段，不作为�
 
 - 一份组合式协议构造能否同时服务 generator、monitor 和 evidence，减少知识重复？
 - typed operation 与 translation stage 能否让 bridge 复用从“协议对代码”转向“codec + semantic stage”？
-- LinkProtocol、VirtualDut、SystemProtocol 的作用域划分能否让单 link 规则和网络级责任更容易审计？
+- InterfaceProtocol、VirtualDut、SystemProtocol 的作用域划分能否让单 link 规则和网络级责任更容易审计？
 
 回答这些问题需要协议工程师、验证工程师、RTL 集成者和可视化贡献者共同提供反例、需求校正和真实案例。
 项目当前定位是 **technical preview with an executable first slice**：欢迎从统一导航扫读
@@ -71,4 +71,4 @@ raw RTL/VCD adapter 和 wait-for/deadlock 分析属于后续阶段，不作为�
 进一步阅读：[架构地图](../../docs/architecture/technical-route/README.md) ·
 [当前实现边界](../../docs/architecture/implementation-status.md) ·
 [统一 AXI4 示例](../generated/axi4/README.zh-CN.md) ·
-[发布说明](../../docs/releases/0.3.0.md)
+[发布说明](../../docs/releases/0.4.0.md)

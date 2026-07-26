@@ -5,7 +5,7 @@ compositional semantic modeling and verification research prototype for on-chip 
 checking, and diagnostic evidence can share one construction path instead of re-encoding the same relationships in
 drivers, monitors, assertions, reference models, and reports.
 
-**CURRENT — what exists today.** The main line builds LinkProtocol models from typed events, constraints, resources,
+**CURRENT — what exists today.** The main line builds InterfaceProtocol models from typed events, constraints, resources,
 and reusable patterns, then attaches those protocols to named VirtualDut modules through typed ports. Its current AXI4
 scope includes bursts, narrow and unaligned transfers, read interleaving, AW/W/B correlation, link-local exclusive
 eligibility, and state-driven generation. The repository also contains synchronous SystemProtocol execution,

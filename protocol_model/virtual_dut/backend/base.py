@@ -8,10 +8,10 @@ from typing import Mapping, TYPE_CHECKING
 from .transition import DutTransition, PortInput
 
 if TYPE_CHECKING:
-    from ..binding.port import PortAttachmentBinding
+    from ..binding.port import InterfaceAttachmentBinding
 
 
-class VirtualDutModel(ABC):
+class VirtualDutBackend(ABC):
     """Minimal protocol-visible backend for one concrete module."""
 
     @abstractmethod
@@ -27,7 +27,7 @@ class VirtualDutModel(ABC):
 
     def local_attachment_bindings(
         self,
-    ) -> Mapping[str, "PortAttachmentBinding"] | None:
+    ) -> Mapping[str, "InterfaceAttachmentBinding"] | None:
         """Bindings consumed by this backend, if attachment-aware.
 
         Raw canonical-event and external models return ``None``.  Backends
@@ -36,3 +36,13 @@ class VirtualDutModel(ABC):
         """
 
         return None
+
+    def boundary_projections(self) -> Mapping[str, object]:
+        """Return immutable configuration facts visible outside this backend.
+
+        Most backends expose no projection.  Constructed routers and bridges
+        can use this hook to let System construction compare an implementation
+        against its declared boundary contract without reading mutable state.
+        """
+
+        return {}

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model.link.amba.axi.axi4_stream import (
+from protocol_model.protocols.amba.axi.axi4_stream import (
     Axi4StreamConfig,
-    build_axi4_stream_link,
+    build_axi4_stream_interface,
 )
 from protocol_model.integrations.attachments.amba.axi.axi4_stream import (
     Axi4StreamReceiverAttachment,
@@ -15,7 +15,7 @@ from protocol_model.integrations.recipes.amba.endpoints import (
 )
 from protocol_model.semantics import CanonicalEvent
 from protocol_model.system import (
-    ProtocolLink,
+    InterfaceConnection,
     SystemAction,
     SystemProtocol,
     VirtualDutPortRef,
@@ -23,12 +23,12 @@ from protocol_model.system import (
 from protocol_model.virtual_dut.attachments.stream import StreamTransfer
 from protocol_model.virtual_dut.backend.stream import StreamCaptureState
 from protocol_model.virtual_dut.boundary.module import VirtualDut
-from protocol_model.virtual_dut.boundary.port import ProtocolPort
+from protocol_model.virtual_dut.boundary.port import InterfacePort
 
 
 class Axi4StreamAttachmentTest(unittest.TestCase):
     def test_optional_sidebands_round_trip_through_stream_operation(self) -> None:
-        protocol = build_axi4_stream_link(
+        protocol = build_axi4_stream_interface(
             Axi4StreamConfig(
                 data_width=24,
                 id_width=2,
@@ -63,7 +63,7 @@ class Axi4StreamAttachmentTest(unittest.TestCase):
         self.assertEqual(transfer, decoded.transfer)
 
     def test_absent_optional_signals_reject_unrepresentable_transfer(self) -> None:
-        protocol = build_axi4_stream_link(
+        protocol = build_axi4_stream_interface(
             Axi4StreamConfig(
                 data_width=16,
                 use_keep=False,
@@ -99,19 +99,19 @@ class Axi4StreamAttachmentTest(unittest.TestCase):
         )
 
     def test_capture_backend_retains_normalized_transfer(self) -> None:
-        protocol = build_axi4_stream_link(
+        protocol = build_axi4_stream_interface(
             Axi4StreamConfig(data_width=16, use_keep=True)
         )
         source = VirtualDut(
             "source",
             {
-                "stream": ProtocolPort(
+                "stream": InterfacePort(
                     "stream", protocol, "transmitter"
                 )
             },
         )
         capture = build_axi4_stream_capture_vdut("capture", protocol)
-        link = ProtocolLink(
+        link = InterfaceConnection(
             "stream_link",
             protocol,
             {

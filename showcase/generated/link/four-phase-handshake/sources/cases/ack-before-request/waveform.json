@@ -1,0 +1,61 @@
+{
+  "signal": [
+    {
+      "name": "OBSERVATION ORDER · not clock",
+      "wave": "==",
+      "data": [
+        "S0",
+        "S1"
+      ]
+    },
+    {
+      "name": "timestamp note (ns)",
+      "wave": "==",
+      "data": [
+        "0",
+        "3.1"
+      ]
+    },
+    {
+      "name": "pin · REQ",
+      "wave": "0."
+    },
+    {
+      "name": "pin · ACK",
+      "wave": "01"
+    },
+    {
+      "name": "pin · bundled event",
+      "wave": "x.",
+      "data": []
+    },
+    {
+      "name": "model · observer post-state",
+      "wave": "==",
+      "data": [
+        "idle_00",
+        "REJECT · 01 returning"
+      ]
+    },
+    {
+      "name": "model · accepted TRANSFER",
+      "wave": "0."
+    },
+    {
+      "name": "model · verdict / diagnostic",
+      "wave": "x=",
+      "data": [
+        "showcase.ack-before-request.phase_order"
+      ]
+    }
+  ],
+  "head": {
+    "text": "非法传输：ACK 在 REQ 前出现"
+  },
+  "foot": {
+    "text": "Edge-complete logical snapshots · timestamps are annotations · not a shared-clock RTL/VCD capture"
+  },
+  "config": {
+    "hscale": 3
+  }
+}

@@ -1,0 +1,172 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "chi-issue-h-routed-read",
+  "run_id": "chi-issue-h-routed-read",
+  "generated_at": "2026-07-26T19:11:46.640117+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "interface",
+      "identity": "chi.issue_h.direct_read",
+      "definition": "restricted ReadNoSnp to one correlated CompData",
+      "parameters": {
+        "issue": "H",
+        "requester_node_id": 7,
+        "home_node_id": 33,
+        "data_width": 128,
+        "outstanding_capacity": 2,
+        "home_request_capacity": 1,
+        "router_queue_capacity": 1,
+        "link_credit_capacity": 1
+      }
+    },
+    {
+      "scope": "transport",
+      "identity": "chi.issue_h.req_dat_hops",
+      "definition": "six independent, directed, credit-controlled hops",
+      "parameters": {
+        "request_hops": 3,
+        "data_hops": 3,
+        "activation": "per directed connection",
+        "credit_capacity": 1
+      }
+    },
+    {
+      "scope": "system",
+      "identity": "chi.issue_h.two_xp_routed_read",
+      "definition": "caller-built topology with exact-NodeID store-forward routing and end-to-end transaction completion",
+      "parameters": {
+        "nodes": [
+          "sensor_reader_rn",
+          "xp0",
+          "xp1",
+          "sensor_io_home"
+        ],
+        "connections": [
+          "req_0_rn_to_xp0",
+          "req_1_xp0_to_xp1",
+          "req_2_xp1_to_home",
+          "dat_0_home_to_xp1",
+          "dat_1_xp1_to_xp0",
+          "dat_2_xp0_to_rn"
+        ],
+        "request_route": [
+          "req_0_rn_to_xp0",
+          "req_1_xp0_to_xp1",
+          "req_2_xp1_to_home"
+        ],
+        "data_route": [
+          "dat_0_home_to_xp1",
+          "dat_1_xp1_to_xp0",
+          "dat_2_xp0_to_rn"
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "sensor-register-read",
+      "expected": "ReadNoSnp crosses XP0 and XP1, then correlated CompData returns over the reverse route",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "completed_count": 1,
+    "committed_microsteps": 71,
+    "request_route": [
+      "req_0_rn_to_xp0",
+      "req_1_xp0_to_xp1",
+      "req_2_xp1_to_home"
+    ],
+    "data_route": [
+      "dat_0_home_to_xp1",
+      "dat_1_xp1_to_xp0",
+      "dat_2_xp0_to_rn"
+    ],
+    "assertions": {
+      "verdict_is_pass": true,
+      "one_completion": true,
+      "sensor_value_matches": true,
+      "request_crosses_two_xps": true,
+      "data_crosses_two_xps": true,
+      "router_accept_count": true,
+      "router_forward_count": true,
+      "lineage_covers_every_hop": true,
+      "session_is_quiescent": true
+    }
+  },
+  "metadata": {
+    "publication": "showcase/generated/system/chi-issue-h-routed-read",
+    "scope": "restricted_two_xp_read_no_snp_witness",
+    "raw_waveform": false,
+    "runtime_executable": true,
+    "topology_source": "SystemProtocol"
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causal_lineage",
+      "path": "lineage.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "scenario_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causal_lineage_source",
+      "path": "sources/lineage.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "system_topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "transaction_path_source",
+      "path": "sources/transaction-path.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "system_topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "transaction_path",
+      "path": "transaction-path.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

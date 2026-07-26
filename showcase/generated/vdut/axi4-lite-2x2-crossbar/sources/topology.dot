@@ -1,0 +1,17 @@
+digraph system_topology {
+  rankdir=LR;
+  label="axi4_lite_two_by_two";
+  labelloc="t";
+  graph [nodesep=0.5, ranksep=1.15, splines=polyline];
+  node [fontname="monospace"];
+  edge [fontname="sans-serif", fontsize=8];
+  dut0 [shape=box, style=rounded, label="manager0\nVirtualDut"];
+  dut1 [shape=box, style=rounded, label="manager1\nVirtualDut"];
+  dut2 [shape=box, style=rounded, label="target0\nVirtualDut · addressable"];
+  dut3 [shape=box, style=rounded, label="target1\nVirtualDut · addressable"];
+  dut4 [shape=box, style=rounded, label="crossbar\nVirtualDut · routing"];
+  dut0 -> dut4 [dir=none, penwidth=1.4, label="axi4_lite\naxi ↔ s_manager0"];
+  dut1 -> dut4 [dir=none, penwidth=1.4, label="axi4_lite\naxi ↔ s_manager1"];
+  dut4 -> dut2 [dir=none, penwidth=1.4, label="axi4_lite\nm_target0 ↔ axi"];
+  dut4 -> dut3 [dir=none, penwidth=1.4, label="axi4_lite\nm_target1 ↔ axi"];
+}

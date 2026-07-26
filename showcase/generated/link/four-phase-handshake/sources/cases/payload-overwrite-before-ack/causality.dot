@@ -1,0 +1,16 @@
+digraph four_phase_case {
+  rankdir=TB;
+  label="非法传输：等待 ACK 时 payload 被覆盖 · observation-order evidence";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.3, ranksep=0.38, splines=polyline];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9, color="#5f7280"];
+  s0 [label="S0 · t=0 ns\n00 idle", fillcolor="#e8f1fb", color="#537a99"];
+  s1 [label="S1 · t=2 ns\n10 requested", fillcolor="#e8f1fb", color="#537a99"];
+  s0 -> s1 [label="observed next"];
+  s2 [label="S2 · t=7.5 ns\n10 requested", fillcolor="#fee2e2", color="#537a99"];
+  s1 -> s2 [label="observed next"];
+  fault [shape=octagon, label="showcase.payload-overwrite-before-ack.event_stability\nthe offered event changed after REQ at sequence 1", fillcolor="#fecaca", color="#b91c1c"];
+  s2 -> fault [label="diagnostic", color="#b91c1c"];
+  note [shape=note, label="Edges above preserve observation order;\nthey are not physical delay or cross-event CausalGraph edges", fillcolor="#fff7d6", color="#b7791f"];
+}

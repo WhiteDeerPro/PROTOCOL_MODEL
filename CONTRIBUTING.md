@@ -83,6 +83,29 @@ architectural progress.
 In a pull request, list the directed commands you ran and the evidence you
 inspected.
 
+## Documentation placement
+
+Documentation is indexed by responsibility; a `README.md` is not required in
+every source directory.
+
+- the repository `README.md` is the landing page and quick start;
+- `docs/README.md` gives first-time readers a progressive route;
+- `docs/architecture/` owns canonical concepts, with
+  `implementation-status.md` as the only full current-capability matrix;
+- `ROADMAP.md` records long-term direction, while release notes preserve the
+  terminology and boundary of an already published tag;
+- source-adjacent READMEs are reserved for public package boundaries, complex
+  protocol families, and construction catalogs whose ownership is not obvious
+  from filenames;
+- leaf modules use module docstrings and typed APIs instead of repeating a
+  miniature architecture document in every folder;
+- `tests/README.md` defines the boundary between reusable implementation and
+  test-only topology fixtures.
+
+When implementation status changes, update the single status row and link to
+it from stable architecture or protocol pages. Do not copy the same mutable
+feature table into several READMEs.
+
 ## Protocol and documentation claims
 
 Protocol specifications remain the authority. For a requirement correction,

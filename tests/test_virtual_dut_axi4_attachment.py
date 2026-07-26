@@ -9,10 +9,10 @@ from protocol_model.integrations.attachments.amba.axi.axi4 import (
 from protocol_model.integrations.recipes.amba.endpoints import (
     build_axi4_address_space_vdut,
 )
-from protocol_model.link.amba.axi.axi4 import Axi4Config, build_axi4_link
+from protocol_model.protocols.amba.axi.axi4 import Axi4Config, build_axi4_interface
 from protocol_model.semantics import CanonicalEvent
 from protocol_model.system import (
-    ProtocolLink,
+    InterfaceConnection,
     SystemAction,
     SystemProtocol,
     VirtualDutPortRef,
@@ -25,8 +25,8 @@ from protocol_model.virtual_dut.address import (
     MemoryRegion,
 )
 from protocol_model.virtual_dut.attachments import AddressRequest
-from protocol_model.virtual_dut.backend import CaptureModel
-from protocol_model.virtual_dut.boundary import ProtocolPort, VirtualDut
+from protocol_model.virtual_dut.backend import CaptureBackend
+from protocol_model.virtual_dut.boundary import InterfacePort, VirtualDut
 
 
 def _address_event(
@@ -60,17 +60,17 @@ class Axi4AddressSpaceEndpointTest(unittest.TestCase):
     def _system(
         self, address_space: AddressSpace
     ) -> tuple[SystemProtocol, VirtualDutPortRef]:
-        protocol = build_axi4_link(Axi4Config(data_width=32))
+        protocol = build_axi4_interface(Axi4Config(data_width=32))
         manager_port = VirtualDutPortRef("manager", "axi")
         manager = VirtualDut(
             "manager",
-            {"axi": ProtocolPort("axi", protocol, "manager")},
-            model=CaptureModel(),
+            {"axi": InterfacePort("axi", protocol, "manager")},
+            backend=CaptureBackend(),
         )
         endpoint = build_axi4_address_space_vdut(
             "memory", protocol, address_space
         )
-        link = ProtocolLink(
+        link = InterfaceConnection(
             "axi",
             protocol,
             {
@@ -186,7 +186,7 @@ class Axi4AddressSpaceEndpointTest(unittest.TestCase):
         self.assertTrue(session.is_quiescent(read.state))
 
     def test_wrap_request_expands_to_ordered_address_accesses(self) -> None:
-        protocol = build_axi4_link(Axi4Config(data_width=32))
+        protocol = build_axi4_interface(Axi4Config(data_width=32))
         attachment = Axi4AddressSpaceAttachment(protocol)
 
         decoded = attachment.decode_request(
@@ -283,7 +283,7 @@ class Axi4AddressSpaceEndpointTest(unittest.TestCase):
 
 class Axi4RequesterAttachmentTest(unittest.TestCase):
     def test_serialized_requester_uses_local_wire_id_and_maps_errors(self) -> None:
-        protocol = build_axi4_link(Axi4Config(data_width=32, id_width=2))
+        protocol = build_axi4_interface(Axi4Config(data_width=32, id_width=2))
         requester = Axi4RequesterAttachment(protocol, wire_id=3)
         issued = requester.encode_request(
             requester.initial_state(),

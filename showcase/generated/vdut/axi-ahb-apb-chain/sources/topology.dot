@@ -1,0 +1,29 @@
+digraph bridge_chain_topology {
+  rankdir=TB;
+  label="AXI4-Lite → AHB-Lite → APB4 peripheral network";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.48, ranksep=0.75,
+         splines=polyline, ordering=out];
+  node [fontname="sans-serif", fontsize=10, shape=box,
+        style="rounded,filled", margin="0.14,0.09"];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d",
+        penwidth=1.35];
+
+  initiator [label="initiator\nVirtualDut · AXI4-Lite manager boundary", fillcolor="#eff6ff", color="#2563eb"];
+  axi_ahb [label="axi_to_ahb\nBridge VirtualDut", fillcolor="#fff7ed", color="#ea580c"];
+  ahb_apb [label="ahb_to_apb\nBridge VirtualDut", fillcolor="#fff7ed", color="#ea580c"];
+  fabric [label="apb_fabric\nVirtualDut · decode · response mux", fillcolor="#fdf2f8", color="#db2777"];
+
+  control [label="control\nVirtualDut · register endpoint", fillcolor="#ecfdf5", color="#059669", group="control"];
+  status [label="status\nVirtualDut · register endpoint", fillcolor="#ecfdf5", color="#059669", group="status"];
+
+  { rank=same; initiator; axi_ahb; ahb_apb; }
+
+  initiator -> axi_ahb [dir=none, label=<<B>AXI4-Lite</B><BR/><FONT POINT-SIZE="8">axi_link · initiator.axi ↔ axi_to_ahb.s_axi</FONT>>];
+  axi_ahb -> ahb_apb [dir=none, label=<<B>AHB-Lite</B><BR/><FONT POINT-SIZE="8">ahb_link · axi_to_ahb.m_ahb ↔ ahb_to_apb.s_ahb</FONT>>];
+  ahb_apb -> fabric [dir=none, label=<<B>APB4</B><BR/><FONT POINT-SIZE="8">apb_upstream · ahb_to_apb.m_apb ↔ apb_fabric.upstream</FONT>>];
+  fabric -> control [dir=none, label=<<B>APB4</B><BR/><FONT POINT-SIZE="8">apb_control · apb_fabric.control ↔ control.apb</FONT>>];
+  fabric -> status [dir=none, label=<<B>APB4</B><BR/><FONT POINT-SIZE="8">apb_status · apb_fabric.status ↔ status.apb</FONT>>];
+  { rank=same; control; status; }
+  control -> status [style=invis, weight=80];
+}

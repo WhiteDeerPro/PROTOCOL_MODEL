@@ -24,7 +24,7 @@
 <title>fault</title>
 <polygon fill="#ffe9e7" stroke="#b33a2b" points="809.71,-18.43 809.71,-44.33 695.89,-62.64 534.92,-62.64 421.1,-44.33 421.1,-18.43 534.92,-0.12 695.89,-0.12 809.71,-18.43"/>
 <text text-anchor="middle" x="615.4" y="-39.88" font-family="sans-serif" font-size="10.00">REJECTED / 已拒绝</text>
-<text text-anchor="middle" x="615.4" y="-28.88" font-family="sans-serif" font-size="10.00">axi4.link_session.AR.event_schema</text>
+<text text-anchor="middle" x="615.4" y="-28.88" font-family="sans-serif" font-size="10.00">axi4.interface_session.AR.event_schema</text>
 <text text-anchor="middle" x="615.4" y="-17.88" font-family="sans-serif" font-size="10.00">FIXED burst length must not exceed 16 transfers</text>
 </g>
 <!-- context&#45;&gt;fault -->

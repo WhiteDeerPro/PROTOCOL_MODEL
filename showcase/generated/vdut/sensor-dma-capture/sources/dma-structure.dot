@@ -1,0 +1,24 @@
+digraph virtual_dut_structure {
+  rankdir=LR;
+  label="dma · VirtualDut · constructed";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.28, ranksep=0.62, splines=polyline, newrank=true];
+  node [fontname="sans-serif", fontsize=10, shape=box, style="rounded,filled", fillcolor="#ffffff"];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d"];
+  subgraph cluster_virtual_dut {
+    label="VirtualDut boundary";
+    color="#64748b";
+    penwidth=1.4;
+    style="rounded";
+    component_0 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="axi\ninterface port\ninterface: axi4_lite · manager", tooltip="axi\ninterface port\ninterface: axi4_lite · manager"];
+    component_1 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address requester\nattachment\nbinding: axi4_lite · manager", tooltip="address requester\nattachment\nbinding: axi4_lite · manager"];
+    component_2 [shape=box, fillcolor="#dcfce7", color="#16a34a", penwidth=1.0, label="fixed copy descriptor\nsource: 0x1000\ndestination: 0x2000\nlength: 8\nbeat: 4\nstrides: 0 / 4", tooltip="fixed copy descriptor\nsource: 0x1000\ndestination: 0x2000\nlength: 8\nbeat: 4\nstrides: 0 / 4"];
+    component_3 [shape=box, fillcolor="#ede9fe", color="#7c3aed", penwidth=1.0, label="serialized copy FSM\nphases: READ → buffer → WRITE\noutstanding: 1", tooltip="serialized copy FSM\nphases: READ → buffer → WRITE\noutstanding: 1"];
+    component_4 [shape=box, fillcolor="#fef3c7", color="#d97706", penwidth=1.0, label="one-beat read buffer\ncapacity: 4 bytes", tooltip="one-beat read buffer\ncapacity: 4 bytes"];
+    component_5 [shape=box, fillcolor="#ffedd5", color="#ea580c", penwidth=1.0, label="pending request correlation\nkey: request_id\nactive: 0 or 1", tooltip="pending request correlation\nkey: request_id\nactive: 0 or 1"];
+    component_1 -> component_0 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_3 -> component_5 [style=solid, constraint=true, weight=4, color="#475569", label="issue read / write"];
+    component_5 -> component_1 [style=solid, constraint=true, weight=4, color="#475569", label="address request"];
+    component_5 -> component_4 [style=solid, constraint=true, weight=4, color="#475569", label="read data"];
+  }
+}

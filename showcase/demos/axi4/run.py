@@ -35,16 +35,16 @@ for path in (REPOSITORY_ROOT, DEMO_DIRECTORY):
         sys.path.insert(0, value)
 
 
-from protocol_model import (  # noqa: E402
-    DutFacet,
-    ProtocolPort,
-    SystemProtocol,
+from protocol_model import __version__  # noqa: E402
+from protocol_model.system import SystemProtocol  # noqa: E402
+from protocol_model.virtual_dut.boundary import (  # noqa: E402
+    DutBehaviorTag,
+    InterfacePort,
     VirtualDut,
-    __version__,
 )
 from protocol_model.artifacts import (  # noqa: E402
     RunArtifactStore,
-    protocol_record_from_link,
+    protocol_record_from_interface,
     protocol_record_from_system,
 )
 from protocol_model.visualization import VisualizationPublisher  # noqa: E402
@@ -69,19 +69,19 @@ DEMO_NAME = "axi4"
 def _build_demo_system(protocol) -> SystemProtocol:
     requester = VirtualDut(
         "requester",
-        {"m_axi": ProtocolPort("m_axi", protocol, "manager")},
-        frozenset((DutFacet.INITIATING,)),
+        {"m_axi": InterfacePort("m_axi", protocol, "manager")},
+        frozenset((DutBehaviorTag.INITIATING,)),
         description="Illustrative AXI4 request source",
     )
     endpoint = VirtualDut(
         "memory_endpoint",
-        {"s_axi": ProtocolPort("s_axi", protocol, "subordinate")},
-        frozenset((DutFacet.ADDRESSABLE,)),
+        {"s_axi": InterfacePort("s_axi", protocol, "subordinate")},
+        frozenset((DutBehaviorTag.ADDRESSABLE,)),
         description="Illustrative addressable endpoint",
     )
-    system = SystemProtocol.from_link(
+    system = SystemProtocol.from_interface(
         "axi4-point-to-point",
-        link_name="axi4-link",
+        connection_name="axi4-link",
         protocol=protocol,
         endpoints={
             "manager": (requester, "m_axi"),
@@ -195,7 +195,7 @@ def _build_publication(directory: Path):
                 "cases.observation",
                 "cases.exclusive_profile",
             ],
-            "execution_models": ["LinkSession", "Axi4ObservationSession"],
+            "execution_models": ["InterfaceSession", "Axi4ObservationSession"],
             "case_count": len(runs),
             "deep_dive_cases": sorted(DEEP_DIVE_CASES),
             "waveform_basis": {
@@ -231,7 +231,7 @@ def _build_publication(directory: Path):
         verdict="PASS" if all_met else "FAIL",
         protocols=(
             protocol_record_from_system(system),
-            *(protocol_record_from_link(protocol) for protocol in protocols.values()),
+            *(protocol_record_from_interface(protocol) for protocol in protocols.values()),
         ),
         cases=tuple(
             {

@@ -1,0 +1,21 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "axi4-lite-single-manager-fabric",
+  "source": "showcase/demos/system/axi4_lite_single_manager_fabric/run.py",
+  "command": "python3 showcase/demos/system/axi4_lite_single_manager_fabric/run.py",
+  "protocol_model_version": "0.4.0",
+  "execution_models": [
+    "SystemSession",
+    "SingleIngressAddressFabricBackend",
+    "PassiveAddressSpaceBackend"
+  ],
+  "renderers": {
+    "topology": "Graphviz + shared canonical system projection",
+    "bus_strip": "Graphviz + shared folded single-ingress fabric projection",
+    "vdut_structure": "Graphviz + shared VirtualDut structure projection",
+    "model_steps": "WaveDrom + demo-local semantic post-state projection",
+    "causality": "Graphviz + shared SystemTrace projection"
+  },
+  "presentation_boundary": "canonical event and model-step execution; not AXI pins, cycle timing, RTL, VCD, or exhaustive compliance",
+  "construction_boundary": "one AddressRouterContract constructs the single-ingress fabric and declares SystemProtocol address resolution; the backend's typed boundary projection is checked before either object is registered"
+}

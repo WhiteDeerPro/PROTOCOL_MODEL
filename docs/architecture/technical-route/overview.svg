@@ -1,249 +1,183 @@
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
      width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
-  <title id="title">Protocol Model：从通信语义到可解释证据</title>
-  <desc id="desc">面向新读者的可导航架构图。主阅读路径依次经过共同语义、LinkProtocol、VirtualDut 与协议接合、SystemProtocol、运行与证据；点到点验证也可以从 LinkProtocol 直接进入运行。主要卡片可以点击进入详细文档。</desc>
+  <title id="title">Protocol Model：三种彼此独立的架构关系</title>
+  <desc id="desc">图中分别展示代码构造依赖、约束判定作用域，以及通信的表示与运输。AXI、TileLink 和 CHI 是跨越这些坐标的协议族切片，不是某一层的子类。</desc>
 
   <defs>
     <linearGradient id="page" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#f8fbff"/>
-      <stop offset="1" stop-color="#eef4f8"/>
+      <stop offset="1" stop-color="#edf3f7"/>
     </linearGradient>
-    <filter id="shadow" x="-12%" y="-12%" width="124%" height="135%">
-      <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#16324f" flood-opacity="0.10"/>
+    <filter id="shadow" x="-12%" y="-12%" width="124%" height="136%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#17324d" flood-opacity="0.10"/>
     </filter>
-    <marker id="main-arrow" markerWidth="12" markerHeight="12" refX="10" refY="4" orient="auto">
-      <path d="M0,0 L0,8 L11,4 z" fill="#2563eb"/>
+    <marker id="blue-arrow" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#2b64c8"/>
     </marker>
-    <marker id="soft-arrow" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto">
-      <path d="M0,0 L0,8 L10,4 z" fill="#6b86a3"/>
+    <marker id="green-arrow" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#16836d"/>
+    </marker>
+    <marker id="purple-arrow" markerWidth="11" markerHeight="11" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L10,4 z" fill="#7654b8"/>
     </marker>
     <style>
-      text { font-family: Inter, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; fill: #132337; }
+      text { font-family: Inter, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif; fill: #14263a; }
       a { cursor: pointer; }
-      a:hover .click-target { stroke: #2563eb; stroke-width: 3; }
-      a:hover .link-label { fill: #174eb6; text-decoration: underline; }
-      a:hover .headline-link { fill: #174eb6; text-decoration: underline; }
-      .title { font-size: 38px; font-weight: 760; letter-spacing: -0.4px; }
-      .headline-link { fill: #132337; }
+      a:hover .clickable { stroke-width: 2.8; }
+      a:hover .link { text-decoration: underline; }
+      .title { font-size: 36px; font-weight: 760; letter-spacing: -0.4px; }
       .subtitle { font-size: 17px; fill: #536b83; }
-      .eyebrow { font-size: 13px; font-weight: 750; letter-spacing: 1px; fill: #2563eb; }
-      .step { font-size: 13px; font-weight: 750; fill: #ffffff; }
-      .card-title { font-size: 24px; font-weight: 760; }
-      .question { font-size: 16px; font-weight: 680; fill: #173b63; }
-      .body { font-size: 14px; fill: #405a73; }
-      .small { font-size: 12px; fill: #60788f; }
-      .link-label { font-size: 13px; font-weight: 720; fill: #2563eb; }
-      .inner-title { font-size: 16px; font-weight: 740; }
-      .inner-body { font-size: 12px; fill: #456078; }
-      .flow-label { font-size: 11px; font-weight: 680; fill: #60788f; }
-      .main-card { fill: #ffffff; stroke: #c8d7e6; stroke-width: 1.4; }
-      .center-card { fill: #f8fffc; stroke: #6bb9a5; stroke-width: 1.8; }
-      .inner-primary { fill: #eaf8f3; stroke: #70baa6; stroke-width: 1.2; }
-      .inner-support { fill: #fff9ed; stroke: #e7bd69; stroke-width: 1.1; }
-      .inner-optional { fill: #f7f4ff; stroke: #b5a3df; stroke-width: 1.1; }
-      .deep-card { fill: #ffffff; stroke: #d2deea; stroke-width: 1.2; }
-      .main-flow { fill: none; stroke: #2563eb; stroke-width: 3; marker-end: url(#main-arrow); }
-      .soft-flow { fill: none; stroke: #6b86a3; stroke-width: 1.8; stroke-dasharray: 7 6; marker-end: url(#soft-arrow); }
+      .column-title { font-size: 23px; font-weight: 760; }
+      .column-question { font-size: 14px; font-weight: 670; fill: #38546e; }
+      .box-title { font-size: 16px; font-weight: 730; }
+      .body { font-size: 13px; fill: #49647d; }
+      .small { font-size: 12px; fill: #637b91; }
+      .chip { font-size: 12px; font-weight: 690; }
+      .link { font-size: 12px; font-weight: 720; fill: #245dbd; }
+      .panel { fill: #ffffff; stroke: #cbd9e6; stroke-width: 1.3; }
+      .blue-box { fill: #edf4ff; stroke: #8fb2e9; stroke-width: 1.2; }
+      .green-box { fill: #ebf8f4; stroke: #78baa8; stroke-width: 1.2; }
+      .purple-box { fill: #f4f0fc; stroke: #b09bd8; stroke-width: 1.2; }
+      .orange-box { fill: #fff7e8; stroke: #e5b868; stroke-width: 1.2; }
+      .neutral-box { fill: #f7f9fb; stroke: #c9d5e0; stroke-width: 1.1; }
+      .blue-flow { fill: none; stroke: #2b64c8; stroke-width: 2.1; marker-end: url(#blue-arrow); }
+      .green-flow { fill: none; stroke: #16836d; stroke-width: 2.1; marker-end: url(#green-arrow); }
+      .purple-flow { fill: none; stroke: #7654b8; stroke-width: 2.1; marker-end: url(#purple-arrow); }
+      .relation { fill: none; stroke: #7654b8; stroke-width: 1.6; stroke-dasharray: 5 5; }
     </style>
   </defs>
 
   <rect width="1600" height="900" fill="url(#page)"/>
 
-  <!-- Header -->
-  <a href="README.md" xlink:href="README.md" target="_top" aria-label="打开技术路线阅读入口">
-    <title>打开技术路线阅读入口</title>
-    <text x="60" y="62" class="title headline-link">从一条消息，到可解释的系统验证</text>
+  <a href="README.md" xlink:href="README.md" target="_top">
+    <text x="58" y="58" class="title link">不要把三种关系画成同一条协议栈</text>
   </a>
-  <text x="60" y="94" class="subtitle">先定义共同语言，再分别说明单条连接、具体 module 和网络；运行时再把它们连成可复查的证据。</text>
-  <g transform="translate(1276 45)">
-    <rect width="264" height="42" rx="21" fill="#e6efff"/>
-    <circle cx="23" cy="21" r="11" fill="#2563eb"/>
-    <text x="19" y="25" class="step">↗</text>
-    <text x="43" y="26" class="small">主卡片可点击进入详细说明</text>
-  </g>
+  <text x="58" y="91" class="subtitle">“由小构件组合”“需要观察多大范围”“通信被编码成什么”是三个问题；协议标准可以同时跨越它们。</text>
 
-  <text x="60" y="150" class="eyebrow">主阅读路径 · 1 → 5</text>
-  <text x="226" y="150" class="small">每一步只回答自己能够观察并拥有的问题</text>
+  <!-- Column 1: construction dependency -->
+  <g filter="url(#shadow)"><rect x="58" y="130" width="450" height="570" rx="22" class="panel"/></g>
+  <text x="84" y="172" class="column-title">① 构造依赖</text>
+  <text x="84" y="198" class="column-question">代码怎样从可复用构件组合成可运行模型？</text>
 
-  <!-- Main flow, placed behind cards -->
-  <path d="M294 370 L314 370" class="main-flow"/>
-  <path d="M554 370 L574 370" class="main-flow"/>
-  <path d="M1034 370 L1054 370" class="main-flow"/>
-  <path d="M1294 370 L1314 370" class="main-flow"/>
+  <a href="01-semantic-foundation.md" xlink:href="01-semantic-foundation.md" target="_top">
+    <rect x="86" y="228" width="394" height="82" rx="14" class="blue-box clickable"/>
+    <text x="108" y="257" class="box-title">共享语义内核</text>
+    <text x="108" y="282" class="body">event schema · constraint · resource · obligation · pattern</text>
+    <text x="393" y="299" class="link">详细说明 ↗</text>
+  </a>
+  <path d="M283 312 L283 340" class="blue-flow"/>
 
-  <!-- 1: semantic foundation -->
-  <a href="01-semantic-foundation.md" xlink:href="01-semantic-foundation.md" target="_top"
-     aria-label="阅读共同语义说明">
-    <title>共同语义：消息、约束、资源与待完成关系</title>
-    <g filter="url(#shadow)">
-      <rect x="60" y="180" width="234" height="380" rx="20" class="main-card click-target"/>
-    </g>
-    <circle cx="88" cy="210" r="16" fill="#2563eb"/>
-    <text x="84" y="215" class="step">1</text>
-    <text x="114" y="217" class="card-title">共同语义</text>
-    <text x="84" y="260" class="question">模型先怎样描述</text>
-    <text x="84" y="283" class="question">“发生了一件事”？</text>
-    <line x1="84" y1="308" x2="270" y2="308" stroke="#e2eaf2"/>
-    <text x="84" y="340" class="body">把总线 pin 名背后的事实</text>
-    <text x="84" y="363" class="body">写成共同的消息与规则。</text>
-    <text x="84" y="399" class="small">输出：</text>
-    <rect x="84" y="414" width="82" height="28" rx="14" fill="#eaf1ff"/>
-    <text x="104" y="433" class="small">通信事实</text>
-    <rect x="174" y="414" width="78" height="28" rx="14" fill="#eaf1ff"/>
-    <text x="193" y="433" class="small">约束</text>
-    <rect x="84" y="450" width="82" height="28" rx="14" fill="#eaf1ff"/>
-    <text x="104" y="469" class="small">资源</text>
-    <rect x="174" y="450" width="78" height="28" rx="14" fill="#eaf1ff"/>
-    <text x="193" y="469" class="small">待完成项</text>
-    <text x="84" y="532" class="link-label">从基础概念开始 ↗</text>
+  <rect x="86" y="346" width="188" height="92" rx="14" class="neutral-box"/>
+  <text x="106" y="374" class="box-title">通用设施</text>
+  <text x="106" y="399" class="body">interface · representation</text>
+  <text x="106" y="419" class="body">transport · observation</text>
+  <rect x="292" y="346" width="188" height="92" rx="14" class="neutral-box"/>
+  <text x="312" y="374" class="box-title">行为与系统设施</text>
+  <text x="312" y="399" class="body">VirtualDut · integration</text>
+  <text x="312" y="419" class="body">system · analysis</text>
+  <path d="M283 440 L283 470" class="blue-flow"/>
+
+  <rect x="86" y="476" width="394" height="92" rx="14" class="orange-box"/>
+  <text x="108" y="505" class="box-title">具体协议族与 module recipe</text>
+  <text x="108" y="530" class="body">AXI / AHB / APB / TileLink / CHI 按需选取上述设施</text>
+  <text x="108" y="551" class="body">它们位于依赖图叶端，不反向定义通用内核。</text>
+  <path d="M283 570 L283 600" class="blue-flow"/>
+
+  <a href="06-observation-execution-evidence.md" xlink:href="06-observation-execution-evidence.md" target="_top">
+    <rect x="86" y="606" width="394" height="66" rx="14" class="blue-box clickable"/>
+    <text x="108" y="635" class="box-title">scenario · session · evidence</text>
+    <text x="108" y="657" class="body">运行已组合的合同并留下 trace、因果关系和 verdict。</text>
   </a>
 
-  <!-- 2: LinkProtocol -->
-  <a href="02-patterns-and-link-protocol.md" xlink:href="02-patterns-and-link-protocol.md" target="_top"
-     aria-label="阅读 LinkProtocol 说明">
-    <title>LinkProtocol：定义一条逻辑连接上的通信合同</title>
-    <g filter="url(#shadow)">
-      <rect x="320" y="180" width="234" height="380" rx="20" class="main-card click-target"/>
-    </g>
-    <circle cx="348" cy="210" r="16" fill="#2563eb"/>
-    <text x="344" y="215" class="step">2</text>
-    <text x="374" y="217" class="card-title">LinkProtocol</text>
-    <text x="344" y="260" class="question">两个端点之间，</text>
-    <text x="344" y="283" class="question">什么通信才算合法？</text>
-    <line x1="344" y1="308" x2="530" y2="308" stroke="#e2eaf2"/>
-    <text x="344" y="340" class="body">定义谁能发送什么、字段</text>
-    <text x="344" y="363" class="body">怎样解释、事务怎样收尾。</text>
-    <text x="344" y="407" class="small">Pattern 提供可复用的小规则；</text>
-    <text x="344" y="429" class="small">具体协议自由选择如何组合。</text>
-    <rect x="344" y="458" width="150" height="30" rx="15" fill="#eef4ff"/>
-    <text x="364" y="478" class="small">结果：单链路合同</text>
-    <text x="344" y="532" class="link-label">看协议如何由规则组成 ↗</text>
+  <!-- Column 2: scope -->
+  <g filter="url(#shadow)"><rect x="532" y="130" width="450" height="570" rx="22" class="panel"/></g>
+  <text x="558" y="172" class="column-title">② 判定作用域与状态所有权</text>
+  <text x="558" y="198" class="column-question">一条规则至少要观察哪些对象，谁持有可变状态？</text>
+
+  <rect x="572" y="228" width="370" height="64" rx="14" class="green-box"/>
+  <text x="594" y="256" class="box-title">Event</text>
+  <text x="678" y="256" class="body">一个候选事件的字段、取值与局部几何</text>
+  <path d="M757 294 L757 312 M660 312 L854 312 M660 312 L660 322 M854 312 L854 322" class="green-flow"/>
+
+  <a href="02-patterns-and-interface-protocol.md" xlink:href="02-patterns-and-interface-protocol.md" target="_top">
+    <rect x="572" y="328" width="176" height="76" rx="14" class="green-box clickable"/>
+    <text x="590" y="355" class="box-title">Interface-local</text>
+    <text x="590" y="378" class="body">完整接口的 event kind、</text>
+    <text x="590" y="396" class="body">ordering、correlation</text>
   </a>
-
-  <!-- 3: VirtualDut + protocol integration -->
-  <g filter="url(#shadow)">
-    <rect x="580" y="155" width="454" height="430" rx="24" class="center-card"/>
-  </g>
-  <circle cx="610" cy="187" r="17" fill="#16836d"/>
-  <text x="606" y="192" class="step">3</text>
-  <text x="638" y="194" class="card-title">让协议落到具体 module</text>
-  <text x="610" y="222" class="small">模块行为是主体；接入与跨协议转换是围绕端口发生的工作。</text>
-
-  <a href="03-virtual-dut.md" xlink:href="03-virtual-dut.md" target="_top"
-     aria-label="阅读 VirtualDut 说明">
-    <title>VirtualDut：具体、具名、虚拟的 module</title>
-    <rect x="610" y="244" width="394" height="112" rx="16" class="inner-primary click-target"/>
-    <text x="632" y="273" class="inner-title">VirtualDut · 模块本身</text>
-    <text x="632" y="298" class="question">收到输入后做什么？状态由谁拥有？</text>
-    <text x="632" y="323" class="inner-body">backend 可以来自 RTL、RPC、trace，也可以是本地参考模型。</text>
-    <text x="876" y="345" class="link-label">模块边界 ↗</text>
+  <a href="../communication-scope-and-transport.md" xlink:href="../communication-scope-and-transport.md" target="_top">
+    <rect x="766" y="328" width="176" height="76" rx="14" class="green-box clickable"/>
+    <text x="784" y="355" class="box-title">Transport-hop</text>
+    <text x="784" y="378" class="body">相邻 TX→RX 的 flit、</text>
+    <text x="784" y="396" class="body">credit、activation</text>
   </a>
+  <path d="M660 406 L660 420 L854 420 M757 420 L757 434" class="relation"/>
 
-  <a href="04-integration-and-binding.md" xlink:href="04-integration-and-binding.md" target="_top"
-     aria-label="阅读协议集成与端口绑定说明">
-    <title>Integration 与 binding：把协议消息翻译成模块操作并安装到端口</title>
-    <rect x="610" y="372" width="394" height="80" rx="14" class="inner-support click-target"/>
-    <text x="632" y="400" class="inner-title">Integration / binding · 接到一个端口</text>
-    <text x="632" y="425" class="inner-body">把线上消息翻译成模块操作，并检查协议、role 与端口外形。</text>
-    <text x="876" y="444" class="link-label">接入边界 ↗</text>
+  <a href="03-virtual-dut.md" xlink:href="03-virtual-dut.md" target="_top">
+    <rect x="572" y="440" width="370" height="76" rx="14" class="green-box clickable"/>
+    <text x="594" y="469" class="box-title">VirtualDut · concrete module</text>
+    <text x="594" y="494" class="body">跨端口 decode、store、route、transform、completion 决策</text>
   </a>
+  <path d="M757 518 L757 546" class="green-flow"/>
 
-  <a href="../typed-transaction-translation.md" xlink:href="../typed-transaction-translation.md" target="_top"
-     aria-label="阅读 bridge 与类型化事务转译说明">
-    <title>Typed translation：bridge 跨协议时改变事务粒度并折回 completion</title>
-    <rect x="610" y="468" width="394" height="86" rx="14" class="inner-optional click-target"/>
-    <text x="632" y="496" class="inner-title">Typed translation · 跨协议时选用</text>
-    <text x="632" y="521" class="inner-body">例如把一笔 burst 拆成多次访问，再把完成结果折回原事务。</text>
-    <text x="876" y="545" class="link-label">bridge 方案 ↗</text>
+  <a href="05-system-protocol.md" xlink:href="05-system-protocol.md" target="_top">
+    <rect x="572" y="552" width="370" height="76" rx="14" class="green-box clickable"/>
+    <text x="594" y="581" class="box-title">SystemProtocol</text>
+    <text x="594" y="606" class="body">跨 module 的 identity、route closure、coherence 与 progress</text>
   </a>
+  <text x="572" y="661" class="small">Interface 与 Transport 是并列观察面；图示不是严格的总序层级。</text>
 
-  <!-- 4: SystemProtocol -->
-  <a href="05-system-protocol.md" xlink:href="05-system-protocol.md" target="_top"
-     aria-label="阅读 SystemProtocol 说明">
-    <title>SystemProtocol：连接具体模块，并声明网络范围内的通信关系</title>
-    <g filter="url(#shadow)">
-      <rect x="1060" y="180" width="234" height="380" rx="20" class="main-card click-target"/>
-    </g>
-    <circle cx="1088" cy="210" r="16" fill="#7c5cc4"/>
-    <text x="1084" y="215" class="step">4</text>
-    <text x="1114" y="217" class="card-title">SystemProtocol</text>
-    <text x="1084" y="260" class="question">多个具体端口，</text>
-    <text x="1084" y="283" class="question">怎样组成一个网络？</text>
-    <line x1="1084" y1="308" x2="1270" y2="308" stroke="#e2eaf2"/>
-    <text x="1084" y="340" class="body">拥有拓扑、连接占用和</text>
-    <text x="1084" y="363" class="body">跨 link 的全局关系。</text>
-    <g transform="translate(1084 402)">
-      <rect x="0" y="0" width="52" height="38" rx="9" fill="#f1ecfc" stroke="#b8a7df"/>
-      <text x="14" y="24" class="small">模块</text>
-      <line x1="52" y1="19" x2="103" y2="19" stroke="#7c5cc4" stroke-width="2"/>
-      <rect x="103" y="0" width="52" height="38" rx="9" fill="#f1ecfc" stroke="#b8a7df"/>
-      <text x="117" y="24" class="small">模块</text>
-    </g>
-    <text x="1084" y="469" class="small">点到点、bridge、微型网络</text>
-    <text x="1084" y="532" class="link-label">看组网范围与边界 ↗</text>
+  <!-- Column 3: representation and transport -->
+  <g filter="url(#shadow)"><rect x="1006" y="130" width="536" height="570" rx="22" class="panel"/></g>
+  <text x="1032" y="172" class="column-title">③ 表示与运输</text>
+  <text x="1032" y="198" class="column-question">一项操作怎样被消息表达，又怎样占用传输资源？</text>
+
+  <rect x="1042" y="228" width="190" height="66" rx="14" class="purple-box"/>
+  <text x="1064" y="256" class="box-title">Operation</text>
+  <text x="1064" y="279" class="body">意图与可见效果</text>
+  <rect x="1320" y="228" width="190" height="66" rx="14" class="orange-box"/>
+  <text x="1342" y="256" class="box-title">Transaction lifecycle</text>
+  <text x="1342" y="279" class="body">完成操作并关联消息</text>
+  <path d="M1234 261 L1314 261" class="relation"/>
+  <text x="1249" y="247" class="small">realized by</text>
+  <path d="M1415 296 L1415 332" class="purple-flow"/>
+
+  <rect x="1042" y="340" width="190" height="64" rx="14" class="purple-box"/>
+  <text x="1064" y="368" class="box-title">Message</text>
+  <text x="1064" y="389" class="body">有类型的协议交换</text>
+  <path d="M1234 372 L1282 372" class="purple-flow"/>
+  <rect x="1288" y="340" width="190" height="64" rx="14" class="purple-box"/>
+  <text x="1310" y="368" class="box-title">Packet</text>
+  <text x="1310" y="389" class="body">带网络身份、可路由</text>
+  <path d="M1383 406 L1383 438" class="purple-flow"/>
+  <rect x="1288" y="446" width="190" height="64" rx="14" class="purple-box"/>
+  <text x="1310" y="474" class="box-title">Flit</text>
+  <text x="1310" y="495" class="body">hop flow-control 单位</text>
+  <a href="../communication-scope-and-transport.md" xlink:href="../communication-scope-and-transport.md" target="_top">
+    <rect x="1042" y="446" width="208" height="82" rx="14" class="orange-box clickable"/>
+    <text x="1064" y="477" class="box-title">协议可以折叠若干形式</text>
+    <text x="1064" y="505" class="body">APB 无需 packet/flit。</text>
   </a>
+  <rect x="1042" y="552" width="190" height="64" rx="14" class="neutral-box"/>
+  <text x="1064" y="580" class="box-title">Pin / AtomicFrame</text>
+  <text x="1064" y="601" class="body">观察输入，不是下一层 flit</text>
+  <path d="M1282 478 C1245 478 1245 584 1234 584" class="relation"/>
+  <text x="1184" y="540" class="small">可被观察</text>
+  <text x="1042" y="661" class="small">表示粒度与判定作用域正交：局部可检查的 flit 仍是 transport form。</text>
 
-  <!-- 5: execution and evidence -->
-  <a href="06-observation-execution-evidence.md" xlink:href="06-observation-execution-evidence.md" target="_top"
-     aria-label="阅读观察执行与证据说明">
-    <title>运行与证据：从观测或系统动作得到可解释结论</title>
-    <g filter="url(#shadow)">
-      <rect x="1320" y="180" width="220" height="380" rx="20" class="main-card click-target"/>
-    </g>
-    <circle cx="1348" cy="210" r="16" fill="#b66a19"/>
-    <text x="1344" y="215" class="step">5</text>
-    <text x="1374" y="217" class="card-title">运行与证据</text>
-    <text x="1344" y="260" class="question">实际发生了什么，</text>
-    <text x="1344" y="283" class="question">结论怎样被复查？</text>
-    <line x1="1344" y1="308" x2="1516" y2="308" stroke="#e2eaf2"/>
-    <text x="1344" y="340" class="body">观察采样或执行动作，</text>
-    <text x="1344" y="363" class="body">让 session 运行规则。</text>
-    <rect x="1344" y="402" width="74" height="28" rx="14" fill="#fff2dd"/>
-    <text x="1363" y="421" class="small">trace</text>
-    <rect x="1426" y="402" width="90" height="28" rx="14" fill="#fff2dd"/>
-    <text x="1445" y="421" class="small">因果图</text>
-    <rect x="1344" y="438" width="94" height="28" rx="14" fill="#fff2dd"/>
-    <text x="1360" y="457" class="small">manifest</text>
-    <text x="1344" y="490" class="small">可运行单条 link，</text>
-    <text x="1344" y="510" class="small">也可运行完整系统。</text>
-    <text x="1344" y="532" class="link-label">看输入如何变成结论 ↗</text>
-  </a>
+  <!-- Cross-cutting protocol family slices -->
+  <text x="58" y="752" class="column-title">协议族如何落位</text>
+  <text x="58" y="778" class="body">协议族选择它需要的坐标，不由目录位置宣称自己“更低”或“更高”。</text>
 
-  <!-- Secondary path: point-to-point verification skips network construction -->
-  <path d="M437 566 L437 605 L1428 605 L1428 568" class="soft-flow"/>
-  <rect x="675" y="590" width="516" height="30" rx="15" fill="#edf3f8"/>
-  <text x="700" y="610" class="flow-label">只验证点到点协议时，可以从 LinkProtocol 直接进入观察与证据，不必先构造网络。</text>
+  <rect x="58" y="806" width="410" height="58" rx="16" fill="#eaf2ff" stroke="#8fb2e9"/>
+  <text x="82" y="832" class="chip">AXI / AHB / APB</text>
+  <text x="82" y="852" class="small">以 interface + module/system 合同为主，通常折叠 packet/flit。</text>
 
-  <!-- Three low-weight reading aids -->
-  <text x="60" y="672" class="eyebrow">按需要继续深入</text>
-  <text x="196" y="672" class="small">它们帮助理解和规划，不是新的架构层</text>
+  <rect x="492" y="806" width="410" height="58" rx="16" fill="#edf8f4" stroke="#78baa8"/>
+  <text x="516" y="832" class="chip">TileLink</text>
+  <text x="516" y="852" class="small">interface/agent graph 与 module 边界独立，按观测目标展开网络。</text>
 
-  <a href="07-apb-read-walkthrough.md" xlink:href="07-apb-read-walkthrough.md" target="_top"
-     aria-label="阅读一次 APB 读取的端到端示例">
-    <title>用一次 APB 寄存器读取串起完整路径</title>
-    <rect x="60" y="694" width="460" height="104" rx="16" class="deep-card click-target"/>
-    <text x="84" y="725" class="inner-title">想先看一个完整例子？</text>
-    <text x="84" y="751" class="body">跟随一次 APB READ，观察请求怎样穿过各层。</text>
-    <text x="84" y="780" class="link-label">端到端 walkthrough ↗</text>
-  </a>
-
-  <a href="glossary.md" xlink:href="glossary.md" target="_top" aria-label="打开术语表">
-    <title>用白话解释项目中的核心术语</title>
-    <rect x="570" y="694" width="460" height="104" rx="16" class="deep-card click-target"/>
-    <text x="594" y="725" class="inner-title">遇到不熟悉的词？</text>
-    <text x="594" y="751" class="body">先看白话定义，再回到相应的主线卡片。</text>
-    <text x="594" y="780" class="link-label">打开术语表 ↗</text>
-  </a>
-
-  <a href="08-roadmap.md" xlink:href="08-roadmap.md" target="_top" aria-label="阅读实施路线与阶段边界">
-    <title>查看当前实现边界与后续实施顺序</title>
-    <rect x="1080" y="694" width="460" height="104" rx="16" class="deep-card click-target"/>
-    <text x="1104" y="725" class="inner-title">哪些已经可运行，哪些仍在构造？</text>
-    <text x="1104" y="751" class="body">把稳定架构、当前实现和研究方向分开阅读。</text>
-    <text x="1104" y="780" class="link-label">当前边界与 roadmap ↗</text>
-  </a>
-
-  <line x1="60" y1="834" x2="1540" y2="834" stroke="#d5e0ea"/>
-  <text x="60" y="865" class="small">阅读原则：协议规定线上语言；VirtualDut 决定模块行为；SystemProtocol 管理连接关系；Session 运行规则并留下证据。</text>
-  <text x="1390" y="865" class="small">Protocol Model</text>
+  <rect x="926" y="806" width="616" height="58" rx="16" fill="#f4f0fc" stroke="#b09bd8"/>
+  <text x="950" y="832" class="chip">CHI</text>
+  <text x="950" y="852" class="small">transaction/interface + message/packet + flit/CHI transport link + participant/system coherence。</text>
 </svg>

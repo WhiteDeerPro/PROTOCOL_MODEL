@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" role="img" aria-labelledby="title desc">
+  <title id="title">Initial Protocol Model logo study 01</title>
+  <desc id="desc">A presentation board for the Protocol Model interface-rule-interface mark and its variants.</desc>
+
+  <defs>
+    <symbol id="mark-color" viewBox="0 0 256 256">
+      <path fill="#17191B" d="M24 52h64v28H56v96h32v28H24z"/>
+      <path fill="#17191B" d="M232 52h-64v28h32v96h-32v28h64z"/>
+      <path fill="#809594" d="M56 94h144v22H56z"/>
+      <path fill="#CDB8BA" d="M56 140h144v22H56z"/>
+      <path fill="#17191B" d="M94 72h68l22 22v68l-22 22H94l-22-22V94z"/>
+      <path fill="#809594" d="M96 96h64v24h-22v12h-22v12H96z"/>
+      <path fill="#CDB8BA" d="M160 120v40H96v-16h20v-12h22v-12z"/>
+      <path fill="none" stroke="#F5F3EE" stroke-width="10" stroke-linecap="square" stroke-linejoin="miter"
+            d="M102 148h18v-12h22v-12h16"/>
+    </symbol>
+
+    <symbol id="mark-mono" viewBox="0 0 256 256">
+      <path fill="currentColor" d="M24 52h64v28H56v96h32v28H24z"/>
+      <path fill="currentColor" d="M232 52h-64v28h32v96h-32v28h64z"/>
+      <path fill="currentColor" d="M56 94h144v22H56zM56 140h144v22H56z"/>
+      <path fill="currentColor" d="M94 72h68l22 22v68l-22 22H94l-22-22V94z"/>
+      <path fill="none" stroke="var(--cut, #F5F3EE)" stroke-width="10" stroke-linecap="square"
+            stroke-linejoin="miter" d="M102 148h18v-12h22v-12h16"/>
+    </symbol>
+
+    <style>
+      .sans { font-family: Inter, "IBM Plex Sans", "Segoe UI", Arial, sans-serif; }
+      .eyebrow { font-size: 18px; font-weight: 650; letter-spacing: 3.4px; }
+      .small { font-size: 18px; font-weight: 500; letter-spacing: 1.2px; }
+      .body { font-size: 24px; font-weight: 400; }
+      .rule { stroke: #17191B; stroke-width: 2; opacity: .18; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#F5F3EE"/>
+  <path fill="#809594" opacity=".08" d="M0 0h620L320 1000H0z"/>
+  <path fill="#CDB8BA" opacity=".08" d="M1600 0h-460l210 1000h250z"/>
+
+  <g class="sans" fill="#17191B">
+    <text class="eyebrow" x="80" y="72">PROTOCOL MODEL / SYMBOL STUDY 01</text>
+    <text class="small" x="1275" y="72">2026.07</text>
+  </g>
+  <path class="rule" d="M80 100H1520"/>
+
+  <!-- Primary mark -->
+  <use href="#mark-color" x="110" y="160" width="560" height="560"/>
+  <g class="sans" fill="#17191B">
+    <text x="740" y="248" font-size="76" font-weight="650" letter-spacing="-2.2">Interface</text>
+    <text x="740" y="330" font-size="76" font-weight="350" letter-spacing="-2.2">Rule model</text>
+    <text x="740" y="412" font-size="76" font-weight="650" letter-spacing="-2.2">Interface</text>
+    <text class="body" x="744" y="486" opacity=".70">A communication fact crosses an explicit boundary,</text>
+    <text class="body" x="744" y="522" opacity=".70">is organized by a model, and remains traceable.</text>
+  </g>
+
+  <!-- Construction explanation without crowding the primary mark. -->
+  <g transform="translate(744 588)" class="sans">
+    <path d="M0 0H700" class="rule"/>
+    <g transform="translate(0 36)">
+      <path fill="#17191B" d="M0 0h56v18H20v84h36v18H0z"/>
+      <text class="small" x="0" y="160" fill="#17191B">BOUNDARY</text>
+    </g>
+    <g transform="translate(212 36)">
+      <rect x="0" width="120" height="120" rx="2" fill="#17191B"/>
+      <path fill="none" stroke="#F5F3EE" stroke-width="12" d="M22 82h28V60h26V38h22"/>
+      <text class="small" x="0" y="160" fill="#17191B">RULE / TRANSFORM</text>
+    </g>
+    <g transform="translate(512 36)">
+      <rect width="150" height="18" y="18" fill="#809594"/>
+      <rect width="150" height="18" y="78" fill="#CDB8BA"/>
+      <text class="small" x="0" y="160" fill="#17191B">CORRELATED PATHS</text>
+    </g>
+  </g>
+
+  <!-- Variant strip -->
+  <path class="rule" d="M80 790H1520"/>
+  <g class="sans" fill="#17191B">
+    <text class="eyebrow" x="80" y="842">COLOR</text>
+    <use href="#mark-color" x="80" y="850" width="112" height="112"/>
+
+    <text class="eyebrow" x="300" y="842">MONO</text>
+    <g color="#17191B" style="--cut:#F5F3EE">
+      <use href="#mark-mono" x="300" y="850" width="112" height="112"/>
+    </g>
+
+    <rect x="520" y="820" width="240" height="160" rx="8" fill="#17191B"/>
+    <text class="eyebrow" x="548" y="850" fill="#F5F3EE">INVERSE</text>
+    <g color="#F5F3EE" style="--cut:#17191B">
+      <use href="#mark-mono" x="574" y="854" width="128" height="128"/>
+    </g>
+
+    <text class="eyebrow" x="840" y="842">SMALL SCALE</text>
+    <use href="#mark-color" x="840" y="876" width="64" height="64"/>
+    <use href="#mark-color" x="938" y="892" width="32" height="32"/>
+    <use href="#mark-color" x="1000" y="896" width="24" height="24"/>
+
+    <text class="eyebrow" x="1110" y="842">PALETTE</text>
+    <rect x="1110" y="874" width="88" height="64" fill="#17191B"/>
+    <rect x="1198" y="874" width="88" height="64" fill="#809594"/>
+    <rect x="1286" y="874" width="88" height="64" fill="#CDB8BA"/>
+    <rect x="1374" y="874" width="88" height="64" fill="#F5F3EE" stroke="#17191B" stroke-opacity=".18"/>
+  </g>
+</svg>

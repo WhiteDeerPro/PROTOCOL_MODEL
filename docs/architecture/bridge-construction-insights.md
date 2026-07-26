@@ -5,7 +5,7 @@
 
 本文解释 Bridge 架构为何采用 operation、stage、plan、executor 和 attachment 这些对象，并把硬件生成、
 HLS/dataflow、延迟不敏感设计、互联网 gateway/translator 等领域的经验映射到本项目。外部系统用于帮助发现
-问题形状，不作为 AMBA、TileLink 或本项目 API 的规范来源；真正进入工程的约束仍由所选 LinkProtocol、
+问题形状，不作为 AMBA、TileLink 或本项目 API 的规范来源；真正进入工程的约束仍由所选 InterfaceProtocol、
 VirtualDut profile 和 SystemProtocol 场景共同确定。
 
 本文的结论可以先压缩成一句话：
@@ -20,8 +20,8 @@ VirtualDut profile 和 SystemProtocol 场景共同确定。
 | 构造 | 请求内容 | 两侧会话 | 典型内部工作 |
 |---|---|---|---|
 | relay | operation 基本不变 | 可以终结后重发，也可以按同协议转送 | route、仲裁、排队、ID/owner 关联 |
-| transport bridge | 两端 wire protocol 不同，但可 decode/encode 同一种 operation form | 两条独立 LinkSession | codec、运输状态、correlation；中间可为 Identity stage |
-| semantic bridge | operation 的粒度、属性或完成关系发生变化 | 两条独立 LinkSession | split/merge、属性政策、completion fold、调度 |
+| interface bridge | 两端 wire protocol 不同，但可 decode/encode 同一种 operation form | 两条独立 InterfaceSession | attachment、接口关联状态、correlation；中间可为 Identity stage |
+| semantic bridge | operation 的粒度、属性或完成关系发生变化 | 两条独立 InterfaceSession | split/merge、属性政策、completion fold、调度 |
 | encapsulation/tunnel | 原协议消息作为 opaque payload 被搬运 | tunnel endpoint 成对出现 | 封装、传输、解封装；中间网络不理解原 operation |
 
 [HTTP Semantics 对 gateway 的定义](https://www.rfc-editor.org/rfc/rfc9110.html#section-3.7)提供了一个很好的
@@ -33,7 +33,7 @@ Bridge 接受下游结果后，按上游协议重新产生 completion。
 不同协议端点直接互通，后者保存原协议并借另一种网络运输。映射到芯片场景，`AXI over chip-to-chip link`
 通常更接近一对 tunnel endpoint 加中间 SystemProtocol；它不应自动退化为一个孤立的 AXI→X Bridge。
 
-这些名称不需要形成继承树。它们更适合作为 `BridgeProfile` 的构造维度，因为同一个具体 VirtualDut 可能同时
+这些名称不需要形成继承树。它们更适合作为 `TranslationProfile` 的构造维度，因为同一个具体 VirtualDut 可能同时
 执行 route、transport conversion 和 semantic translation。
 
 早期的[异构协议接口自动合成研究](https://iris.unitn.it/handle/11572/95174)已经把抽象 message 与 message 在
@@ -210,12 +210,12 @@ mux、buffer、source 和 sink 表达 dataflow；[ESI](https://circt.llvm.org/do
 接口](https://www.chisel-lang.org/docs/explanations/interfaces-and-connections#the-standard-ready-valid-interface-readyvalidio--decoupled)
 也只提供 ready、valid 和 bits 的传输形状；它不会自动证明 stalled payload 稳定等协议规则。
 
-因此 Bridge profile 需要说明它保持哪一种等价：
+因此 Translation profile 需要说明它保持哪一种等价：
 
 | 等价层级 | 允许变化 | 不能由它单独保证 |
 |---|---|---|
 | operation/effect trace | 周期和内部 child 形状可变 | pin 周期一致、未声明的 ordering |
-| link transaction/order | 可插入满足条件的等待和 buffer | 原始 cycle-by-cycle 波形 |
+| interface transaction/order | 可插入满足条件的等待和 buffer | 原始 cycle-by-cycle 波形 |
 | pin/cycle | 只允许 profile 明确列出的时序差异 | 任意 queue/retiming |
 
 插入 FIFO 或 register slice 通常只在前两种等价的特定条件下安全。它解决“何时传”，不替代 burst 拆分、
@@ -331,7 +331,7 @@ Route miss 可以是正常 local completion 并编码为 `DECERR`；APB error �
 宣称为端到端保证。对本项目而言：
 
 - Bridge 可以保证本地 request/completion 配对和已声明的转换政策；
-- Bridge 可以报告它保持了哪些 link ordering；
+- Bridge 可以报告它保持了哪些 interface ordering；
 - 它不能只凭本地 completion 证明最终存储持久化、全系统可见性或网络无死锁；
 - 后三者需要 SystemProtocol、endpoint contract 或 scenario property 闭合。
 
@@ -365,7 +365,7 @@ architecture ↔ ExecutorProfile / VirtualDut capability
    source port + target port + requested semantic profile
                          │
 2. 选择 codec
-   link events ↔ typed operation + reply context
+   interface events ↔ typed operation + reply context
                          │
 3. 双向协商
    request capability 向下；completion/requirement 向上
@@ -386,10 +386,10 @@ architecture ↔ ExecutorProfile / VirtualDut capability
    topology、route ownership、return closure、端到端 property
 ```
 
-建议的 `BridgeProfile` 至少表达：
+建议的 `TranslationProfile` 至少表达：
 
 ```text
-BridgeProfile
+TranslationProfile
 ├── ingress/egress role
 ├── source/target operation signature
 ├── supported direction and operation predicates

@@ -1,0 +1,126 @@
+digraph sensor_dma_msc {
+  rankdir=TB;
+  label="Sensor DMA · first beat message sequence (actual accepted events)";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.28, nodesep=0.8, ranksep=0.36, newrank=true];
+  node [fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9];
+  h_dma [shape=box, style="rounded,filled", fillcolor="#f8fafc", group="dma", label="dma"];
+  h_crossbar [shape=box, style="rounded,filled", fillcolor="#f8fafc", group="crossbar", label="crossbar"];
+  h_sensor [shape=box, style="rounded,filled", fillcolor="#f8fafc", group="sensor", label="sensor"];
+  h_memory [shape=box, style="rounded,filled", fillcolor="#f8fafc", group="memory", label="memory"];
+  { rank=same; h_dma; h_crossbar; h_sensor; h_memory; }
+  p0_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  h_dma -> p0_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p0_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  h_crossbar -> p0_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p0_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  h_sensor -> p0_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p0_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  h_memory -> p0_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p0_dma; p0_crossbar; p0_sensor; p0_memory; }
+  p0_dma -> p0_crossbar -> p0_sensor -> p0_memory [style=invis, weight=100];
+  p0_dma -> p0_crossbar [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e0 AR 0x1000"];
+  p1_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p0_dma -> p1_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p1_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p0_crossbar -> p1_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p1_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p0_sensor -> p1_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p1_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p0_memory -> p1_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p1_dma; p1_crossbar; p1_sensor; p1_memory; }
+  p1_dma -> p1_crossbar -> p1_sensor -> p1_memory [style=invis, weight=100];
+  p1_crossbar -> p1_sensor [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e1 AR 0x0"];
+  p2_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p1_dma -> p2_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p2_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p1_crossbar -> p2_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p2_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p1_sensor -> p2_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p2_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p1_memory -> p2_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p2_dma; p2_crossbar; p2_sensor; p2_memory; }
+  p2_dma -> p2_crossbar -> p2_sensor -> p2_memory [style=invis, weight=100];
+  p2_sensor -> p2_crossbar [constraint=false, penwidth=1.6, color="#059669", fontcolor="#059669", label="e2 R 0x10203040"];
+  p3_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p2_dma -> p3_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p3_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p2_crossbar -> p3_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p3_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p2_sensor -> p3_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p3_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p2_memory -> p3_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p3_dma; p3_crossbar; p3_sensor; p3_memory; }
+  p3_dma -> p3_crossbar -> p3_sensor -> p3_memory [style=invis, weight=100];
+  p3_crossbar -> p3_dma [constraint=false, penwidth=1.6, color="#059669", fontcolor="#059669", label="e3 R 0x10203040"];
+  p4_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p3_dma -> p4_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p4_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p3_crossbar -> p4_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p4_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p3_sensor -> p4_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p4_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p3_memory -> p4_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p4_dma; p4_crossbar; p4_sensor; p4_memory; }
+  p4_dma -> p4_crossbar -> p4_sensor -> p4_memory [style=invis, weight=100];
+  p4_dma -> p4_crossbar [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e4 AW 0x2000"];
+  p5_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p4_dma -> p5_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p5_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p4_crossbar -> p5_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p5_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p4_sensor -> p5_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p5_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p4_memory -> p5_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p5_dma; p5_crossbar; p5_sensor; p5_memory; }
+  p5_dma -> p5_crossbar -> p5_sensor -> p5_memory [style=invis, weight=100];
+  p5_dma -> p5_crossbar [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e5 W 0x10203040"];
+  p6_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p5_dma -> p6_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p6_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p5_crossbar -> p6_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p6_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p5_sensor -> p6_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p6_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p5_memory -> p6_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p6_dma; p6_crossbar; p6_sensor; p6_memory; }
+  p6_dma -> p6_crossbar -> p6_sensor -> p6_memory [style=invis, weight=100];
+  p6_crossbar -> p6_memory [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e6 AW 0x0"];
+  p7_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p6_dma -> p7_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p7_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p6_crossbar -> p7_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p7_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p6_sensor -> p7_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p7_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p6_memory -> p7_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p7_dma; p7_crossbar; p7_sensor; p7_memory; }
+  p7_dma -> p7_crossbar -> p7_sensor -> p7_memory [style=invis, weight=100];
+  p7_crossbar -> p7_memory [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e7 W 0x10203040"];
+  p8_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p7_dma -> p8_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p8_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p7_crossbar -> p8_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p8_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p7_sensor -> p8_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p8_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p7_memory -> p8_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p8_dma; p8_crossbar; p8_sensor; p8_memory; }
+  p8_dma -> p8_crossbar -> p8_sensor -> p8_memory [style=invis, weight=100];
+  p8_memory -> p8_crossbar [constraint=false, penwidth=1.6, color="#059669", fontcolor="#059669", label="e8 B OKAY"];
+  p9_dma [shape=point, width=0.035, label="", color="#94a3b8", group="dma"];
+  p8_dma -> p9_dma [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p9_crossbar [shape=point, width=0.035, label="", color="#94a3b8", group="crossbar"];
+  p8_crossbar -> p9_crossbar [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p9_sensor [shape=point, width=0.035, label="", color="#94a3b8", group="sensor"];
+  p8_sensor -> p9_sensor [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p9_memory [shape=point, width=0.035, label="", color="#94a3b8", group="memory"];
+  p8_memory -> p9_memory [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p9_dma; p9_crossbar; p9_sensor; p9_memory; }
+  p9_dma -> p9_crossbar -> p9_sensor -> p9_memory [style=invis, weight=100];
+  p9_crossbar -> p9_dma [constraint=false, penwidth=1.6, color="#059669", fontcolor="#059669", label="e9 B OKAY"];
+  repeat [shape=note, style="rounded,dashed,filled", fillcolor="#fff7ed", color="#ea580c", label="beat 1 repeats the same read→write lifecycle
+with the next retained sample"];
+  p9_crossbar -> repeat [style=dashed, color="#ea580c"];
+}

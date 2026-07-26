@@ -20,7 +20,7 @@ Protocol Model starts with small communication facts and builds upward:
 ```text
 events, relations, and resources
         ↓ compose and refine
-LinkProtocol: the language allowed on one logical connection
+InterfaceProtocol: the language allowed on one logical connection
         ↓ bind to named module ports
 VirtualDut: communication-relevant behavior of one virtual module
         ↓ connect and add global contracts
@@ -32,12 +32,12 @@ replayable scenarios, waveforms, causality, and diagnostics
 ### What exists today?
 
 The current source tree includes compositional semantic units, an `AtomicFrame` observation boundary, ready/valid and
-reset handling, and LinkProtocol implementations for AXI4, AXI4-Lite, AXI4-Stream, AHB-Lite/AHB5 profiles,
+reset handling, and InterfaceProtocol implementations for AXI4, AXI4-Lite, AXI4-Stream, AHB-Lite/AHB5 profiles,
 APB3/APB4/APB5, and an ACE-Lite ordinary-data subset. Non-trivial AXI4 behavior in the current scope includes bursts,
 narrow and unaligned transfers, read interleaving, AW/W/B correlation, link-local exclusive eligibility, and
 state-driven generation.
 
-The project also provides named `VirtualDut` modules, typed protocol ports, AMBA attachments, address-space endpoints,
+The project also provides named `VirtualDut` modules, typed interface ports, AMBA attachments, address-space endpoints,
 synchronous `SystemProtocol` sessions, and bridge witnesses including AXI4-to-APB. A typed transaction translation kernel
 already models operation signatures, stage contracts, plan closure, fan-out lifecycle, and serial capacity leases. The
 existing full-AXI bridge is still being migrated onto that shared kernel.
@@ -72,7 +72,7 @@ The project poses three testable questions rather than assuming their answers:
   knowledge?
 - Can typed operations and translation stages move bridge reuse from protocol-pair code toward codecs plus semantic
   stages?
-- Does the LinkProtocol / VirtualDut / SystemProtocol scope split make link-local and network-level responsibilities
+- Does the InterfaceProtocol / VirtualDut / SystemProtocol scope split make link-local and network-level responsibilities
   easier to audit?
 
 Answering these questions requires protocol engineers, verification engineers, RTL integrators, and visualization
@@ -84,4 +84,4 @@ presentation, and the external-DUT path.
 Read more: [architecture map](../../docs/architecture/technical-route/README.md) ·
 [current implementation boundary](../../docs/architecture/implementation-status.md) ·
 [unified AXI4 examples](../generated/axi4/README.en.md) ·
-[release notes](../../docs/releases/0.3.0.md)
+[release notes](../../docs/releases/0.4.0.md)

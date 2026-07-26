@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping
 
@@ -13,14 +14,36 @@ from ..attachments.address import (
     AddressRequest,
     AddressRequesterAttachment,
 )
-from ..backend.base import VirtualDutModel
+from ..backend.base import VirtualDutBackend
 from ..backend.transition import DutTransition, PortEmission, PortInput
-from ..binding.port import PortAttachmentBinding
+from ..binding.port import InterfaceAttachmentBinding
+from .projection import (
+    ADDRESS_ROUTER_PROJECTION,
+    AddressRouterBoundaryProjection,
+)
+from .ownership import RoutedAddressRequest
 from .route import AddressRoute, validate_address_routes
-from .state import AddressFabricState, RoutedAddressRequest
 
 
-class SingleIngressAddressFabricBackend(VirtualDutModel):
+@dataclass(frozen=True)
+class SingleIngressAddressFabricState:
+    """Runtime state owned by one single-ingress fabric controller."""
+
+    ingress_state: object
+    egress_states: Mapping[str, object]
+    pending: Mapping[int, RoutedAddressRequest]
+    next_request_id: int = 0
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "egress_states", MappingProxyType(dict(self.egress_states))
+        )
+        object.__setattr__(
+            self, "pending", MappingProxyType(dict(self.pending))
+        )
+
+
+class SingleIngressAddressFabricBackend(VirtualDutBackend):
     """Synchronous one-ingress address decoder and completion mux.
 
     This execution profile intentionally has one active cross-port request.
@@ -30,11 +53,11 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
 
     def __init__(
         self,
-        ingress_binding: PortAttachmentBinding,
-        egress_bindings: Mapping[str, PortAttachmentBinding],
+        ingress_binding: InterfaceAttachmentBinding,
+        egress_bindings: Mapping[str, InterfaceAttachmentBinding],
         routes: tuple[AddressRoute, ...],
     ) -> None:
-        if not isinstance(ingress_binding, PortAttachmentBinding):
+        if not isinstance(ingress_binding, InterfaceAttachmentBinding):
             raise TypeError("fabric ingress requires an attachment binding")
         ingress_port = ingress_binding.name
         ingress_attachment = ingress_binding.attachment
@@ -42,7 +65,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
             raise TypeError("fabric ingress requires a completer binding")
         egress_bindings = dict(egress_bindings)
         if any(
-            not isinstance(item, PortAttachmentBinding)
+            not isinstance(item, InterfaceAttachmentBinding)
             for item in egress_bindings.values()
         ):
             raise TypeError("fabric egresses require attachment bindings")
@@ -73,14 +96,26 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
             {ingress_binding.name: ingress_binding, **egress_bindings}
         )
         self.routes = validate_address_routes(routes, egress)
+        self._boundary_projections = MappingProxyType(
+            {
+                ADDRESS_ROUTER_PROJECTION: AddressRouterBoundaryProjection(
+                    (self.ingress_port,),
+                    tuple(self.egress_bindings),
+                    self.routes,
+                )
+            }
+        )
 
     def local_attachment_bindings(
         self,
-    ) -> Mapping[str, PortAttachmentBinding]:
+    ) -> Mapping[str, InterfaceAttachmentBinding]:
         return self.bindings
 
-    def initial_state(self) -> AddressFabricState:
-        return AddressFabricState(
+    def boundary_projections(self) -> Mapping[str, object]:
+        return self._boundary_projections
+
+    def initial_state(self) -> SingleIngressAddressFabricState:
+        return SingleIngressAddressFabricState(
             self.ingress_attachment.initial_state(),
             {
                 name: attachment.initial_state()
@@ -90,9 +125,10 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
         )
 
     def accept(self, state: object, action: PortInput) -> DutTransition:
-        if not isinstance(state, AddressFabricState):
+        if not isinstance(state, SingleIngressAddressFabricState):
             raise TypeError(
-                "SingleIngressAddressFabricBackend requires AddressFabricState"
+                "SingleIngressAddressFabricBackend requires "
+                "SingleIngressAddressFabricState"
             )
         if action.port == self.ingress_port:
             return self._accept_ingress(state, action)
@@ -106,7 +142,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
         )
 
     def _accept_ingress(
-        self, state: AddressFabricState, action: PortInput
+        self, state: SingleIngressAddressFabricState, action: PortInput
     ) -> DutTransition:
         if state.pending:
             return DutTransition(
@@ -124,7 +160,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
             return DutTransition(state, fault=decoded.fault)
         if decoded.access is None:
             return DutTransition(
-                AddressFabricState(
+                SingleIngressAddressFabricState(
                     decoded.state,
                     state.egress_states,
                     state.pending,
@@ -145,7 +181,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
             if encoded.fault is not None:
                 return DutTransition(state, fault=encoded.fault)
             return DutTransition(
-                AddressFabricState(
+                SingleIngressAddressFabricState(
                     encoded.state,
                     state.egress_states,
                     state.pending,
@@ -179,7 +215,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
             decoded.reply_context,
         )
         return DutTransition(
-            AddressFabricState(
+            SingleIngressAddressFabricState(
                 decoded.state,
                 egress_states,
                 pending,
@@ -192,7 +228,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
         )
 
     def _accept_egress(
-        self, state: AddressFabricState, action: PortInput
+        self, state: SingleIngressAddressFabricState, action: PortInput
     ) -> DutTransition:
         attachment = self.egress_attachments[action.port]
         decoded = attachment.decode_completion(
@@ -205,7 +241,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
         egress_states[action.port] = decoded.state
         if decoded.completion is None:
             return DutTransition(
-                AddressFabricState(
+                SingleIngressAddressFabricState(
                     state.ingress_state,
                     egress_states,
                     state.pending,
@@ -252,7 +288,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
         pending = dict(state.pending)
         del pending[completion.request_id]
         return DutTransition(
-            AddressFabricState(
+            SingleIngressAddressFabricState(
                 encoded.state,
                 egress_states,
                 pending,
@@ -265,7 +301,7 @@ class SingleIngressAddressFabricBackend(VirtualDutModel):
         )
 
     def is_quiescent(self, state: object) -> bool:
-        if not isinstance(state, AddressFabricState):
+        if not isinstance(state, SingleIngressAddressFabricState):
             return False
         return (
             not state.pending

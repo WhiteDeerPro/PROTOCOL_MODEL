@@ -1,73 +1,150 @@
 # 当前实现状态
 
 这份状态表描述 `protocol_model/` 当前已经落地的能力、明确边界与下一落点。“尚未实现”表示该能力
-仍需按照现有层级和职责设计，不代表协议本身禁止或架构永久排除。
+仍需按照现有视图和职责设计，不代表协议本身禁止或架构永久排除。
+
+本页使用仓库当前 Python 名称：接口合同、运行账本和连接实例分别是 `InterfaceProtocol`、
+`InterfaceSession` 和 `InterfaceConnection`，标准协议族位于 `protocol_model.protocols`。CHI 当前有受限的
+Issue H direct-read/retry transaction profile，以及读取调用方拓扑的 transport-network slice；这不代表完整
+RN-I profile 已经实现。三张视图及命名边界见
+[通信建模的三张视图](communication-scope-and-transport.md)。
 
 ## 已进入主线
 
 | 层级 | 当前能力 |
 |---|---|
-| 基础语义 | typed canonical event、value domain、constraint/resource/obligation、CausalGraph、可组合 fragment |
-| observation | `AtomicFrame`、ready-valid lowering、stall stability、reset epoch、quiet tied/stable policy |
-| LinkProtocol | channel role/direction、schema validation、profile refinement、event prohibition、bounded resource profile |
+| 基础语义 | typed canonical event、value domain、event/transport/interface/VirtualDut/system constraint scope、resource/obligation、`ResourceDemand`/blocked transition、CausalGraph、可组合 fragment |
+| observation | `AtomicFrame`、`AsynchronousSample`、ready-valid lowering、四相 REQ/ACK RTZ lowering、stall/data-window stability、reset epoch、quiet tied/stable policy |
+| InterfaceProtocol | directed event kind、schema validation、profile refinement、event prohibition、bounded resource profile |
 | 通用 pattern | keyed cardinality、burst assembly、FIFO join、completion ledger |
-| AXI4 | 五通道、burst/narrow/unaligned、read interleave、AW/W/B、exclusive、ordering 边界、状态驱动生成 |
+| AXI4 | 五通道、burst/narrow/unaligned、read interleave 判定、AW/W/B、exclusive、ordering 边界、状态驱动生成；AddressSpace endpoint 可选 bounded stepped R/B，并能按不同 RID round-robin 逐 beat 发射、按相同 RID 保持 batch 顺序 |
 | AXI4-Lite | 原生五通道 schema、单 beat/in-order、多 outstanding、AXI4 embedding、ready-valid observation |
 | AXI4-Stream | 单 T channel、byte qualifier、packet/interleave/order、Continuous_Packets profile、生成与 observation |
 | AHB | AHB-Lite transaction/pipeline observer；AHB5 extended HPROT、secure、sparse strobe、exclusive signaling、User payload |
 | APB3/APB4/APB5 | 独立 variant package、single outstanding、SETUP/ACCESS observation；APB5 user/wakeup/RME profile |
 | ACE-Lite data | AXI4 五通道语义加 ACE-Lite domain/snoop/bar 组合检查；不含 barrier/CMO |
-| VirtualDut | 具名 module、typed ProtocolPort、attachment SPI/binding/builder、APB/AHB/AXI AddressSpace endpoint、Stream capture、单入口 AddressFabric 与首批 bridge witnesses |
-| SystemProtocol | topology、ownership、elaboration、同步 fixed-point 路由、系统 trace、递归封装 |
-| 产物与展示 | run store、manifest、记录投影、renderer/publisher、系统 topology/trace DOT |
+| VirtualDut | 具名 module、typed InterfacePort/TransportPort、attachment SPI/binding/builder、APB/AHB/AXI AddressSpace endpoint、有限 FIFO/dynamic-delay address responder、有限 stepped-emission wrapper、Sensor FIFO、serialized memory-copy engine、edge interrupt collector/EOI target、Stream capture、单入口 AddressFabric、scheduled N×M address crossbar、AXI4 read-only AR/R 与 write-only AW/W/B N×M crossbar、read 1×M demux 特化、统一 AMBA serial bridge 构造 |
+| SystemProtocol | 单一 topology registry 中的 InterfaceConnection/DirectedTransportConnection、typed ownership、elaboration、派生 ResolvedTransportPlan、同步 interface fixed-point 路由、显式 `DutAdvanceAction`、blocked step 原子回滚、系统 trace、递归封装，以及显式 address claim/router contract 的 direct-neighbor resolution |
+| 产物与展示 | run store、manifest、记录投影、renderer/publisher、系统 topology/trace DOT、自动 VirtualDut 展开、显式 single-ingress fabric 的 bus-strip 折叠投影，以及 AXI4 AR/R 2×4 crossbar 可执行 witness |
 
 ## 当前边界
 
 | 能力 | 状态与下一落点 |
 |---|---|
-| raw RTL pin adapter | `AtomicFrame` 边界已建立；AXI 字段采集、VCD/UVM transaction adapter 后续位于协议 observation adapter |
-| AXI WaveJSON | 通用显示 policy 已有；各 AXI variant 的 lane/field 投影应留在对应 link 子包 |
-| bounded capacity | LinkProfile 能拒绝并回滚超限事件；translation runtime 已有 typed pool/lease、usage 与 `ResourceDecl` 投影；attachment admission 向 READY/backpressure 的闭合尚未实现 |
-| wait-for/deadlock | 需要 blocked reason、动态资源和非立即 emission 后再进入 SystemProtocol 分析 |
-| AXI bridge | AXI4-Lite→APB 同宽、单活动 profile，以及 AXI4→APB 有界 parent FIFO、逐 beat burst split、地址重映射和错误回传已实现；width conversion、narrow beat 转换、有限 ID pool 和并发 APB 执行尚未实现 |
-| typed transaction translation | signature/profile、unary/fanout stage、双向 plan closure、fan-out ledger、capacity pool/lease 与 operation-level serial executor 已落地；attachment-aware 事务式 codec 外壳、`AddressBurst` stages 和现有 AXI bridge 接入待完成，blocked/deferred demand 属于后续 runtime 阶段 |
-| 异步 DUT emission | 当前暂缓；同步 fixed-point 用于点到点和微小 bridge 网络 |
-| protocol attachment | APB/AHB/AXI4-Lite address 两面已实现；AXI4 有 burst-aware subordinate 与 serialized requester；AXI4-Stream 有独立 StreamTransfer 两面 |
+| raw RTL pin adapter | clocked `AtomicFrame` 与 edge-complete `AsynchronousSample` 边界已建立；AXI 字段采集、VCD/UVM transaction adapter 和多 clock trace merge 后续位于协议 observation adapter |
+| AXI WaveJSON | 通用显示 policy 已有；各 AXI variant 的 lane/field 投影应留在对应 interface protocol 子包 |
+| bounded capacity | InterfaceProtocol profile 通过 offer/profile 限制 outstanding；forced 非法事件仍产生 interface fault。VirtualDut runtime 已区分 `BLOCK`、有序 deferred `ERROR_COMPLETION` 与 `FAULT`，queued responder、scheduled crossbar、AXI4 read/write crossbar、Sensor FIFO、interrupt collector 和 stepped output FIFO 使用显式有限资源。AXI4 read 按 ingress 限制 active RID 和每 RID pending burst；write 另行限制 pending AW、pre-AW W burst、buffered W beat、active BID 和每 BID accepted burst。ordered error marker 每 port/ingress 有一个应急槽，正常 FIFO 仍满且槽已占用时，再次 overflow 返回 `BLOCK`。`BLOCK` 由 SystemSession 整步回滚并交给 scenario 重试；向 READY/HREADY/PREADY 的周期级投影尚未实现 |
+| blocked rollback granularity | 当前回滚边界是一项外部 `SystemAction`/`DutAdvanceAction`。单发射 backend 能保持精确接纳；一次 advance 同时发往多个 egress 时，任一 destination `BLOCK` 会回滚同批其他发射，形成保守的跨出口耦合。当前 Sensor→DMA 场景使用串行 requester 不触发该边界；独立出口背压需要 emission-level admission 或可选择的单端口 service action |
+| wait-for/deadlock | blocked reason 已能指出 resource、容量和位置；held-resource edge、response-path capacity、wait-for graph 与 deadlock verdict 尚未接入。错误响应只能结束特定 obligation，不单独构成无死锁保证 |
+| AMBA serial bridge | `build_amba_serial_bridge_vdut()` 按 ingress form 选择 single-access 或 AXI4 burst 路径；AXI4、AXI4-Lite、AHB、APB 的 4×4 family 组合共用一个 backend 与 egress requester factory。当前七个具体 variant 有 7×7 默认-profile 装配见证，执行覆盖选择代表性路径和 AXI→AHB→APB chain。当前 profile 是单 ingress/egress、严格串行 child；width split/merge、burst-preserving egress、有限 ID remap pool 和并发 child 尚未实现 |
+| typed transaction translation | signature/profile、unary/fanout stage、双向 plan closure、fan-out ledger、capacity pool/lease、attachment-aware operation backend、AddressAccess/AddressBurst route/shape/split stages 与统一 AMBA serial composition root 已落地；多层 fanout、并发 child 调度、完整 ordering/admission/fold metadata 和 blocked demand 仍待推进 |
+| DUT 延后 emission | caller-owned `DutAdvanceAction` 已能推进 queued responder、scheduled crossbar 与通用 `SteppedEmissionBackend`。后者把 immediate output batch 放入有限 event FIFO，以动态 wait policy 在显式 service opportunity 间逐事件释放，并可按 batch ordering key round-robin；AXI4 Full AddressSpace endpoint 用 R/B channel+ID 保护同 ID 顺序并允许不同 RID 的 R beat 交织。非破坏式 prepare/current/accept offer 已保存未接纳 event 的所有权；AXI RVALID/RREADY pin lowering、reset 清理、跨 connection lineage、自主 wakeup、clock domain、timeout 和异步调度仍暂缓 |
+| protocol attachment | APB/AHB/AXI4-Lite address 两面已实现；AXI4 有 burst-aware subordinate 与 serialized requester；stateless canonical relay 可供 fabric 保留原始协议事件并复用方向/schema 检查；AXI4-Stream 有独立 StreamTransfer 两面；项目级 edge notification 有 notifier/handler 两面 |
 | empty endpoint | APB/AHB/AXI idle source 与 blackhole sink 已可构造；请求—响应 blackhole 会保留 pending，正常 error responder 尚未实现 |
 | external backend | VirtualDut 的外部性已经确立；opaque/RPC/RTL/trace backend binding 和不可枚举 state ownership 尚未进入代码 |
-| constructed backend | 单入口 AddressFabric 已执行 Route/Correlate；operation-level serial translation executor 已实现，但还不是 attachment-aware `VirtualDutModel`；当前 full-AXI pair backend 仍负责具体 bridge 调度；Stream capture 可保存规范化 beat；通用 Arbitrate/Compose 尚未实现 |
+| constructed backend | 单入口 AddressFabric 已执行 Route/Correlate；协议无关 `ScheduledAddressCrossbarBackend` 已执行 per-ingress FIFO、per-egress round-robin、active owner 与 completion return，当前具体 recipe 为 AXI4-Lite。AXI4-specific read backend 接受任意非空 N×M port tuple，以 pending-burst ledger 派生 `(ingress, RID)` destination lock 和 `(egress, RID)` return-owner FIFO，执行 RLAST retire 与 ordered DECERR；1×M demux 是便捷特化。write backend 独立保存每 ingress AW/W assembly，AW 接纳时预留 BID destination/order slot，完整 burst 以 store-and-forward batch 发送，并从 `(egress, BID)` owner FIFO返回 B；route miss 在消费匹配 W burst 后本地返回 DECERR。两者分别要求 read-only 或 write-only 五通道 profile，当前均为 `raw-ID-serialized` 普通事务，不含 downstream ID remap、多 ingress exclusive、cut-through 或 Full AXI 五通道组合。`AddressOperationTranslationBridgeBackend` 承载 single-access 与 AXI burst→access 两条 AMBA serial 路径；其余网络实验原件保持原有职责 |
+| scenario traffic | `RandomTrafficController` 按 source role 与当前 EventOffer 生成可复现 canonical-event 流量，并可与 SystemSession interface state 同步；raw pin/cycle driver 仍需 observation/driver adapter |
+| sensor/DMA scenario | AXI4-Lite serialized DMA 已经通过 1×2 scheduled crossbar 从固定地址 Sensor FIFO 搬运到递增 MemoryRegion，并覆盖快速 sensor 的 `DROP_NEWEST`/overrun；AMBA recipe 会在构造期检查 beat/address geometry，但 read-only/write-only 等 event prohibition profile 仍可能在首次不兼容发射时报告 attachment fault。DMA 仍是 construction-time descriptor fixture，尚无 CSR 编程面和 completion-to-interrupt 绑定 |
+| reference/RTL conformance | 当前 executor 与 scenario 生成 deterministic execution witness，可检查 operation effect、owner/lifetime 和结果映射；尚无把两侧 RTL observation 按 stutter、identity、允许重排和必要偏序与 contract 比较的通用 checker，因而 witness 不作为逐周期 golden trace |
 | boundary runtime/嵌套执行 | 可以封装 subsystem；外部边界注入与内部 session 生命周期仍需统一 |
-| ordering | 单 link 的 beat、same-ID、AW/W/B 与同帧可见性可判定；内存可见性和跨 link ordering 尚未建模 |
+| address closure | `AddressClaim`、`AddressRouterContract`、`SystemProtocolBuilder` 和 `ResolvedAddressPlan` 已闭合显式 router route 到唯一 direct-neighbor claim，并按 ingress×route 形成路径；不从 topology 推断 router、不搜索多跳、不读取 endpoint 私有 AddressSpace |
+| system boundary projection | bridge typed translation 已有 capacity、completion origin 和 attribute effect；generated crossbar 会从实际 backend 配置公开 `AddressRouterBoundaryProjection` 并在 construction 时与 router contract 核对。external/opaque DUT assertion、capability、return、resource/wait-for projection 与 runtime monitor 尚缺 |
+| ordering | 单 interface connection 的 beat、same-ID、AW/W/B 与同帧可见性可判定；AXI4 read crossbar 用 manager-local RID destination lock 和 subordinate-local raw-ID owner FIFO 恢复 R 归属，write crossbar 从 AW 接纳起用 BID destination lock，并在完整 AW/W 转发后用 `(egress, BID)` FIFO 恢复 B 归属。当前 raw-ID profile 会把同 egress/同 ID 并入一条 downstream ordering stream；通用的内存可见性和跨 connection ordering property 仍未建模 |
+| typed representation / codec | operation translation 已有；CHI Issue H 已把 typed protocol message、named logical-field record、`ChiNetworkPacket` 与 `ChiProtocolFlit` 分成显式对象。当前 message profile 覆盖 `ReadNoSnp`/`ReadShared`/`ReadUnique`/`ReadNotSharedDirty`/`WriteBackFull`/`PCrdReturn` REQ、`SnpResp`/`CompAck`/`CompDBIDResp`/`RetryAck`/`PCrdGrant` RSP、`CompData`/`SnpRespData`/`CopyBackWrData` DAT 与 `SnpShared`/`SnpUnique`/`SnpNotSharedDirty` SNP；`ChiIssueHLogicalFieldCodec` 为先前的 read/snoop/retry form 提供 channel+opcode 分派、精确字段集合、常量/宽度/profile 诊断及双向 round-trip，writeback typed form 已有 local profile 但尚未加入 logical-field codec schema。各 channel 的 `LCrdReturn` 保持为不进入 message codec 和 packet 的 hop-local link flit。`SnpUnique` 与 no-SD `SnpNotSharedDirty` profile 检查 `DoNotGoToSD=1`；clean profile 使用 `RetToSrc=0`，dirty-data profile 可使用 `RetToSrc=1` 收集数据。Network packet 单独持有 source/target route identity 与 packet index/count；当前尚不拆分 message 内容，Snoop fanout 则产生若干各自为单 fragment 的目标副本。Issue H 每 packet 恰好一 protocol flit、每 flit 一 phit，但 phit/raw pin、packed bit layout、完整 opcode/conditional-field catalog 和实际 multi-packet DAT splitter/reassembler 尚未实现 |
+| transport contract | CHI Issue H 的有向 link 共享四态 activation，REQ、RSP、SNP、DAT 分别持有独立 L-Credit；REQ 支持 1–8 个 dedicated Resource Plane，RSP/SNP/DAT 使用标量 credit。四类 channel-only 有限点对点路径覆盖 pre-state 接纳、receiver reservation、backpressure、capture/drain 和 deactivation credit return；protocol traffic 以携带 packet 的 flit 跨 hop，`LCrdReturn` 不进入 network packet。一个 `AtomicFrame` 内的已启用 channel 统一提交或回滚。shared credit、replicated channel、FLITPEND/raw pin lowering、异步 activation race 和全网原子 tick 尚未实现 |
+| CHI network/router slice | `SystemProtocolBuilder.connect_transport()` 已将有向 CHI connection 放入 canonical topology，elaboration 形成 `ResolvedTransportPlan`。一条 connection 可同时启用 REQ/RSP/SNP/DAT，并以一个 activation state 配合各 channel 独立的 FIFO、receiver reservation 与 L-Credit；lineage 按 `connection + channel` 保存。`ChiTransportNetworkSession` 读取这份 plan 及调用方 router registry，原子提交 capture→router 和 router service→downstream enqueue。有限 store-and-forward router 按 network packet 的 `channel + target_id` 精确路由且不改写 protocol message；Session 不内置 RN→router→Home、ring 或 mesh。SNP message 不拥有协议 `TgtID`；coherent Home 可按 clean Shared/Unique、dirty unique 和 no-SD ReadNotSharedDirty profile 从目录选择目标，并为每个 Snoopee 建立显式 packet copy。通用 multicast switch 与 topology-wide fanout scheduler 尚未实现。`ChiBehaviorFacet` 已区分 transaction/forwarding behavior，NodeID identity plan、flow projector 与 feature capability resolver 可形成 CHI-family 构造期闭合证据。Snoopee role 可声明为有限 peer set；projector/resolver 会按每个成员闭合 SNP 去程、RSP/DAT 回程和 participant capability。该集合仍由 construction 显式提供，尚未从 coherence domain/Home authority 自动派生，也未与任意手工 session registry 强制绑定；通用 participant/identity API 暂不从单一协议样本提取 |
+| CHI read/coherence lifecycle | 受限 direct-Home `ReadNoSnp→CompData` 已以 interface ledger、有限 Home participant 和 REQ/DAT transport 闭合，并在调用方装配的一至多个 router topology 上运行；公开 witness 使用两级 XP、三跳 REQ 和反向三跳 DAT。`ChiAddressHomeNode` 已把 aligned full-DAT-width 读转换为协议无关 `AddressRead`。`ChiCoherenceSession` 闭合 clean `ReadShared`、clean `ReadUnique`、dirty-owner transfer、MESI no-SD `ReadNotSharedDirty` 和显式 `UD` `WriteBackFull`。协议中立 `CacheLineStore/CacheCore` 持有 resident payload，RN participant 持有 `I/UC/SC/UD` permission 与 transaction state；`attach_chi_issue_h_coherence()` 将已有 core 与双向 CHI transport boundary 和 transaction facet 装配成可发现的 Cache VirtualDut 产物，当前 capacity 只表示 pending coherence lifecycle，不冒充完整 RTL MSHR。RN/Home 已以 per-line reservation 串行化同地址 lifecycle；第二笔 RN transaction 与撞上 local pending 的 Snoop 返回 `ResourceDemand`，尚未实现 waiter merge 或完整 transient phase。`UC` 可经本地 full-line write 进入 `UD`，`SC` 可通过 `ReadUnique` 重取 full-line、失效其他 holder 并进入 `UC` 后再本地写入。另一 requester 的 `ReadUnique` 可通过 `SnpRespData_I_PD→CompData_UD_PD→CompAck` 接管最新数据与 dirty responsibility；`ReadNotSharedDirty` 则通过 `SnpNotSharedDirty(DoNotGoToSD=1)→SnpRespData_SC_PD→Home pending 接管 dirty data/responsibility→CompData_SC→CompAck→Home backing/directory commit` 使旧 owner 与 requester 最终都成为 clean `SC` holder。Home 目前在受限 reference state 中合并 backing data、directory 和 pending table；UD owner 存在时 backing data 可以陈旧，no-SD 或 dirty writeback 完成后 backing 恢复为最新。`WriteBackFull(TxnID=A)→CompDBIDResp(DBID=B)→CopyBackWrData_UD_PD(TxnID=B)` 已在 participant 和 packet-delivery session 闭合：RN 收到 DBID 后转 `I`，Home 收到 DAT 后才提交 backing、清除 owner 并释放 DBID。Snoop TxnID 与 completion DBID 分域关联，静止点 system monitor 检查 directory、permission 和相应的数据权威。五个 coherence profile 分别登记为构造期 feature；dirty-unique 依赖 clean ReadUnique；dirty-writeback 将 `UD` 作为 participant-state 前置条件而不强制声明获取该权限的路径，并闭合 Requester↔Home 的 REQ/RSP/DAT flow；独立的 ReadNotSharedDirty feature 不依赖 dirty-unique、也不要求 local-write capability。`CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset 组合两者，dependency closure 再带入 clean ReadUnique。当前 Home 固定吸收 PassDirty、返回 `CompData_SC` 并在 CompAck 后提交，这是规范允许结果的受限子集。普通 `ReadShared + dirty-unique` 仍被拒绝，因为该组合的 shared-dirty transition policy 尚未定义；非数据 SnpResp 也不能携带 PassDirty。`ChiCoherenceSession.from_resolved()` 将 closed requester/Home/Snoopee roles 精确绑定到 packet-delivery registry；`ChiCoherenceNetworkSession.from_resolved()` 进一步从同一 flow evidence 建立 packet route，自动推进 participant egress、Link/router 与 endpoint delivery。一次 participant transition 的完整输出先原子保存为显式 batch，再按网络容量逐 packet 接纳；当前只有一个 batch 槽。定向 witness 已闭合 clean 七 packet fanout、dirty 五 packet owner-transfer，以及五 packet no-SD dirty-to-clean-shared 路径。当前窄 profile 只接受 component NodeID 与 binding singleton identity 一致的角色，并在打开 session 时检查沿途 DAT 均为 512-bit。Retry 参考装配仍闭合 `RetryAck→PCrdGrant→AllowRetry=0 重发→CompData` 与取消时 `PCrdReturn`。当前缺口包括 `CleanUnique`/`MakeUnique`、clean `Evict`、自动 victim/writeback scheduling、writeback 与 Retry/error 的组合、完整 same-line transient/hazard policy、`SD`/Owned、forwarding snoop、真实 snoop filter、narrow/error completion 和多 waiter 公平性；有界运行耗尽仍为 inconclusive，不是 deadlock proof |
 | requirement catalog | 协议语义已有声明；官方章节、执行 monitor 和覆盖状态的逐条目录仍待建立 |
+
+## 已识别的术语与对象边界债务
+
+这些项目已经有较明确的修正方向，但涉及数据形状或公共职责，当前不靠表面改名掩盖：
+
+| 当前对象 | 审核判断 | 后续修正条件 |
+|---|---|---|
+| `ConstraintKind` | 同时混入 safety/progress 的性质分类与 relation/resource 的约束对象分类 | requirement catalog 开始消费性质分类时，拆成 property class 与 constraint subject，并迁移报告 schema |
+| CHI packetization cardinality | message、network packet、protocol flit 已是独立对象；当前 executable profile 不拆分 message 内容。Snoop fanout 可为同一语义消息生成 per-target copies，但每份 copy 的 fragment index/count 仍为 `0/1` | 首个 multi-packet DAT 场景引入 splitter/reassembler、fragment lineage 与缺包/重复包检查；不把 fanout copy identity 混入分片序号 |
+| `participants/router.py` | store-and-forward router 是 forwarding facet，不是 RN/HN/SN/MN transaction participant；语义区分已由 `ChiFacetKind` 建立，但源码仍与 participant 实现同包 | 第二种 forwarding module 或独立 routing policy 出现时移入 `network/routing`，避免只为目录整齐搬移 |
+| `chi/issue_h/interface/` | 当前主要保存跨多条消息的 transaction ledger，目录名容易与通用 `InterfaceProtocol` 混淆 | 引入更多 opcode/message 时迁入 `transactions/` 或 `protocol/`，再由 participant/system slice 组合 |
+| AXI/AHB attachment 的 requester/completer 类名 | `InterfacePort.role` 已使用标准 manager/subordinate；部分类名沿用 address-operation SPI 的请求/完成方向 | operation SPI 与标准 role 显示需要同时公开时，改成 manager/subordinate 的协议类名或显式 `AddressOperationEmitter/Consumer`，避免半套迁移 |
+| artifacts / visualization composition | `RunBundle` 同时组合 store 与 publisher，包级依赖尚未完全单向 | reporting/publication 成为独立用户流程时提取 composition root，不让 renderer 或 store 互相拥有 |
+
+AXI4 protocol-bound execution 已从 recipe 目录归位到
+`integrations/backends/amba/axi/axi4/{address_space,read,write}.py`。1×M read demux 现在只是通用 N×M read
+backend 的 recipe 配置，不再维护无独立行为的 subclass；Full AXI composite 仍是功能缺口，而不是目录迁移债务。
+AMBA protection decode/encode stage 也已从 bridge recipe 目录移入 `integrations/translations/amba/`；bridge
+目录中的 `_address_recipe.py` 只保留 attachment 选择、route-width 与 target-shape 等装配期 helper。
+
+根 `protocol_model` 已收为延迟加载的架构入口，只公开 `CanonicalEvent`、`InterfaceProtocol`、`VirtualDut`、
+`SystemProtocol` 四个概念锚点和版本号。协议、构造 recipe、运行状态及辅助类型由所属 facade/叶包公开；仓内代码
+除读取版本号外不再依赖宽根入口。
+
+`DutBehaviorTag` 已收束为非权威的发现/显示标签；`STORING` 不再作为设备能力，复合性由 `subsystem`
+直接派生。路由、容量、attachment 状态与 capability 仍从 backend 或 boundary contract 获取。
 
 ## 协议策略
 
-- AXI4 继续作为 memory-mapped LinkProtocol 的主要推进对象，优先补 requirement catalog、optional fields 和
+- AXI4 继续作为 memory-mapped InterfaceProtocol 的主要推进对象，优先补 requirement catalog、optional fields 和
   协议本地可视化；AXI4-Lite 已作为原生 schema variant 落地。
-- AXI4-Stream 是独立 LinkProtocol；后续 width conversion/packing 属于 stream bridge VirtualDut，不放进
+- AXI4-Stream 是独立 InterfaceProtocol；后续 width conversion/packing 属于 stream bridge VirtualDut，不放进
   AXI4 memory-mapped 的继承链。
 - APB3/APB4/APB5 由私有 SETUP/ACCESS phase engine 构造，对外暴露独立版本 API。APB4 的
   PPROT/PSTRB 相互独立；APB5 已有 user/wakeup/RME，parity 在当前 profile 中关闭。
-- AHB-Lite 是共享 transaction core；AHB5 已派生 Issue C interface properties。多-manager arbitration、
-  decoder/response mux、exclusive conflict monitor 和 AHB→APB 转换由 interconnect/memory/bridge VirtualDut
-  或 SystemProtocol 组合。
-- 当前 ACE-Lite 入口明确命名为 `build_ace_lite_data_link()`；barrier、CMO 和 full ACE snoop
+- AHB-Lite 是共享 transaction core；AHB5 已派生 Issue C interface properties。普通 address profile 的
+  AHB→APB/AXI 路径可由统一 serial builder 构造；多-manager arbitration、decoder/response mux 和
+  exclusive conflict monitor 仍由相应 interconnect/memory VirtualDut 组合。
+- 当前 ACE-Lite 入口明确命名为 `build_ace_lite_data_interface()`；barrier、CMO 和 full ACE snoop
   channel 需要专用 monitor 后再扩大公开名称范围。
-- CHI Issue H 已完成 Link/System 边界审计。第一个最小可执行代码路径等待 conditional field、credit-frame
-  语义、typed capability negotiation 和 retry ledger，然后以 RN-I basic profile 进入。
+- CHI Issue H 已完成构造依赖、判定作用域与表示/运输三张视图的边界审计，并有受限 direct-Home
+  `ReadNoSnp→CompData` 与 `RetryAck→PCrdGrant→AllowRetry=0 重发→CompData` 纵向见证，以及拓扑无关的
+  CHI transport-network session。typed message→network packet→protocol flit 边界已经显式化；SNP 当前覆盖
+  `SnpShared`/`SnpUnique`/`SnpNotSharedDirty` representation、独立 channel L-Credit、共享 Link
+  activation、FIFO/reservation、背压与 capture/drain。
+  Snoop request 不在 message 中携带 `TgtID`，选定 Snoopee 由每份 packet 的 network route identity 表达；
+  clean `ReadShared` 与 `ReadUnique` profile 已加入目录选靶、显式 per-target packet、clean SnpResp 聚合、
+  `I/UC/SC` cache state、CompData/CompAck correlation 与稳定点一致性检查。dirty-unique 扩展再加入
+  `UD`、本地 full-line write、`SnpRespData_I_PD` 和 `CompData_UD_PD` responsibility transfer；MESI
+  `ReadNotSharedDirty` 扩展通过 `SnpNotSharedDirty(DoNotGoToSD=1)`、`SnpRespData_SC_PD`、
+  Home pending 接管、`CompData_SC`、`CompAck` 后 backing/directory commit，把 dirty unique line 转成
+  两个 clean shared copy。四者分别登记为构造期 feature；dirty-unique 依赖 clean ReadUnique，而独立
+  ReadNotSharedDirty feature 无此依赖。no-SD policy preset 组合二者。dirty-data 扩展增加
+  Snoopee→Home DAT flow。flow projector 只投影
+  当前合同及依赖，新增 feature 不会给旧网络制造无关 gap。Snoopee role 已支持
+  显式有限 peer set，成员 capability、SNP 去程和 RSP 回程逐一闭合；空 peer set 是有效显式声明，漏绑仍报告
+  role gap。`ChiCoherenceSession.from_resolved()` 已把 closed role set、component singleton NodeID、
+  requester/Snoopee authority 与启用 feature 带入 packet-level runtime registry；
+  `ChiCoherenceNetworkSession` 已让这些 participant emission 经 resolved network 自动运输和交付，并以
+  显式 pending batch 保存受背压的 fanout。`SC→ReadUnique→UC→local write→UD` 已进入 participant
+  lifecycle；集合从 coherence domain 自动派生、`CleanUnique`/`MakeUnique`、clean `Evict`、自动 victim/writeback scheduling、
+  MOESI `SD`/Owned、真实 snoop filter 和更一般的 transient/hazard 仍未进入该
+  slice。两级 XP 的公开
+  happy-path 场景验证六条 REQ/DAT hop、L-Credit、有限 router FIFO、TgtID route 和跨组件原子 admission；
+  另有四 XP 的 2×2 square-mesh 公开场景让 clean `ReadUnique` 的 REQ/SNP/RSP/DAT/CompAck 覆盖
+  方环四边，并展示 `I/SC/UC` 与 Home directory 的稳定状态闭合；
+  retry composite 当前使用 direct REQ/RSP/DAT topology。RSP 已进入通用
+  network/router 执行分支，经 router 的完整 retry 运行尚未单独保存为 witness，属于实验覆盖缺口，不视为另一套
+  核心功能。aligned full-DAT-width read 已通过 `ChiAddressHomeNode` 委派给协议无关 `AddressTarget`；功能缺口
+  仍包括同 Home/type 多 waiter 的具名选择/公平性合同、multi-packet DAT、narrow/error completion、可推进的
+  Sensor target、address→home authority 与更完整的多节点 coherence；NodeID ownership 和所需 feature 的
+  route/capability closure 已在 CHI family resolver 中落地。这里的 opcode/field 与 transaction-local
+  correlation、participant cache/directory/backing，以及跨节点 authority/invariant 分别属于表示/完整逻辑
+  接口、VirtualDut 与 SystemProtocol 三种投影；`TransportLink` 仍只负责单向 hop 的运输。
 - 协议定义不拥有 `attach(vdut)`。VirtualDut 定义 attachment SPI 和本地 binding，具体 AMBA 转换位于
   `protocol_model.integrations.attachments.amba`；对应模块构造位于
-  `protocol_model.integrations.recipes.amba`，SystemProtocol 只连接 `ProtocolPort`。
+  `protocol_model.integrations.recipes.amba`。完整逻辑接口由 SystemProtocol 连接 `InterfacePort`；展开单向
+  transport hop 时则连接 `TransportPort`。
 - ready-valid 是 observation encoding；需要一个点到点数据协议时，由具体 EventSchema 和
-  ChannelProtocol 组合，不恢复旧的顶层 ready-valid 包。
-- `protocol_model.link.tilelink` 已建立家族命名空间，但尚无具体 builder/observer。未来 TL-UL/TL-UH/TL-C
+  InterfaceEventKind 组合，不恢复旧的顶层 ready-valid 包。
+- four-phase REQ/ACK 同样是 observation encoding；当前提供独立 token InterfaceProtocol 作为最小承载，也可将
+  observer 绑定到已有 event schema。two-phase toggle、独立 reset recovery 和 system CDC closure 尚待场景驱动。
+- `protocol_model.protocols.tilelink` 已建立家族命名空间，但尚无具体 builder/observer。未来 TL-UL/TL-UH/TL-C
   用于检验 multibeat、source/sink ID、denied/corrupt 和 coherence 作用域。
 
 ## 文档与运行产物
 
-- 稳定概念和层级边界维护在 `docs/architecture/`，入口是
+- 稳定概念、视图和职责边界维护在 `docs/architecture/`，入口是
   [架构说明索引](README.md)。
-- [技术路线](technical-route/README.md)按一次通信经过各层的顺序解释概念，不单独维护第二套定义。
+- [技术路线](technical-route/README.md)按构造依赖、判定作用域和表示/运输解释概念，不单独维护第二套定义。
 - 本页维护当前实现状态；[根路线图](../../ROADMAP.md)维护长期能力方向，具体施工边界放在对应实施案中。
 - 一次运行的 trace、图和报告进入调用方选择的 run root；省略路径时仍可使用临时默认 `out/`。
 - 从 protocol record 生成的临时参考文档进入 scratch 或临时目录，不固定依赖仓库内的 `out/doc-build/`。

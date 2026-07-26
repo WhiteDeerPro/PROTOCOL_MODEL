@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 256" role="img" aria-labelledby="title desc">
+  <title id="title">Initial Protocol Model horizontal logo study</title>
+  <desc id="desc">Superseded exploration retained as design history.</desc>
+
+  <defs>
+    <mask id="stepped-rule-cut">
+      <rect width="256" height="256" fill="#fff"/>
+      <path fill="none" stroke="#000" stroke-width="10" stroke-linecap="square" stroke-linejoin="miter"
+            d="M102 148h18v-12h22v-12h16"/>
+    </mask>
+  </defs>
+
+  <g transform="translate(0)" mask="url(#stepped-rule-cut)">
+    <path fill="#17191B" d="M24 52h64v28H56v96h32v28H24z"/>
+    <path fill="#17191B" d="M232 52h-64v28h32v96h-32v28h64z"/>
+    <path fill="#809594" d="M56 94h144v22H56z"/>
+    <path fill="#CDB8BA" d="M56 140h144v22H56z"/>
+    <path fill="#17191B" d="M94 72h68l22 22v68l-22 22H94l-22-22V94z"/>
+    <path fill="#809594" d="M96 96h64v24h-22v12h-22v12H96z"/>
+    <path fill="#CDB8BA" d="M160 120v40H96v-16h20v-12h22v-12z"/>
+  </g>
+
+  <g fill="#17191B" font-family="Inter, 'IBM Plex Sans', 'Segoe UI', Arial, sans-serif">
+    <text x="304" y="124" font-size="64" font-weight="650" letter-spacing="-1.8">Protocol</text>
+    <text x="304" y="184" font-size="64" font-weight="360" letter-spacing="-1.8">Model</text>
+  </g>
+</svg>

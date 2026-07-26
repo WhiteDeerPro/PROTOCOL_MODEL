@@ -1,7 +1,7 @@
 """Reusable restrictions for inactive events and observed values.
 
 The two components in this module deliberately act at different boundaries:
-``ForbiddenEventMonitor`` constrains canonical link events, while
+``ForbiddenEventMonitor`` constrains canonical interface events, while
 ``QuietConstraint`` constrains values in an observation stream.  Display
 filtering belongs to :mod:`protocol_model.visualization` and is not evidence
 for either restriction.
@@ -57,7 +57,7 @@ class QuietConstraint(
     mode: QuietMode
     value_of: Callable[[ObservationT], ValueT] = lambda observation: observation
     expected: object = _UNSET
-    scope: ConstraintScope = ConstraintScope.LINK
+    scope: ConstraintScope = ConstraintScope.INTERFACE
     location: str = ""
 
     def __post_init__(self) -> None:
@@ -110,11 +110,11 @@ class QuietConstraint(
 class ForbiddenEventMonitor(
     SemanticComponent[CanonicalEvent, None, CanonicalEvent]
 ):
-    """Reject selected canonical event kinds in a refined LinkProtocol."""
+    """Reject selected canonical event kinds in a refined InterfaceProtocol."""
 
     name: str
     event_kinds: frozenset[str]
-    reason: str = "disabled by the link profile"
+    reason: str = "disabled by the interface profile"
 
     def __post_init__(self) -> None:
         if not self.name or not self.event_kinds or any(
@@ -139,7 +139,7 @@ class ForbiddenEventMonitor(
             fault=SemanticFault(
                 f"{self.name}.forbidden_event",
                 f"{event.kind} is {self.reason}",
-                ConstraintScope.LINK,
+                ConstraintScope.INTERFACE,
                 event.kind,
             ),
         )

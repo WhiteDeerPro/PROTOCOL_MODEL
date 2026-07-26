@@ -2,45 +2,51 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
+from protocol_model.interface import InterfaceEventKind, InterfaceProtocol
+from protocol_model.patterns import CardinalityMonitor
+from protocol_model.semantics import (
     BitVectorDomain,
     CanonicalEvent,
-    CardinalityMonitor,
-    CaptureModel,
-    CaptureState,
-    ChannelProtocol,
     ConstraintScope,
-    DutFacet,
     EventField,
     EventSchema,
-    FunctionModel,
-    LinkProtocol,
-    ProtocolLink,
     SemanticConstraint,
     SemanticFragment,
-    SystemProtocol,
+)
+from protocol_model.system import (
+    InterfaceConnection,
     SystemAction,
-    VirtualDut,
-    PortEmission,
-    ProtocolPort,
+    SystemProtocol,
     VirtualDutPortRef,
 )
+from protocol_model.virtual_dut.backend import (
+    CaptureBackend,
+    CaptureState,
+    FunctionBackend,
+    PortEmission,
+)
+from protocol_model.virtual_dut.boundary import (
+    DutBehaviorTag,
+    InterfacePort,
+    VirtualDut,
+)
 from protocol_model.visualization import system_topology_dot
+from protocol_model.visualization.policy import DiagramDetail
 
 
-def ready_valid_protocol() -> LinkProtocol:
+def ready_valid_protocol() -> InterfaceProtocol:
     transfer = EventSchema("transfer")
-    channel = ChannelProtocol("data", "source", "sink", transfer)
+    channel = InterfaceEventKind("data", "source", "sink", transfer)
     rule = SemanticConstraint(
         "stable_while_stalled",
         "payload remains stable while valid is held without acceptance",
-        ConstraintScope.LINK,
+        ConstraintScope.INTERFACE,
         targets=("data",),
     )
-    return LinkProtocol.define(
+    return InterfaceProtocol.define(
         "ready_valid",
         roles=frozenset(("source", "sink")),
-        channels={"data": channel},
+        event_kinds={"data": channel},
         fragments=(SemanticFragment("handshake", constraints=(rule,)),),
     )
 
@@ -49,14 +55,14 @@ def connected_system() -> SystemProtocol:
     protocol = ready_valid_protocol()
     source = VirtualDut(
         "producer",
-        {"out": ProtocolPort("out", protocol, "source")},
-        frozenset((DutFacet.INITIATING,)),
+        {"out": InterfacePort("out", protocol, "source")},
+        frozenset((DutBehaviorTag.INITIATING,)),
     )
     sink = VirtualDut(
         "consumer",
-        {"in": ProtocolPort("in", protocol, "sink")},
+        {"in": InterfacePort("in", protocol, "sink")},
     )
-    link = ProtocolLink(
+    link = InterfaceConnection(
         "data_path",
         protocol,
         {
@@ -71,7 +77,7 @@ def connected_system() -> SystemProtocol:
     )
 
 
-def request_response_protocol(name: str, prefix: str) -> LinkProtocol:
+def request_response_protocol(name: str, prefix: str) -> InterfaceProtocol:
     request = EventSchema(
         f"{prefix}_REQUEST",
         {"data": EventField("data", BitVectorDomain(8))},
@@ -83,13 +89,13 @@ def request_response_protocol(name: str, prefix: str) -> LinkProtocol:
         BitVectorDomain(4),
     )
     channels = {
-        "request": ChannelProtocol("request", "initiator", "target", request),
-        "response": ChannelProtocol("response", "target", "initiator", response),
+        "request": InterfaceEventKind("request", "initiator", "target", request),
+        "response": InterfaceEventKind("response", "target", "initiator", response),
     }
-    return LinkProtocol.define(
+    return InterfaceProtocol.define(
         name,
         roles=frozenset(("initiator", "target")),
-        channels=channels,
+        event_kinds=channels,
         fragments=(SemanticFragment.empty(f"{name}.base"),),
         monitors={
             f"{name}.request_response": CardinalityMonitor(
@@ -104,13 +110,90 @@ def request_response_protocol(name: str, prefix: str) -> LinkProtocol:
 
 class SystemProtocolTest(unittest.TestCase):
     def test_system_topology_visualization_is_protocol_independent(self) -> None:
-        dot = system_topology_dot(connected_system())
+        system = connected_system()
+        dot = system_topology_dot(system)
 
         self.assertIn("producer_to_consumer", dot)
         self.assertIn("VirtualDut", dot)
-        self.assertIn("data_path", dot)
-        self.assertIn("source · out", dot)
-        self.assertIn("sink · in", dot)
+        self.assertIn('label="ready_valid\\nout ↔ in"', dot)
+        self.assertNotIn("data_path", dot)
+        self.assertNotIn("source · out", dot)
+        self.assertNotIn("declaration", dot)
+        self.assertNotIn("shape=diamond", dot)
+
+        overview = system_topology_dot(
+            system,
+            detail=DiagramDetail.OVERVIEW,
+        )
+        self.assertIn('label="producer"', overview)
+        self.assertIn('label="ready_valid"', overview)
+        self.assertNotIn("VirtualDut", overview)
+        self.assertNotIn("out ↔ in", overview)
+        self.assertEqual(dot.count(" -> "), overview.count(" -> "))
+
+        diagnostic = system_topology_dot(
+            system,
+            detail=DiagramDetail.DIAGNOSTIC,
+        )
+        self.assertIn(
+            'label="ready_valid\\ndata_path\\nsource · out ↔ sink · in"',
+            diagnostic,
+        )
+        self.assertIn("declaration", diagnostic)
+        self.assertEqual(dot.count(" -> "), diagnostic.count(" -> "))
+
+    def test_multi_role_link_keeps_a_small_junction(self) -> None:
+        protocol = InterfaceProtocol.define(
+            "three_role_control",
+            roles=frozenset(("source", "relay", "sink")),
+            event_kinds={
+                "request": InterfaceEventKind(
+                    "request", "source", "relay", EventSchema("REQUEST")
+                ),
+                "forward": InterfaceEventKind(
+                    "forward", "relay", "sink", EventSchema("FORWARD")
+                ),
+            },
+            fragments=(SemanticFragment.empty("three_role_control.base"),),
+        )
+        duts = {
+            role: VirtualDut(
+                role,
+                {"link": InterfacePort("link", protocol, role)},
+            )
+            for role in ("source", "relay", "sink")
+        }
+        link = InterfaceConnection(
+            "shared_control",
+            protocol,
+            {
+                role: VirtualDutPortRef(role, "link")
+                for role in ("source", "relay", "sink")
+            },
+        )
+        system = SystemProtocol("three_party", duts, {link.name: link})
+        dot = system_topology_dot(system)
+
+        self.assertIn("shape=point", dot)
+        self.assertIn("three_role_control", dot)
+        self.assertNotIn("shared_control", dot)
+        self.assertIn("relay · link", dot)
+        self.assertNotIn("shape=diamond", dot)
+
+        overview = system_topology_dot(
+            system,
+            detail=DiagramDetail.OVERVIEW,
+        )
+        diagnostic = system_topology_dot(
+            system,
+            detail=DiagramDetail.DIAGNOSTIC,
+        )
+
+        self.assertIn("shape=point", overview)
+        self.assertNotIn("relay · link", overview)
+        self.assertIn("shared_control", diagnostic)
+        self.assertEqual(dot.count(" -> "), overview.count(" -> "))
+        self.assertEqual(dot.count(" -> "), diagnostic.count(" -> "))
 
     def test_link_profile_refinement_only_adds_semantics(self) -> None:
         protocol = ready_valid_protocol()
@@ -120,7 +203,7 @@ class SystemProtocolTest(unittest.TestCase):
                 SemanticConstraint(
                     "eventual_accept",
                     "a continuously offered transfer is eventually accepted",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                 ),
             ),
         )
@@ -138,21 +221,21 @@ class SystemProtocolTest(unittest.TestCase):
 
         self.assertEqual(2, len(elaborated.owner_by_port))
         self.assertEqual(
-            ("link.data_path.stable_while_stalled",),
+            ("interface.data_path.stable_while_stalled",),
             tuple(item.name for item in elaborated.semantics.constraints),
         )
 
     def test_unconnected_port_is_rejected(self) -> None:
         system = connected_system()
-        protocol = next(iter(system.links.values())).protocol
+        protocol = next(iter(system.connections.values())).protocol
         dangling = VirtualDut(
             "dangling",
-            {"in": ProtocolPort("in", protocol, "sink")},
+            {"in": InterfacePort("in", protocol, "sink")},
         )
         invalid = SystemProtocol(
             system.name,
             {**system.virtual_duts, dangling.name: dangling},
-            system.links,
+            system.connections,
         )
 
         with self.assertRaisesRegex(ValueError, "unconnected VirtualDut ports"):
@@ -162,7 +245,7 @@ class SystemProtocolTest(unittest.TestCase):
         protocol = ready_valid_protocol()
         endpoint = VirtualDut(
             "endpoint",
-            {"external": ProtocolPort("external", protocol, "source")},
+            {"external": InterfacePort("external", protocol, "source")},
         )
         subsystem = SystemProtocol(
             "subsystem",
@@ -173,14 +256,14 @@ class SystemProtocolTest(unittest.TestCase):
 
         wrapper = subsystem.as_virtual_dut("chiplet")
 
-        self.assertIn(DutFacet.COMPOSITE, wrapper.facets)
+        self.assertEqual("SystemProtocol", wrapper.realization_name)
         self.assertEqual("source", wrapper.port("out").role)
         self.assertIs(subsystem, wrapper.subsystem)
 
     def test_one_link_is_a_complete_executable_system_protocol(self) -> None:
         protocol = request_response_protocol("local_bus", "LOCAL")
-        client_model = CaptureModel()
-        server_model = FunctionModel(
+        client_model = CaptureBackend()
+        server_model = FunctionBackend(
             lambda action: (
                 PortEmission(
                     "bus",
@@ -194,17 +277,17 @@ class SystemProtocolTest(unittest.TestCase):
         )
         client = VirtualDut(
             "client",
-            {"bus": ProtocolPort("bus", protocol, "initiator")},
-            model=client_model,
+            {"bus": InterfacePort("bus", protocol, "initiator")},
+            backend=client_model,
         )
         server = VirtualDut(
             "server",
-            {"bus": ProtocolPort("bus", protocol, "target")},
-            model=server_model,
+            {"bus": InterfacePort("bus", protocol, "target")},
+            backend=server_model,
         )
-        system = SystemProtocol.from_link(
+        system = SystemProtocol.from_interface(
             "point_to_point",
-            link_name="bus",
+            connection_name="bus",
             protocol=protocol,
             endpoints={
                 "initiator": (client, "bus"),
@@ -236,8 +319,8 @@ class SystemProtocolTest(unittest.TestCase):
         downstream = request_response_protocol("downstream_bus", "DOWN")
         client = VirtualDut(
             "point_a",
-            {"bus": ProtocolPort("bus", upstream, "initiator")},
-            model=CaptureModel(),
+            {"bus": InterfacePort("bus", upstream, "initiator")},
+            backend=CaptureBackend(),
         )
 
         def bridge_function(action):
@@ -268,18 +351,18 @@ class SystemProtocolTest(unittest.TestCase):
         bridge = VirtualDut(
             "bridge",
             {
-                "upstream": ProtocolPort("upstream", upstream, "target"),
-                "downstream": ProtocolPort(
+                "upstream": InterfacePort("upstream", upstream, "target"),
+                "downstream": InterfacePort(
                     "downstream", downstream, "initiator"
                 ),
             },
-            frozenset((DutFacet.TRANSFORMING,)),
-            model=FunctionModel(bridge_function),
+            frozenset((DutBehaviorTag.TRANSFORMING,)),
+            backend=FunctionBackend(bridge_function),
         )
         server = VirtualDut(
             "point_b",
-            {"bus": ProtocolPort("bus", downstream, "target")},
-            model=FunctionModel(
+            {"bus": InterfacePort("bus", downstream, "target")},
+            backend=FunctionBackend(
                 lambda action: (
                     PortEmission(
                         "bus",
@@ -292,7 +375,7 @@ class SystemProtocolTest(unittest.TestCase):
                 )
             ),
         )
-        link_a = ProtocolLink(
+        link_a = InterfaceConnection(
             "link_a",
             upstream,
             {
@@ -300,7 +383,7 @@ class SystemProtocolTest(unittest.TestCase):
                 "target": VirtualDutPortRef("bridge", "upstream"),
             },
         )
-        link_b = ProtocolLink(
+        link_b = InterfaceConnection(
             "link_b",
             downstream,
             {
@@ -330,7 +413,7 @@ class SystemProtocolTest(unittest.TestCase):
         )
         self.assertEqual(
             ("link_a", "link_b", "link_b", "link_a"),
-            tuple(item.link for item in transition.emissions),
+            tuple(item.connection for item in transition.emissions),
         )
         self.assertEqual(
             frozenset(((0, 1), (1, 2), (2, 3), (0, 3))),

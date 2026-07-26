@@ -1,0 +1,22 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "chi-issue-h-routed-read",
+  "source": "showcase/demos/system/chi_issue_h_routed_read/run.py",
+  "command": ".venv/bin/python showcase/demos/system/chi_issue_h_routed_read/run.py",
+  "protocol_model_version": "0.4.0",
+  "time_basis": "committed semantic microsteps and per-hop reference ticks",
+  "construction": [
+    "SystemProtocolBuilder",
+    "DirectedTransportConnection",
+    "ChiReadNoSnpDirectLedger",
+    "ChiAddressHomeNode",
+    "AddressSpace/MemoryRegion AddressTarget",
+    "ChiStoreForwardRouterNode[xp0,xp1]",
+    "ChiParticipantBinding",
+    "ChiReadNoSnpSystemSession"
+  ],
+  "topology_projection": "protocol_model.visualization.system_topology_dot",
+  "renderer": "Graphviz dot; automatic hierarchical layout",
+  "presentation_boundary": "two-XP direct-Home ReadNoSnp witness; single DAT flit; REQ/DAT-only directed hops; no raw waveform, bit codec, narrow DAT placement, CHI error-response mapping, SNP/coherence, complete CHI Port, QoS/fairness, or deadlock proof",
+  "peripheral_boundary": "CHI Home participant delegates to one protocol-neutral AddressSpace/MemoryRegion state authority; Sensor FIFO progress and global address-to-Home authority remain open"
+}

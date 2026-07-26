@@ -1,0 +1,1246 @@
+{
+  "schema": "protocol-model.showcase.axi4-read-2x4-crossbar/v1",
+  "system": {
+    "name": "axi4_read_two_by_four_crossbar",
+    "virtual_duts": [
+      "manager0",
+      "manager1",
+      "target0",
+      "target1",
+      "target2",
+      "target3",
+      "crossbar"
+    ],
+    "connections": [
+      "manager0_bus",
+      "manager1_bus",
+      "target0_bus",
+      "target1_bus",
+      "target2_bus",
+      "target3_bus"
+    ],
+    "resolved_address_paths": 8
+  },
+  "address_windows": {
+    "target0": [
+      4096,
+      4352
+    ],
+    "target1": [
+      8192,
+      8448
+    ],
+    "target2": [
+      12288,
+      12544
+    ],
+    "target3": [
+      16384,
+      16640
+    ]
+  },
+  "id_policy": "raw-id-serialized",
+  "route_table_profile": {
+    "active_id_capacity_per_ingress": 4,
+    "outstanding_bursts_per_id": 4
+  },
+  "steps": [
+    {
+      "label": "S0 · manager0 RID1 opens target0 burst",
+      "action": "M0 R1→T0 ×2",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 2
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 0,
+          "connection": "manager0_bus",
+          "source": "manager0.axi",
+          "destination": "crossbar.s0",
+          "kind": "AR",
+          "key": 1,
+          "payload": {
+            "addr": 4096,
+            "len": 1,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 1,
+          "connection": "target0_bus",
+          "source": "crossbar.m0",
+          "destination": "target0.axi",
+          "kind": "AR",
+          "key": 1,
+          "payload": {
+            "addr": 0,
+            "len": 1,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S1 · manager1 uses the same RID at target3",
+      "action": "M1 R1→T3",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 2
+          },
+          {
+            "serial": 1,
+            "ingress": "s1",
+            "upstream_rid": 1,
+            "egress": "m3",
+            "downstream_rid": 1,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          },
+          {
+            "ingress": "s1",
+            "rid": 1,
+            "egress": "m3",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          },
+          {
+            "egress": "m3",
+            "downstream_rid": 1,
+            "owners": [
+              "s1"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 2,
+          "connection": "manager1_bus",
+          "source": "manager1.axi",
+          "destination": "crossbar.s1",
+          "kind": "AR",
+          "key": 1,
+          "payload": {
+            "addr": 16384,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 3,
+          "connection": "target3_bus",
+          "source": "crossbar.m3",
+          "destination": "target3.axi",
+          "kind": "AR",
+          "key": 1,
+          "payload": {
+            "addr": 0,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S2 · manager0 RID2 enters shared target2 stream",
+      "action": "M0 R2→T2",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 2
+          },
+          {
+            "serial": 1,
+            "ingress": "s1",
+            "upstream_rid": 1,
+            "egress": "m3",
+            "downstream_rid": 1,
+            "remaining_beats": 1
+          },
+          {
+            "serial": 2,
+            "ingress": "s0",
+            "upstream_rid": 2,
+            "egress": "m2",
+            "downstream_rid": 2,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          },
+          {
+            "ingress": "s0",
+            "rid": 2,
+            "egress": "m2",
+            "bursts": 1
+          },
+          {
+            "ingress": "s1",
+            "rid": 1,
+            "egress": "m3",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          },
+          {
+            "egress": "m2",
+            "downstream_rid": 2,
+            "owners": [
+              "s0"
+            ]
+          },
+          {
+            "egress": "m3",
+            "downstream_rid": 1,
+            "owners": [
+              "s1"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 4,
+          "connection": "manager0_bus",
+          "source": "manager0.axi",
+          "destination": "crossbar.s0",
+          "kind": "AR",
+          "key": 2,
+          "payload": {
+            "addr": 12288,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 5,
+          "connection": "target2_bus",
+          "source": "crossbar.m2",
+          "destination": "target2.axi",
+          "kind": "AR",
+          "key": 2,
+          "payload": {
+            "addr": 0,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S3 · manager1 same RID follows at target2",
+      "action": "M1 R2→T2",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 2
+          },
+          {
+            "serial": 1,
+            "ingress": "s1",
+            "upstream_rid": 1,
+            "egress": "m3",
+            "downstream_rid": 1,
+            "remaining_beats": 1
+          },
+          {
+            "serial": 2,
+            "ingress": "s0",
+            "upstream_rid": 2,
+            "egress": "m2",
+            "downstream_rid": 2,
+            "remaining_beats": 1
+          },
+          {
+            "serial": 3,
+            "ingress": "s1",
+            "upstream_rid": 2,
+            "egress": "m2",
+            "downstream_rid": 2,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          },
+          {
+            "ingress": "s0",
+            "rid": 2,
+            "egress": "m2",
+            "bursts": 1
+          },
+          {
+            "ingress": "s1",
+            "rid": 1,
+            "egress": "m3",
+            "bursts": 1
+          },
+          {
+            "ingress": "s1",
+            "rid": 2,
+            "egress": "m2",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          },
+          {
+            "egress": "m2",
+            "downstream_rid": 2,
+            "owners": [
+              "s0",
+              "s1"
+            ]
+          },
+          {
+            "egress": "m3",
+            "downstream_rid": 1,
+            "owners": [
+              "s1"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 6,
+          "connection": "manager1_bus",
+          "source": "manager1.axi",
+          "destination": "crossbar.s1",
+          "kind": "AR",
+          "key": 2,
+          "payload": {
+            "addr": 12292,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 7,
+          "connection": "target2_bus",
+          "source": "crossbar.m2",
+          "destination": "target2.axi",
+          "kind": "AR",
+          "key": 2,
+          "payload": {
+            "addr": 4,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S4 · manager0 cannot redirect active RID1",
+      "action": "M0 R1→T1 try 1",
+      "admission": "BLOCK · RID route lock",
+      "blocked": {
+        "resource": "crossbar.axi4_read_id_destination",
+        "reason": "s0 RID 1 is locked to 'm0'; request for 'm1' waits for prior RLAST",
+        "capacity": 1
+      },
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 2
+          },
+          {
+            "serial": 1,
+            "ingress": "s1",
+            "upstream_rid": 1,
+            "egress": "m3",
+            "downstream_rid": 1,
+            "remaining_beats": 1
+          },
+          {
+            "serial": 2,
+            "ingress": "s0",
+            "upstream_rid": 2,
+            "egress": "m2",
+            "downstream_rid": 2,
+            "remaining_beats": 1
+          },
+          {
+            "serial": 3,
+            "ingress": "s1",
+            "upstream_rid": 2,
+            "egress": "m2",
+            "downstream_rid": 2,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          },
+          {
+            "ingress": "s0",
+            "rid": 2,
+            "egress": "m2",
+            "bursts": 1
+          },
+          {
+            "ingress": "s1",
+            "rid": 1,
+            "egress": "m3",
+            "bursts": 1
+          },
+          {
+            "ingress": "s1",
+            "rid": 2,
+            "egress": "m2",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          },
+          {
+            "egress": "m2",
+            "downstream_rid": 2,
+            "owners": [
+              "s0",
+              "s1"
+            ]
+          },
+          {
+            "egress": "m3",
+            "downstream_rid": 1,
+            "owners": [
+              "s1"
+            ]
+          }
+        ]
+      },
+      "emissions": []
+    },
+    {
+      "label": "S5 · target3 returns manager1 RID1",
+      "action": "advance T3",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "R1=41/L",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 2
+          },
+          {
+            "serial": 2,
+            "ingress": "s0",
+            "upstream_rid": 2,
+            "egress": "m2",
+            "downstream_rid": 2,
+            "remaining_beats": 1
+          },
+          {
+            "serial": 3,
+            "ingress": "s1",
+            "upstream_rid": 2,
+            "egress": "m2",
+            "downstream_rid": 2,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          },
+          {
+            "ingress": "s0",
+            "rid": 2,
+            "egress": "m2",
+            "bursts": 1
+          },
+          {
+            "ingress": "s1",
+            "rid": 2,
+            "egress": "m2",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          },
+          {
+            "egress": "m2",
+            "downstream_rid": 2,
+            "owners": [
+              "s0",
+              "s1"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 8,
+          "connection": "target3_bus",
+          "source": "target3.axi",
+          "destination": "crossbar.m3",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 65,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 9,
+          "connection": "manager1_bus",
+          "source": "crossbar.s1",
+          "destination": "manager1.axi",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 65,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    },
+    {
+      "label": "S6 · target2 owner FIFO returns manager0 first",
+      "action": "advance T2",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "R2=31/L",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 2
+          },
+          {
+            "serial": 3,
+            "ingress": "s1",
+            "upstream_rid": 2,
+            "egress": "m2",
+            "downstream_rid": 2,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          },
+          {
+            "ingress": "s1",
+            "rid": 2,
+            "egress": "m2",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          },
+          {
+            "egress": "m2",
+            "downstream_rid": 2,
+            "owners": [
+              "s1"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 10,
+          "connection": "target2_bus",
+          "source": "target2.axi",
+          "destination": "crossbar.m2",
+          "kind": "R",
+          "key": 2,
+          "payload": {
+            "data": 49,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 11,
+          "connection": "manager0_bus",
+          "source": "crossbar.s0",
+          "destination": "manager0.axi",
+          "kind": "R",
+          "key": 2,
+          "payload": {
+            "data": 49,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    },
+    {
+      "label": "S7 · target2 owner FIFO advances to manager1",
+      "action": "advance T2",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "R2=32/L",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 2
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 12,
+          "connection": "target2_bus",
+          "source": "target2.axi",
+          "destination": "crossbar.m2",
+          "kind": "R",
+          "key": 2,
+          "payload": {
+            "data": 50,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 13,
+          "connection": "manager1_bus",
+          "source": "crossbar.s1",
+          "destination": "manager1.axi",
+          "kind": "R",
+          "key": 2,
+          "payload": {
+            "data": 50,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    },
+    {
+      "label": "S8 · target0 emits first RID1 beat",
+      "action": "advance T0 beat 1",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "R1=11",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 14,
+          "connection": "target0_bus",
+          "source": "target0.axi",
+          "destination": "crossbar.m0",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 17,
+            "resp": "OKAY",
+            "last": false
+          }
+        },
+        {
+          "index": 15,
+          "connection": "manager0_bus",
+          "source": "crossbar.s0",
+          "destination": "manager0.axi",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 17,
+            "resp": "OKAY",
+            "last": false
+          }
+        }
+      ]
+    },
+    {
+      "label": "S9 · route lock remains until RLAST",
+      "action": "M0 R1→T1 try 2",
+      "admission": "BLOCK · RID route lock",
+      "blocked": {
+        "resource": "crossbar.axi4_read_id_destination",
+        "reason": "s0 RID 1 is locked to 'm0'; request for 'm1' waits for prior RLAST",
+        "capacity": 1
+      },
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 0,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m0",
+            "downstream_rid": 1,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m0",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m0",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          }
+        ]
+      },
+      "emissions": []
+    },
+    {
+      "label": "S10 · target0 RLAST releases manager0 RID1",
+      "action": "advance T0 RLAST",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "R1=12/L",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [],
+        "route_locks": [],
+        "owner_queues": []
+      },
+      "emissions": [
+        {
+          "index": 16,
+          "connection": "target0_bus",
+          "source": "target0.axi",
+          "destination": "crossbar.m0",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 18,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 17,
+          "connection": "manager0_bus",
+          "source": "crossbar.s0",
+          "destination": "manager0.axi",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 18,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    },
+    {
+      "label": "S11 · manager0 retries RID1 at target1",
+      "action": "M0 R1→T1 retry",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "—",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [
+          {
+            "serial": 4,
+            "ingress": "s0",
+            "upstream_rid": 1,
+            "egress": "m1",
+            "downstream_rid": 1,
+            "remaining_beats": 1
+          }
+        ],
+        "route_locks": [
+          {
+            "ingress": "s0",
+            "rid": 1,
+            "egress": "m1",
+            "bursts": 1
+          }
+        ],
+        "owner_queues": [
+          {
+            "egress": "m1",
+            "downstream_rid": 1,
+            "owners": [
+              "s0"
+            ]
+          }
+        ]
+      },
+      "emissions": [
+        {
+          "index": 18,
+          "connection": "manager0_bus",
+          "source": "manager0.axi",
+          "destination": "crossbar.s0",
+          "kind": "AR",
+          "key": 1,
+          "payload": {
+            "addr": 8192,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 19,
+          "connection": "target1_bus",
+          "source": "crossbar.m1",
+          "destination": "target1.axi",
+          "kind": "AR",
+          "key": 1,
+          "payload": {
+            "addr": 0,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S12 · target1 completes the retry",
+      "action": "advance T1",
+      "admission": "OK",
+      "blocked": null,
+      "fault": null,
+      "manager0_response": "R1=21/L",
+      "manager1_response": "—",
+      "crossbar": {
+        "pending": [],
+        "route_locks": [],
+        "owner_queues": []
+      },
+      "emissions": [
+        {
+          "index": 20,
+          "connection": "target1_bus",
+          "source": "target1.axi",
+          "destination": "crossbar.m1",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 33,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 21,
+          "connection": "manager0_bus",
+          "source": "crossbar.s0",
+          "destination": "manager0.axi",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 33,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    }
+  ],
+  "manager_responses": {
+    "manager0": [
+      [
+        2,
+        49,
+        true
+      ],
+      [
+        1,
+        17,
+        false
+      ],
+      [
+        1,
+        18,
+        true
+      ],
+      [
+        1,
+        33,
+        true
+      ]
+    ],
+    "manager1": [
+      [
+        1,
+        65,
+        true
+      ],
+      [
+        2,
+        50,
+        true
+      ]
+    ]
+  },
+  "assertions": {
+    "fault_free": true,
+    "same_raw_rid_owner_fifo": true,
+    "manager_id_namespaces_are_distinct": true,
+    "same_manager_route_lock_until_rlast": true,
+    "blocked_steps_rolled_back": true,
+    "final_quiescent": true
+  },
+  "event_count": 22,
+  "causal_edges": [
+    [
+      0,
+      1
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      6,
+      7
+    ],
+    [
+      3,
+      8
+    ],
+    [
+      2,
+      9
+    ],
+    [
+      8,
+      9
+    ],
+    [
+      5,
+      10
+    ],
+    [
+      4,
+      11
+    ],
+    [
+      10,
+      11
+    ],
+    [
+      7,
+      12
+    ],
+    [
+      6,
+      13
+    ],
+    [
+      12,
+      13
+    ],
+    [
+      1,
+      14
+    ],
+    [
+      0,
+      15
+    ],
+    [
+      14,
+      15
+    ],
+    [
+      14,
+      16
+    ],
+    [
+      15,
+      17
+    ],
+    [
+      16,
+      17
+    ],
+    [
+      18,
+      19
+    ],
+    [
+      19,
+      20
+    ],
+    [
+      18,
+      21
+    ],
+    [
+      20,
+      21
+    ]
+  ]
+}

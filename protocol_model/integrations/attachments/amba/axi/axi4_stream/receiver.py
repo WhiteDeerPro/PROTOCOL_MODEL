@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import CanonicalEvent
 from protocol_model.virtual_dut.attachments.stream import (
     StreamReceiverAttachment,
@@ -19,11 +19,11 @@ class Axi4StreamReceiverAttachment(StreamReceiverAttachment):
 
     role = "receiver"
 
-    def __init__(self, protocol: LinkProtocol) -> None:
+    def __init__(self, protocol: InterfaceProtocol) -> None:
         require_axi4_stream_role(protocol, self.role)
         self.protocol = protocol
         self.lane_count = int(protocol.parameters["data_width"]) // 8
-        self.fields = frozenset(protocol.channels["T"].event.fields)
+        self.fields = frozenset(protocol.event_kinds["T"].schema.fields)
 
     def decode_transfer(
         self, state: object, event: CanonicalEvent

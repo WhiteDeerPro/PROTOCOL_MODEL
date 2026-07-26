@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import (
     CanonicalEvent,
     ConstraintScope,
@@ -28,7 +28,7 @@ class ApbCompleterAttachment(AddressCompleterAttachment):
 
     role = "completer"
 
-    def __init__(self, protocol: LinkProtocol) -> None:
+    def __init__(self, protocol: InterfaceProtocol) -> None:
         require_apb_role(protocol, self.role)
         self.protocol = protocol
         self.data_width = int(protocol.parameters["data_width"])
@@ -100,9 +100,9 @@ class ApbCompleterAttachment(AddressCompleterAttachment):
             )
         error = not result.succeeded
         if context.request_kind == "READ":
-            response_fields = self.protocol.channels[
+            response_fields = self.protocol.event_kinds[
                 "READ_RESPONSE"
-            ].event.fields
+            ].schema.fields
             event = CanonicalEvent(
                 "READ_RESPONSE",
                 None,
@@ -117,9 +117,9 @@ class ApbCompleterAttachment(AddressCompleterAttachment):
                 },
             )
         else:
-            response_fields = self.protocol.channels[
+            response_fields = self.protocol.event_kinds[
                 "WRITE_RESPONSE"
-            ].event.fields
+            ].schema.fields
             event = CanonicalEvent(
                 "WRITE_RESPONSE",
                 None,

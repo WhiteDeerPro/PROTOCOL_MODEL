@@ -8,8 +8,9 @@ while its two walkthroughs can show AXI-facing ready/valid lanes and reset.
 
 from __future__ import annotations
 
-from protocol_model import AtomicFrame, CanonicalEvent, ReadyValidSignals
-from protocol_model.link.amba.axi.axi4 import byte_lane_mask
+from protocol_model.observation import AtomicFrame, ReadyValidSignals
+from protocol_model.protocols.amba.axi.axi4 import byte_lane_mask
+from protocol_model.semantics import CanonicalEvent
 
 from common import AXI4_CHANNELS, ExecutionMode, ExampleCase
 

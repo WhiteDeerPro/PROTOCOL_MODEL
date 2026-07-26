@@ -3,18 +3,19 @@ from __future__ import annotations
 from random import Random
 import unittest
 
-from protocol_model import AtomicFrame, CanonicalEvent, ReadyValidSignals, Verdict
-from protocol_model.link.amba.axi.axi4_stream import (
+from protocol_model.observation import AtomicFrame, ReadyValidSignals
+from protocol_model.protocols.amba.axi.axi4_stream import (
     Axi4StreamConfig,
     Axi4StreamGenerationPolicy,
     Axi4StreamGenerator,
     Axi4StreamObservationSession,
     build_axi4_stream_continuous_profile,
-    build_axi4_stream_link,
+    build_axi4_stream_interface,
 )
+from protocol_model.semantics import CanonicalEvent, Verdict
 
 
-class Axi4StreamLinkTest(unittest.TestCase):
+class Axi4StreamInterfaceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.config = Axi4StreamConfig(
             data_width=24,
@@ -41,7 +42,7 @@ class Axi4StreamLinkTest(unittest.TestCase):
         )
 
     def test_base_stream_allows_packet_interleaving_and_retains_transfer_order(self) -> None:
-        protocol = build_axi4_stream_link(self.config)
+        protocol = build_axi4_stream_interface(self.config)
         trace = (
             self.event(1, last=False),
             self.event(2, last=False),
@@ -55,7 +56,7 @@ class Axi4StreamLinkTest(unittest.TestCase):
         self.assertEqual(((0, 1), (1, 2), (2, 3)), run.final_state.causal_edges)
 
     def test_reserved_tkeep_tstrb_combination_is_rejected(self) -> None:
-        protocol = build_axi4_stream_link(self.config)
+        protocol = build_axi4_stream_interface(self.config)
         invalid = self.event(0, keep=0b001, strb=0b010, last=True)
 
         transition = protocol.open_session().step(
@@ -104,7 +105,7 @@ class Axi4StreamLinkTest(unittest.TestCase):
         )
 
     def test_packet_generator_uses_native_link_offers(self) -> None:
-        protocol = build_axi4_stream_link(self.config)
+        protocol = build_axi4_stream_interface(self.config)
         trace = Axi4StreamGenerator(protocol).generate(
             Random(9),
             Axi4StreamGenerationPolicy(

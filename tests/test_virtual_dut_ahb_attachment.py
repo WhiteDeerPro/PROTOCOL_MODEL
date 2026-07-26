@@ -2,36 +2,44 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
-    AccessResult,
-    AccessStatus,
-    AddressRoute,
-    AddressSpace,
-    AddressWrite,
-    CanonicalEvent,
-    CaptureModel,
-    MemoryRegion,
-    ProtocolLink,
-    ProtocolPort,
-    SystemAction,
-    SystemProtocol,
-    VirtualDut,
-    VirtualDutPortRef,
-    build_ahb_address_fabric_vdut,
+from protocol_model.integrations.recipes.amba.endpoints import (
     build_ahb_address_space_vdut,
 )
+from protocol_model.integrations.recipes.amba.fabrics import (
+    build_ahb_address_fabric_vdut,
+)
+from protocol_model.semantics import CanonicalEvent
+from protocol_model.system import (
+    InterfaceConnection,
+    SystemAction,
+    SystemProtocol,
+    VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.address import (
+    AccessResult,
+    AccessStatus,
+    AddressSpace,
+    AddressWrite,
+    MemoryRegion,
+)
+from protocol_model.virtual_dut.backend import CaptureBackend
+from protocol_model.virtual_dut.boundary import (
+    InterfacePort,
+    VirtualDut,
+)
+from protocol_model.virtual_dut.fabric import AddressRoute
 from protocol_model.integrations.attachments.amba.ahb import (
     AhbCompleterAttachment,
     AhbRequesterAttachment,
 )
-from protocol_model.link.amba.ahb.ahb5 import Ahb5Config, build_ahb5_link
-from protocol_model.link.amba.ahb.ahb_lite import build_ahb_lite_link
+from protocol_model.protocols.amba.ahb.ahb5 import Ahb5Config, build_ahb5_interface
+from protocol_model.protocols.amba.ahb.ahb_lite import build_ahb_lite_interface
 from protocol_model.virtual_dut.attachments import AddressRequest
 
 
 class AhbAttachmentTest(unittest.TestCase):
     def test_ahb5_narrow_write_joins_address_data_and_byte_lanes(self) -> None:
-        protocol = build_ahb5_link(
+        protocol = build_ahb5_interface(
             Ahb5Config(
                 extended_memory_types=True,
                 secure_transfers=True,
@@ -90,7 +98,7 @@ class AhbAttachmentTest(unittest.TestCase):
         self.assertEqual(AccessStatus.OK, completion.completion.result.status)
 
     def test_exclusive_ahb5_requires_a_dedicated_backend(self) -> None:
-        protocol = build_ahb5_link(Ahb5Config(exclusive_transfers=True))
+        protocol = build_ahb5_interface(Ahb5Config(exclusive_transfers=True))
 
         with self.assertRaisesRegex(ValueError, "Exclusive Access Monitor"):
             AhbCompleterAttachment(protocol)
@@ -143,11 +151,11 @@ class AhbAddressFabricTest(unittest.TestCase):
         )
 
     def _system(self) -> SystemProtocol:
-        protocol = build_ahb_lite_link()
+        protocol = build_ahb_lite_interface()
         manager = VirtualDut(
             "manager",
-            {"ahb": ProtocolPort("ahb", protocol, "manager")},
-            model=CaptureModel(),
+            {"ahb": InterfacePort("ahb", protocol, "manager")},
+            backend=CaptureBackend(),
         )
         fabric = build_ahb_address_fabric_vdut(
             "fabric",
@@ -160,7 +168,7 @@ class AhbAddressFabricTest(unittest.TestCase):
             AddressSpace((MemoryRegion("ram", 0x100, base_address=0x1000),)),
         )
         links = (
-            ProtocolLink(
+            InterfaceConnection(
                 "upstream",
                 protocol,
                 {
@@ -168,7 +176,7 @@ class AhbAddressFabricTest(unittest.TestCase):
                     "subordinate": VirtualDutPortRef("fabric", "upstream"),
                 },
             ),
-            ProtocolLink(
+            InterfaceConnection(
                 "downstream",
                 protocol,
                 {

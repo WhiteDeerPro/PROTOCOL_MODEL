@@ -1,0 +1,175 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP · not ACLK",
+      "wave": "===========",
+      "data": [
+        "S0",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7",
+        "S8",
+        "S9",
+        "S10"
+      ]
+    },
+    [
+      "scenario",
+      {
+        "name": "attempted action",
+        "wave": "===========",
+        "data": [
+          "AR RID1 target0 · 2 beats",
+          "AR RID2 target1 · 2 beats",
+          "advance target1",
+          "advance target0",
+          "advance target1",
+          "advance target0",
+          "AR RID3 target0",
+          "AR RID3 target1 · first attempt",
+          "advance target0",
+          "AR RID3 target1 · retry",
+          "advance target1"
+        ]
+      },
+      {
+        "name": "admission",
+        "wave": "===========",
+        "data": [
+          "accepted",
+          "accepted",
+          "accepted",
+          "accepted",
+          "accepted",
+          "accepted",
+          "accepted",
+          "BLOCK · read_fabric.axi4_read_id_destination",
+          "accepted",
+          "accepted",
+          "accepted"
+        ]
+      },
+      {
+        "name": "manager R",
+        "wave": "===========",
+        "data": [
+          "—",
+          "—",
+          "R id=2 data=0x21",
+          "R id=1 data=0x11",
+          "R id=2 data=0x22 last",
+          "R id=1 data=0x12 last",
+          "—",
+          "—",
+          "R id=3 data=0x13 last",
+          "—",
+          "R id=3 data=0x23 last"
+        ]
+      }
+    ],
+    [
+      "accepted interface events",
+      {
+        "name": "manager ↔ fabric",
+        "wave": "===========",
+        "data": [
+          "AR id=1 @0x1000 beats=2",
+          "AR id=2 @0x2000 beats=2",
+          "R id=2 data=0x21",
+          "R id=1 data=0x11",
+          "R id=2 data=0x22 last",
+          "R id=1 data=0x12 last",
+          "AR id=3 @0x1008 beats=1",
+          "—",
+          "R id=3 data=0x13 last",
+          "AR id=3 @0x2008 beats=1",
+          "R id=3 data=0x23 last"
+        ]
+      },
+      {
+        "name": "fabric ↔ target0",
+        "wave": "===========",
+        "data": [
+          "AR id=1 @0x0000 beats=2",
+          "—",
+          "—",
+          "R id=1 data=0x11",
+          "—",
+          "R id=1 data=0x12 last",
+          "AR id=3 @0x0008 beats=1",
+          "—",
+          "R id=3 data=0x13 last",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "fabric ↔ target1",
+        "wave": "===========",
+        "data": [
+          "—",
+          "AR id=2 @0x0000 beats=2",
+          "R id=2 data=0x21",
+          "—",
+          "R id=2 data=0x22 last",
+          "—",
+          "—",
+          "—",
+          "—",
+          "AR id=3 @0x0008 beats=1",
+          "R id=3 data=0x23 last"
+        ]
+      }
+    ],
+    [
+      "fabric post-state",
+      {
+        "name": "active RID entries",
+        "wave": "===========",
+        "data": [
+          "1",
+          "2",
+          "2",
+          "2",
+          "1",
+          "0",
+          "1",
+          "1",
+          "0",
+          "1",
+          "0"
+        ]
+      },
+      {
+        "name": "RID → egress [remaining beats]",
+        "wave": "===========",
+        "data": [
+          "RID1→m0[2]",
+          "RID1→m0[2] · RID2→m1[2]",
+          "RID1→m0[2] · RID2→m1[1]",
+          "RID1→m0[1] · RID2→m1[1]",
+          "RID1→m0[1]",
+          "empty",
+          "RID3→m0[1]",
+          "RID3→m0[1]",
+          "empty",
+          "RID3→m1[1]",
+          "empty"
+        ]
+      }
+    ]
+  ],
+  "head": {
+    "text": "AXI4 one-manager read demux · multi-device R return"
+  },
+  "foot": {
+    "text": "1 column = 1 attempted SystemSession action · POST-STATE · BLOCK rolls back the attempted action"
+  },
+  "config": {
+    "hscale": 4
+  }
+}

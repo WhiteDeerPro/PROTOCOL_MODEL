@@ -1,0 +1,24 @@
+digraph async_choice {
+  rankdir=TB;
+  label="Where asynchronous handshakes appear / 异步握手出现在哪里";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.3, nodesep=0.45, ranksep=0.55, splines=polyline];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=10, margin="0.16,0.10"];
+  edge [fontname="sans-serif", fontsize=9, color="#526b7a"];
+
+  boundary [shape=diamond, label="Can both endpoints rely on\none sampling clock?\n两端是否共享可靠采样时钟？", fillcolor="#f5efff", color="#7356a8"];
+  sync [label="Synchronous interface\nAPB / ready-valid / wait states\n慢速不等于异步", fillcolor="#e8f1fb", color="#2b6cb0"];
+  payload [shape=diamond, label="What must cross?\n需要跨越什么？", fillcolor="#f5efff", color="#7356a8"];
+  level [label="Persistent single bit\n多级 synchronizer", fillcolor="#ecfdf5", color="#2f855a"];
+  token [label="Exactly-once sparse token\nFour-phase REQ/ACK\n允许接收端任意等待", fillcolor="#fff7d6", color="#b7791f"];
+  stream [label="Continuous / burst data\nAsynchronous FIFO\n有限容量 + backpressure", fillcolor="#ffedd5", color="#c05621"];
+
+  boundary -> sync [label="yes / 是"];
+  boundary -> payload [label="no, independent/gated clocks / 否"];
+  payload -> level [label="stable level"];
+  payload -> token [label="confirmed command/event"];
+  payload -> stream [label="buffered stream"];
+
+  apb [shape=note, label="APB at one PCLK remains synchronous.\nPREADY handles wait; it does not solve CDC.", fillcolor="#f8fafc", color="#64748b"];
+  sync -> apb [style=dashed, arrowhead=none];
+}

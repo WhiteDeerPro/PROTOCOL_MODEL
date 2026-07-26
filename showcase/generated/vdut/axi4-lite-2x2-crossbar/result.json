@@ -1,0 +1,281 @@
+{
+  "schema": "protocol-model.showcase.axi4-lite-crossbar/v1",
+  "system": {
+    "name": "axi4_lite_two_by_two",
+    "virtual_duts": [
+      "manager0",
+      "manager1",
+      "target0",
+      "target1",
+      "crossbar"
+    ],
+    "connections": [
+      "manager0_bus",
+      "manager1_bus",
+      "target0_bus",
+      "target1_bus"
+    ]
+  },
+  "steps": [
+    {
+      "label": "S0 · manager0 accepts AR@0x1000",
+      "action": "inject manager0.AR",
+      "outcome": "enqueue req0",
+      "fault": null,
+      "crossbar": {
+        "advance_index": 0,
+        "ingress_queue_capacity": 2,
+        "ingress_queue_usage": {
+          "s_manager0": 1,
+          "s_manager1": 0
+        },
+        "active_owners": [],
+        "round_robin_cursors": {
+          "m_target0": 0,
+          "m_target1": 0
+        }
+      },
+      "emissions": [
+        {
+          "index": 0,
+          "connection": "manager0_bus",
+          "source": "manager0.axi",
+          "destination": "crossbar.s_manager0",
+          "kind": "AR",
+          "payload": {
+            "addr": 4096,
+            "prot": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S1 · manager1 accepts AR@0x1004",
+      "action": "inject manager1.AR",
+      "outcome": "enqueue req1",
+      "fault": null,
+      "crossbar": {
+        "advance_index": 0,
+        "ingress_queue_capacity": 2,
+        "ingress_queue_usage": {
+          "s_manager0": 1,
+          "s_manager1": 1
+        },
+        "active_owners": [],
+        "round_robin_cursors": {
+          "m_target0": 0,
+          "m_target1": 0
+        }
+      },
+      "emissions": [
+        {
+          "index": 1,
+          "connection": "manager1_bus",
+          "source": "manager1.axi",
+          "destination": "crossbar.s_manager1",
+          "kind": "AR",
+          "payload": {
+            "addr": 4100,
+            "prot": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S2 · crossbar grants target0 to manager0",
+      "action": "advance crossbar",
+      "outcome": "grant req0",
+      "fault": null,
+      "crossbar": {
+        "advance_index": 1,
+        "ingress_queue_capacity": 2,
+        "ingress_queue_usage": {
+          "s_manager0": 0,
+          "s_manager1": 1
+        },
+        "active_owners": [
+          {
+            "request_id": 0,
+            "ingress": "s_manager0",
+            "egress": "m_target0"
+          }
+        ],
+        "round_robin_cursors": {
+          "m_target0": 1,
+          "m_target1": 0
+        }
+      },
+      "emissions": [
+        {
+          "index": 2,
+          "connection": "target0_bus",
+          "source": "crossbar.m_target0",
+          "destination": "target0.axi",
+          "kind": "AR",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S3 · target0 completes manager0",
+      "action": "advance target0",
+      "outcome": "return req0",
+      "fault": null,
+      "crossbar": {
+        "advance_index": 1,
+        "ingress_queue_capacity": 2,
+        "ingress_queue_usage": {
+          "s_manager0": 0,
+          "s_manager1": 1
+        },
+        "active_owners": [],
+        "round_robin_cursors": {
+          "m_target0": 1,
+          "m_target1": 0
+        }
+      },
+      "emissions": [
+        {
+          "index": 3,
+          "connection": "target0_bus",
+          "source": "target0.axi",
+          "destination": "crossbar.m_target0",
+          "kind": "R",
+          "payload": {
+            "data": 286331153,
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 4,
+          "connection": "manager0_bus",
+          "source": "crossbar.s_manager0",
+          "destination": "manager0.axi",
+          "kind": "R",
+          "payload": {
+            "data": 286331153,
+            "resp": "OKAY"
+          }
+        }
+      ]
+    },
+    {
+      "label": "S4 · crossbar grants target0 to manager1",
+      "action": "advance crossbar",
+      "outcome": "grant req1",
+      "fault": null,
+      "crossbar": {
+        "advance_index": 2,
+        "ingress_queue_capacity": 2,
+        "ingress_queue_usage": {
+          "s_manager0": 0,
+          "s_manager1": 0
+        },
+        "active_owners": [
+          {
+            "request_id": 1,
+            "ingress": "s_manager1",
+            "egress": "m_target0"
+          }
+        ],
+        "round_robin_cursors": {
+          "m_target0": 0,
+          "m_target1": 0
+        }
+      },
+      "emissions": [
+        {
+          "index": 5,
+          "connection": "target0_bus",
+          "source": "crossbar.m_target0",
+          "destination": "target0.axi",
+          "kind": "AR",
+          "payload": {
+            "addr": 4,
+            "prot": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S5 · target0 completes manager1",
+      "action": "advance target0",
+      "outcome": "return req1",
+      "fault": null,
+      "crossbar": {
+        "advance_index": 2,
+        "ingress_queue_capacity": 2,
+        "ingress_queue_usage": {
+          "s_manager0": 0,
+          "s_manager1": 0
+        },
+        "active_owners": [],
+        "round_robin_cursors": {
+          "m_target0": 0,
+          "m_target1": 0
+        }
+      },
+      "emissions": [
+        {
+          "index": 6,
+          "connection": "target0_bus",
+          "source": "target0.axi",
+          "destination": "crossbar.m_target0",
+          "kind": "R",
+          "payload": {
+            "data": 286331153,
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 7,
+          "connection": "manager1_bus",
+          "source": "crossbar.s_manager1",
+          "destination": "manager1.axi",
+          "kind": "R",
+          "payload": {
+            "data": 286331153,
+            "resp": "OKAY"
+          }
+        }
+      ]
+    }
+  ],
+  "assertions": {
+    "fault_free": true,
+    "shared_egress_serialized": true,
+    "manager0_readback": "0x11111111",
+    "manager1_readback": "0x11111111",
+    "final_quiescent": true
+  },
+  "event_count": 8,
+  "causal_edges": [
+    [
+      2,
+      3
+    ],
+    [
+      0,
+      4
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      1,
+      7
+    ],
+    [
+      6,
+      7
+    ]
+  ]
+}

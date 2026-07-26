@@ -3,13 +3,13 @@ from __future__ import annotations
 from random import Random
 import unittest
 
-from protocol_model import CanonicalEvent, EventOffer
-from protocol_model.link.amba.axi.axi4 import build_axi4_link
+from protocol_model.protocols.amba.axi.axi4 import build_axi4_interface
+from protocol_model.semantics import CanonicalEvent, EventOffer
 
 
-class Axi4ExclusiveLinkTest(unittest.TestCase):
+class Axi4ExclusiveInterfaceTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.protocol = build_axi4_link()
+        self.protocol = build_axi4_interface()
         self.session = self.protocol.open_session()
         self.state = self.session.initial_state()
         self.rng = Random(53)

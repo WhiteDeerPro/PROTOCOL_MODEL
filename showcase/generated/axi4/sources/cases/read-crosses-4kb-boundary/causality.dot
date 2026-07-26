@@ -6,6 +6,6 @@ digraph axi4_case {
   node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
   edge [color="#3169a8", fontname="sans-serif", fontsize=9];
   context [shape=note, style="filled", fillcolor="#f4f5f6", color="#7c8790", label="rejected input / 被拒输入\nID1 A=0xffc N=2 S=4B INCR"];
-  fault [shape=octagon, style="filled", fillcolor="#ffe9e7", color="#b33a2b", label="REJECTED / 已拒绝\naxi4.link_session.AR.event_schema\nburst crosses a 4KB address boundary"];
+  fault [shape=octagon, style="filled", fillcolor="#ffe9e7", color="#b33a2b", label="REJECTED / 已拒绝\naxi4.interface_session.AR.event_schema\nburst crosses a 4KB address boundary"];
   context -> fault [style=dashed, color="#777777", label="diagnostic context / 诊断上下文（非因果边）"];
 }

@@ -1,56 +1,77 @@
 # Protocol Model 文档
 
-文档提供两个入口：初次阅读可以沿技术路线获得完整直觉；设计或修改某个子系统时，应进入对应的
-canonical 架构文档。当前实现状态和实施计划单独列出，不与稳定概念混写。
+这套文档同时服务三类需求：第一次认识工程、实现或审查某个架构对象、确认当前代码究竟覆盖了什么。
+它们使用不同入口，避免让初次读者先面对完整源码目录和状态表。
 
-[![Protocol Model 方法总览](../showcase/materials/assets/overview/protocol-model-overview.zh.svg)](../showcase/materials/assets/overview/protocol-model-overview.zh.svg)
+[![Protocol Model 三视图架构地图](architecture/technical-route/overview.svg)](architecture/technical-route/overview.svg)
 
-[English overview](../showcase/materials/assets/overview/protocol-model-overview.en.svg) ·
-[可导航的详细架构地图](architecture/technical-route/overview.svg)
+这张图与当前架构文档同步；Showcase 中的发布图是演示快照，不作为架构定义来源。
 
-- [技术路线导览](architecture/technical-route/README.md)：按一次通信经过的层级渐进阅读；
-- [架构文档索引](architecture/README.md)：按概念所有权定位 canonical 文档；
-- [术语表](architecture/technical-route/glossary.md)：先给白话解释，再给工程定义。
+## 第一次阅读
 
-## 核心架构
+建议先看到一笔完整通信，再学习各对象的边界：
 
-### 单链路语言与观察
+1. 从根目录的[快速体验](../README.md#快速体验-axi4-示例)运行或浏览一个 AXI4 场景；
+2. 阅读[一次 APB 寄存器读取](architecture/technical-route/07-apb-read-walkthrough.md)，理解请求怎样经过接口、
+   attachment、VirtualDut 和 SystemProtocol；
+3. 回到[架构地图](architecture/technical-route/README.md)，用“五个问题”定位每个对象；
+4. 按当前任务进入下面的专题，不需要顺序读完所有架构文档；
+5. 最后查看[实现状态](architecture/implementation-status.md)，区分架构设计与当前可执行范围。
 
+遇到不熟悉的词，使用[术语表](architecture/terminology.md)。工程讲义
+[《从链路到互连：可组合通信协议建模》](../book/README.md)提供更连续的教学叙述，但 API 和实现状态仍以
+本目录为准。
+
+## 按任务选择阅读路径
+
+| 目标 | 推荐顺序 |
+|---|---|
+| 新增或审查接口协议 | [基础语义](architecture/technical-route/01-semantic-foundation.md) → [Pattern 与 InterfaceProtocol](architecture/technical-route/02-patterns-and-interface-protocol.md) → [Observation](architecture/observation-layer.md) → 对应协议专题 |
+| 构造 endpoint、bridge 或 crossbar | [VirtualDut](architecture/technical-route/03-virtual-dut.md) → [Integration 与 binding](architecture/technical-route/04-integration-and-binding.md) → [事务转译](architecture/typed-transaction-translation.md) → [AddressFabric](architecture/address-fabric.md) |
+| 构造点到点系统或网络 | [SystemProtocol](architecture/technical-route/05-system-protocol.md) → [组网构造](architecture/network-construction.md) → [执行与证据](architecture/technical-route/06-observation-execution-evidence.md) |
+| 研究 CHI、TileLink 或 NoC | [通信建模的三张视图](architecture/communication-scope-and-transport.md) → [ACE/CHI 边界](architecture/ace-chi-communication-scopes.md) → [CHI 源码地图](../protocol_model/protocols/amba/chi/README.md) |
+| 接入 RTL/UVM/VCD | [Observation](architecture/observation-layer.md) → [执行与证据](architecture/technical-route/06-observation-execution-evidence.md) → [产物管理](architecture/run-output-management.md) |
+
+## 架构参考
+
+### 共同语义与接口合同
+
+- [架构文档索引](architecture/README.md)：查询一个概念由哪篇 canonical 文档负责；
+- [通信建模的三张视图](architecture/communication-scope-and-transport.md)：区分代码构造、规则作用域和表示/运输；
 - [Observation 层与 AtomicFrame](architecture/observation-layer.md)：采样边界、ready-valid、reset epoch；
-- [基础语义](architecture/technical-route/01-semantic-foundation.md)：event、constraint、resource、obligation；
-- [Pattern 与 LinkProtocol](architecture/technical-route/02-patterns-and-link-protocol.md)：从关系积木构造单 link 协议。
+- [异步四相握手](architecture/asynchronous-handshake.md)：REQ/ACK RTZ observation 与 token 接口。
 
-### VirtualDut 与互连构造
+### VirtualDut、bridge 与 fabric
 
-- [VirtualDut 方法论](architecture/virtual-dut.md)：模块边界、行为构造、backend、ProtocolPort 和 attachment；
-- [Bridge 与类型化事务转译](architecture/typed-transaction-translation.md)：operation form、stage、plan、executor、容量和 completion；
-- [Bridge 构造的跨领域启示](architecture/bridge-construction-insights.md)：Chisel/Diplomacy、HLS/dataflow、TCP/IP 与 gateway 的设计映射；
-- [事务转译 V1 实施计划](architecture/translation-implementation.md)：当前抽取顺序、源码边界与验收条件；
-- [AddressFabric VirtualDut](architecture/address-fabric.md)：route、owner、decoder-mux、crossbar 与地址终点边界；
-- [Integration 与 binding](architecture/technical-route/04-integration-and-binding.md)：协议 codec 如何装到具体端口。
+- [VirtualDut 方法论](architecture/virtual-dut.md)：模块边界、backend、attachment 与 realization；
+- [Bridge 与类型化事务转译](architecture/typed-transaction-translation.md)：operation form、stage、executor 和 completion；
+- [事务转译实施状态](architecture/translation-implementation.md)：当前 V1 profile 与剩余边界；
+- [AddressFabric VirtualDut](architecture/address-fabric.md)：route、owner、decoder-mux 和 crossbar；
+- [容量、接纳与背压](architecture/capacity-admission-and-backpressure.md)：有限资源、BLOCK、错误完成与 deadlock 输入事实。
 
-### 组网、运行与证据
+### System、运行与证据
 
-- [LinkProtocol、VirtualDut 与 SystemProtocol](architecture/system-protocol.md)：三个对象的作用域和递归组合；
-- [SystemProtocol 组网构造](architecture/network-construction.md)：边界声明、construction lowering、elaboration、运行和分析；
-- [观察、执行与证据](architecture/technical-route/06-observation-execution-evidence.md)：输入、session、verdict 和 artifact；
-- [运行产物、可视化与发布](architecture/run-output-management.md)：可配置运行目录、manifest、renderer 和长期发布边界。
+- [SystemProtocol 架构](architecture/system-protocol.md)：接口、模块和系统合同怎样组合；
+- [SystemProtocol 组网构造](architecture/network-construction.md)：topology、construction、resolution、runtime 和 analysis；
+- [可视化视图与 Artifact 管理](architecture/visualization-and-artifacts.md)：结构、时序、MSC、因果图和报告怎样分类并形成可追溯投影；
+- [运行产物、可视化与发布](architecture/run-output-management.md)：运行目录、manifest、renderer 与发布边界；
+- [事务时空图](visualization/transaction-time-space-view.md)：区分序列图、波形、因果图、拓扑和 CHI time-space view。
 
-## 协议专题
+### 协议专题
 
-这些页面说明通用架构在具体协议中的实现，不重新定义 VirtualDut、integration 或 SystemProtocol：
+- [AXI4 InterfaceProtocol](architecture/axi4-interface.md)；
+- [AMBA interface 家族组织](architecture/amba-interface-families.md)；
+- [AXI4-Lite 与 AXI4-Stream](architecture/amba-interface-variants.md)；
+- [AHB-Lite 与 APB phased links](architecture/amba-phased-interfaces.md)；
+- [ACE 接口与 CHI 多视图边界](architecture/ace-chi-communication-scopes.md)。
 
-- [AXI4 LinkProtocol](architecture/axi4-link.md)；
-- [AMBA LinkProtocol 家族组织](architecture/amba-link-families.md)；
-- [AXI4-Lite 与 AXI4-Stream](architecture/amba-link-variants.md)；
-- [AHB-Lite 与 APB phased links](architecture/amba-phased-links.md)；
-- [ACE/CHI Link 边界](architecture/ace-chi-links.md)。
+## 状态、计划与历史
 
-## 状态与路线
+- [当前实现状态](architecture/implementation-status.md)是“已经实现/尚未实现”的唯一汇总页；
+- [近期实施顺序](architecture/technical-route/08-roadmap.md)只记录下一批能力的依赖关系；
+- [项目 Roadmap](../ROADMAP.md)记录长期研究和工程方向；
+- [社区传播与宣称治理](community/README.md)保存维护者使用的定位、推广计划和证据审计，不作为架构定义或直接发布稿；
+- [Release archive](releases/README.md)保留已发布 tag 当时的术语和边界。
 
-- [当前实现状态](architecture/implementation-status.md)：已经进入主线的能力和当前边界；
-- [架构实施路线](architecture/technical-route/08-roadmap.md)：当前主线各层的依赖顺序；
-- [项目 Roadmap](../ROADMAP.md)：更长期的协议、runtime、CDC 和研究方向。
-
-普通运行写入调用方选择的工作目录，测试使用临时目录；它们不会隐式发布或改写本目录。具名文档或 showcase
-生成脚本可以显式重建其拥有的发布子树。
+普通运行写入调用方选择的目录，测试使用临时目录。只有具名发布脚本可以重建其拥有的
+`showcase/generated/` 子树；普通测试和文档阅读不会隐式改写发布材料。

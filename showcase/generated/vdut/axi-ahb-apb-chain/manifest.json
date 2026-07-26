@@ -1,0 +1,347 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "vdut-axi-ahb-apb-chain",
+  "run_id": "axi-ahb-apb-chain",
+  "generated_at": "2026-07-26T19:11:56.411952+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "system",
+      "identity": "axi_ahb_apb_peripherals",
+      "definition": "axi_ahb_apb_peripherals",
+      "parameters": {},
+      "lineage": [],
+      "metadata": {
+        "virtual_duts": [
+          "ahb_to_apb",
+          "apb_fabric",
+          "axi_to_ahb",
+          "control",
+          "initiator",
+          "status"
+        ],
+        "connections": [
+          "ahb_link",
+          "apb_control",
+          "apb_status",
+          "apb_upstream",
+          "axi_link"
+        ],
+        "boundary": []
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "axi4_lite",
+      "definition": "axi4_lite",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 32
+      },
+      "lineage": [],
+      "metadata": {
+        "interface_family": "amba.axi4_lite",
+        "roles": [
+          "manager",
+          "subordinate"
+        ],
+        "event_kinds": [
+          "AR",
+          "AW",
+          "B",
+          "R",
+          "W"
+        ],
+        "monitors": [
+          "axi4_lite.read",
+          "axi4_lite.write"
+        ],
+        "resources": [
+          {
+            "name": "axi4_lite.read.pending_transactions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AR"
+            ],
+            "released_by": [
+              "R",
+              "reset"
+            ],
+            "description": "accepted AR transfers awaiting R"
+          },
+          {
+            "name": "axi4_lite.write.pending_descriptors",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW without available W"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "accepted AW transfers awaiting FIFO-matched W"
+          },
+          {
+            "name": "axi4_lite.write.pending_data_bursts",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "W without available AW"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "single W transfers observed before FIFO-matched AW"
+          },
+          {
+            "name": "axi4_lite.write.pending_completions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW/W FIFO join"
+            ],
+            "released_by": [
+              "B",
+              "reset"
+            ],
+            "description": "joined AW/W transactions awaiting B"
+          }
+        ]
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "ahb_lite",
+      "definition": "ahb_lite",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 32,
+        "revision": "AHB-Lite"
+      },
+      "lineage": [],
+      "metadata": {
+        "interface_family": "amba.ahb",
+        "roles": [
+          "manager",
+          "subordinate"
+        ],
+        "event_kinds": [
+          "READ",
+          "READ_RESPONSE",
+          "WRITE",
+          "WRITE_DATA",
+          "WRITE_RESPONSE"
+        ],
+        "monitors": [
+          "ahb.burst",
+          "ahb.transfer",
+          "ahb.write_data"
+        ],
+        "resources": [
+          {
+            "name": "ahb.pending_transfer",
+            "scope": "interface",
+            "capacity": 1,
+            "acquired_by": [
+              "READ or WRITE"
+            ],
+            "released_by": [
+              "matching response",
+              "reset"
+            ],
+            "description": "accepted address phase awaiting its data-phase completion"
+          }
+        ]
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "apb4",
+      "definition": "apb4",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 32,
+        "revision": "APB4",
+        "pprot_present": true,
+        "pstrb_present": true,
+        "pready_default": true,
+        "pslverr_default": false
+      },
+      "lineage": [],
+      "metadata": {
+        "interface_family": "amba.apb",
+        "roles": [
+          "completer",
+          "requester"
+        ],
+        "event_kinds": [
+          "READ",
+          "READ_RESPONSE",
+          "WRITE",
+          "WRITE_RESPONSE"
+        ],
+        "monitors": [
+          "apb.transfer"
+        ],
+        "resources": [
+          {
+            "name": "apb.pending_transfer",
+            "scope": "interface",
+            "capacity": 1,
+            "acquired_by": [
+              "READ or WRITE"
+            ],
+            "released_by": [
+              "matching response",
+              "reset"
+            ],
+            "description": "transfer observed in SETUP and awaiting completed ACCESS"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "two-endpoint-write-read-and-decode-miss",
+      "expected": "two equal readbacks, SLVERR for APB decode miss, final quiescence",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "event_count": 42,
+    "causal_edge_count": 55,
+    "final_quiescent": true
+  },
+  "metadata": {
+    "publication": "showcase/generated/vdut/axi-ahb-apb-chain",
+    "network_scope": "non-coherent single-initiator address network",
+    "raw_pin_capture": false
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "vdut_structure",
+      "path": "ahb-to-apb-structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "vdut_structure",
+      "path": "apb-fabric-structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "vdut_structure",
+      "path": "axi-to-ahb-structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "causality.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "topology",
+      "path": "expanded-topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "vdut_structure_source",
+      "path": "sources/ahb-to-apb-structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "vdut_structure_source",
+      "path": "sources/apb-fabric-structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "vdut_structure_source",
+      "path": "sources/axi-to-ahb-structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/expanded-topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/waveform.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

@@ -58,7 +58,7 @@ description: Protocol Model technical preview 中文演示稿
 
 | 对象 | 它先回答什么？ | 典型责任 |
 |---|---|---|
-| **LinkProtocol** | 一条连接上允许怎样通信？ | channel、event schema、ordering、completion |
+| **InterfaceProtocol** | 一条连接上允许怎样通信？ | channel、event schema、ordering、completion |
 | **VirtualDut** | 一个具体 module 收到通信后做什么？ | 地址操作、转换、路由、队列和 owner |
 | **SystemProtocol** | 多个 module 接起来后整体怎样成立？ | topology、link ownership、端到端契约 |
 
@@ -71,7 +71,7 @@ attachment 把协议事件翻译成模块操作；observation 把采样帧降低
 # 当前已经有可执行工程证据
 
 - **语义与观察**：typed event、constraint/resource/obligation、因果图、`AtomicFrame`、stall 与 reset；
-- **LinkProtocol**：AXI4、AXI4-Lite、AXI4-Stream、AHB-Lite/AHB5 profile、APB3/4/5、ACE-Lite ordinary-data subset；
+- **InterfaceProtocol**：AXI4、AXI4-Lite、AXI4-Stream、AHB-Lite/AHB5 profile、APB3/4/5、ACE-Lite ordinary-data subset；
 - **AXI4 行为**：burst、narrow/unaligned、read interleave、AW/W/B correlation、link-local exclusive eligibility；
 - **模块与系统**：typed ports、AMBA attachments、地址 endpoint、同步微网络和 AXI4→APB bridge witness；
 - **证据基础**：managed run store、manifest、DOT/WaveDrom renderer。

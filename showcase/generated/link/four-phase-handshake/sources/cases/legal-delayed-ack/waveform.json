@@ -1,0 +1,81 @@
+{
+  "signal": [
+    {
+      "name": "OBSERVATION ORDER · not clock",
+      "wave": "=======",
+      "data": [
+        "S0",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6"
+      ]
+    },
+    {
+      "name": "timestamp note (ns)",
+      "wave": "=======",
+      "data": [
+        "0",
+        "2.7",
+        "5.2",
+        "9.9",
+        "12.4",
+        "15",
+        "18.6"
+      ]
+    },
+    {
+      "name": "pin · REQ",
+      "wave": "01...0."
+    },
+    {
+      "name": "pin · ACK",
+      "wave": "0...1.0"
+    },
+    {
+      "name": "pin · bundled event",
+      "wave": "x====x.",
+      "data": [
+        "ref=17 · 0x5A",
+        "ref=17 · 0x5A",
+        "ref=17 · 0x5A",
+        "ref=17 · 0x5A"
+      ]
+    },
+    {
+      "name": "model · observer post-state",
+      "wave": "=======",
+      "data": [
+        "idle_00",
+        "requested_10",
+        "requested_10",
+        "requested_10",
+        "acknowledged_11",
+        "returning_01",
+        "idle_00"
+      ]
+    },
+    {
+      "name": "model · accepted TRANSFER",
+      "wave": "0...10."
+    },
+    {
+      "name": "model · verdict / diagnostic",
+      "wave": "x.....=",
+      "data": [
+        "PASS"
+      ]
+    }
+  ],
+  "head": {
+    "text": "合法传输：接收端任意等待后确认"
+  },
+  "foot": {
+    "text": "Edge-complete logical snapshots · timestamps are annotations · not a shared-clock RTL/VCD capture"
+  },
+  "config": {
+    "hscale": 3
+  }
+}

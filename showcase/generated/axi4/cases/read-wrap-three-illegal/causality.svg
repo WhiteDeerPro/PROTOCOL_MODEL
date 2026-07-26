@@ -24,7 +24,7 @@
 <title>fault</title>
 <polygon fill="#ffe9e7" stroke="#b33a2b" points="800.99,-18.43 800.99,-44.33 684.42,-62.64 519.57,-62.64 403,-44.33 403,-18.43 519.57,-0.12 684.42,-0.12 800.99,-18.43"/>
 <text text-anchor="middle" x="602" y="-39.88" font-family="sans-serif" font-size="10.00">REJECTED / 已拒绝</text>
-<text text-anchor="middle" x="602" y="-28.88" font-family="sans-serif" font-size="10.00">axi4.link_session.AR.event_schema</text>
+<text text-anchor="middle" x="602" y="-28.88" font-family="sans-serif" font-size="10.00">axi4.interface_session.AR.event_schema</text>
 <text text-anchor="middle" x="602" y="-17.88" font-family="sans-serif" font-size="10.00">WRAP burst length must be 2, 4, 8, or 16 transfers</text>
 </g>
 <!-- context&#45;&gt;fault -->

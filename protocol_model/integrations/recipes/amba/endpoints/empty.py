@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from protocol_model.link import LinkProtocol
-from protocol_model.link.amba.ahb import AHB_FAMILY
-from protocol_model.link.amba.apb import APB_FAMILY
-from protocol_model.link.amba.axi.axi4 import AXI4_FAMILY
+from protocol_model.interface import InterfaceProtocol
+from protocol_model.protocols.amba.ahb import AHB_FAMILY
+from protocol_model.protocols.amba.apb import APB_FAMILY
+from protocol_model.protocols.amba.axi.axi4 import AXI4_FAMILY
 from protocol_model.virtual_dut.boundary.module import VirtualDut
 from protocol_model.virtual_dut.recipes import (
     build_blackhole_sink_vdut,
@@ -13,16 +13,16 @@ from protocol_model.virtual_dut.recipes import (
 )
 
 
-def _require_family(protocol: LinkProtocol, family: str, label: str) -> None:
-    if protocol.family != family:
+def _require_family(protocol: InterfaceProtocol, family: str, label: str) -> None:
+    if protocol.interface_family != family:
         raise ValueError(
             f"{label} empty endpoint requires protocol family {family!r}, "
-            f"got {protocol.family!r}"
+            f"got {protocol.interface_family!r}"
         )
 
 
 def build_apb_idle_source_vdut(
-    name: str, protocol: LinkProtocol, *, port_name: str = "apb"
+    name: str, protocol: InterfaceProtocol, *, port_name: str = "apb"
 ) -> VirtualDut:
     _require_family(protocol, APB_FAMILY, "APB")
     return build_idle_source_vdut(
@@ -31,7 +31,7 @@ def build_apb_idle_source_vdut(
 
 
 def build_apb_blackhole_sink_vdut(
-    name: str, protocol: LinkProtocol, *, port_name: str = "apb"
+    name: str, protocol: InterfaceProtocol, *, port_name: str = "apb"
 ) -> VirtualDut:
     _require_family(protocol, APB_FAMILY, "APB")
     return build_blackhole_sink_vdut(
@@ -40,7 +40,7 @@ def build_apb_blackhole_sink_vdut(
 
 
 def build_ahb_idle_source_vdut(
-    name: str, protocol: LinkProtocol, *, port_name: str = "ahb"
+    name: str, protocol: InterfaceProtocol, *, port_name: str = "ahb"
 ) -> VirtualDut:
     _require_family(protocol, AHB_FAMILY, "AHB")
     return build_idle_source_vdut(
@@ -49,7 +49,7 @@ def build_ahb_idle_source_vdut(
 
 
 def build_ahb_blackhole_sink_vdut(
-    name: str, protocol: LinkProtocol, *, port_name: str = "ahb"
+    name: str, protocol: InterfaceProtocol, *, port_name: str = "ahb"
 ) -> VirtualDut:
     _require_family(protocol, AHB_FAMILY, "AHB")
     return build_blackhole_sink_vdut(
@@ -58,7 +58,7 @@ def build_ahb_blackhole_sink_vdut(
 
 
 def build_axi4_idle_source_vdut(
-    name: str, protocol: LinkProtocol, *, port_name: str = "axi"
+    name: str, protocol: InterfaceProtocol, *, port_name: str = "axi"
 ) -> VirtualDut:
     _require_family(protocol, AXI4_FAMILY, "AXI4")
     return build_idle_source_vdut(
@@ -67,7 +67,7 @@ def build_axi4_idle_source_vdut(
 
 
 def build_axi4_blackhole_sink_vdut(
-    name: str, protocol: LinkProtocol, *, port_name: str = "axi"
+    name: str, protocol: InterfaceProtocol, *, port_name: str = "axi"
 ) -> VirtualDut:
     _require_family(protocol, AXI4_FAMILY, "AXI4")
     return build_blackhole_sink_vdut(

@@ -195,18 +195,18 @@
       "axi4.write.pending_descriptors": 1
     },
     "final": {
-      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
       "axi4.write.pending_descriptors": 1,
       "axi4.read.pending_transactions": 0,
+      "axi4.write.pending_completions": 0,
       "axi4.write.assembling_data": 0,
-      "axi4.exclusive.reservations": 0,
-      "axi4.write.pending_data_bursts": 0
+      "axi4.exclusive.reservations": 0
     }
   },
   "fault": {
     "rule": "axi4.write.final_marker",
     "reason": "W beat 1/4 requires last=False",
-    "scope": "link",
+    "scope": "interface",
     "location": ""
   }
 }

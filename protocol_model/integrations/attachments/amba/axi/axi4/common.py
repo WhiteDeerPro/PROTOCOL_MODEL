@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from math import log2
 
-from protocol_model.link import LinkProtocol
-from protocol_model.link.amba.axi.axi4 import (
+from protocol_model.interface import InterfaceProtocol
+from protocol_model.protocols.amba.axi.axi4 import (
     AXI4_FAMILY,
     beat_byte_addresses,
     byte_lane_bounds,
 )
-from protocol_model.patterns import ForbiddenEventMonitor
 from protocol_model.semantics import CanonicalEvent
 from protocol_model.virtual_dut.address.access import (
     AccessResult,
@@ -25,17 +24,17 @@ AXI4_ADDRESS_ATTRIBUTES = frozenset(("cache", "prot", "qos", "region"))
 
 
 def require_axi4_address_protocol(
-    protocol: LinkProtocol,
+    protocol: InterfaceProtocol,
     role: str,
     byte_order: ByteOrder | str,
 ) -> ByteOrder:
-    """Validate the transport shape used by the current AXI4 integration."""
+    """Validate the interface shape used by the current AXI4 integration."""
 
-    if protocol.family != AXI4_FAMILY:
-        raise ValueError("AXI4 attachment requires the AXI4 LinkProtocol family")
+    if protocol.interface_family != AXI4_FAMILY:
+        raise ValueError("AXI4 attachment requires the AXI4 InterfaceProtocol family")
     if role not in protocol.roles:
         raise ValueError(f"AXI4 protocol has no {role} role")
-    if set(protocol.channels) != AXI4_CHANNELS:
+    if set(protocol.event_kinds) != AXI4_CHANNELS:
         raise ValueError("AXI4 address integration requires the five-channel shape")
     for name in ("address_width", "data_width", "id_width"):
         if name not in protocol.parameters:
@@ -50,14 +49,10 @@ def require_axi4_address_protocol(
     return normalized
 
 
-def event_is_forbidden(protocol: LinkProtocol, kind: str) -> bool:
-    """Whether a monotonic link profile explicitly disables an event kind."""
+def event_is_forbidden(protocol: InterfaceProtocol, kind: str) -> bool:
+    """Whether a monotonic interface profile explicitly disables an event kind."""
 
-    return any(
-        isinstance(monitor, ForbiddenEventMonitor)
-        and kind in monitor.event_kinds
-        for monitor in protocol.monitors.values()
-    )
+    return kind in protocol.forbidden_event_kinds
 
 
 def address_attributes(event: CanonicalEvent) -> dict[str, object]:

@@ -3,6 +3,21 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum
+
+
+class DiagramDetail(str, Enum):
+    """Select presentation density without changing projected model facts.
+
+    ``OVERVIEW`` keeps the component graph and its primary path but presents
+    only short semantic labels. ``STANDARD`` retains the attributes needed to
+    understand the construction. ``DIAGNOSTIC`` exposes every projected
+    attribute, return path, and control edge for model debugging.
+    """
+
+    OVERVIEW = "overview"
+    STANDARD = "standard"
+    DIAGNOSTIC = "diagnostic"
 
 
 @dataclass(frozen=True)

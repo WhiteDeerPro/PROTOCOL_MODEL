@@ -1,4 +1,4 @@
-"""Keyed exact-count obligations for request/response and multibeat links."""
+"""Keyed exact-count obligations for request/response and multibeat interfaces."""
 
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ class CardinalityMonitor(
         return SemanticStep(
             state,
             fault=SemanticFault(
-                f"{self.name}.{rule}", reason, ConstraintScope.LINK
+                f"{self.name}.{rule}", reason, ConstraintScope.INTERFACE
             ),
         )
 
@@ -106,7 +106,7 @@ class CardinalityMonitor(
             return self._fault(
                 state,
                 "trace_index",
-                "cardinality events must be normalized by a LinkSession",
+                "cardinality events must be normalized by an InterfaceSession",
             )
         if event.kind == self.begin_kind:
             count = self.count_of(event)

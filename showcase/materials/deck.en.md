@@ -58,20 +58,20 @@ The goal is not to copy an entire specification into code. It is to select verif
 
 | Object | What does it answer first? | Typical responsibility |
 |---|---|---|
-| **LinkProtocol** | What communication is legal on one connection? | channels, event schemas, ordering, completion |
+| **InterfaceProtocol** | What communication is legal on one connection? | channels, event schemas, ordering, completion |
 | **VirtualDut** | What does one concrete module do with communication? | address operations, translation, routing, queues, owners |
 | **SystemProtocol** | What must hold after modules are connected? | topology, link ownership, end-to-end contracts |
 
 An attachment translates protocol events into module operations. Observation lowers sampled frames into protocol events.
 
-The model attaches protocol ports to named virtual modules instead of building an AXI/APB device inheritance tree.
+The model attaches interface ports to named virtual modules instead of building an AXI/APB device inheritance tree.
 
 ---
 
 # Executable engineering evidence exists today
 
 - **Semantics and observation:** typed events, constraints/resources/obligations, causal graphs, `AtomicFrame`, stalls, reset.
-- **LinkProtocol:** AXI4, AXI4-Lite, AXI4-Stream, AHB-Lite/AHB5 profiles, APB3/4/5, ACE-Lite ordinary-data subset.
+- **InterfaceProtocol:** AXI4, AXI4-Lite, AXI4-Stream, AHB-Lite/AHB5 profiles, APB3/4/5, ACE-Lite ordinary-data subset.
 - **AXI4 behavior:** bursts, narrow/unaligned transfers, read interleaving, AW/W/B correlation, link-local exclusive eligibility.
 - **Modules and systems:** typed ports, AMBA attachments, address endpoints, synchronous micro-systems, AXI4-to-APB witness.
 - **Evidence foundation:** managed run store, manifests, DOT and WaveDrom renderers.

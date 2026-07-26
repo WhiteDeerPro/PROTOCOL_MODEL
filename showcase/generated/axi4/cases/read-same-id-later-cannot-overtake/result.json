@@ -11,9 +11,9 @@
     "zh-CN": "面向后一笔单拍读的末拍，对最早的两拍读而言属于过早结束。"
   },
   "execution": {
-    "mode": "link-events",
+    "mode": "interface-events",
     "protocol": "axi4",
-    "model": "LinkSession"
+    "model": "InterfaceSession"
   },
   "presentation": {
     "level": "catalog",
@@ -136,18 +136,18 @@
       "axi4.write.pending_descriptors": 0
     },
     "final": {
-      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
       "axi4.write.pending_descriptors": 0,
       "axi4.read.pending_transactions": 2,
+      "axi4.write.pending_completions": 0,
       "axi4.write.assembling_data": 0,
-      "axi4.exclusive.reservations": 0,
-      "axi4.write.pending_data_bursts": 0
+      "axi4.exclusive.reservations": 0
     }
   },
   "fault": {
     "rule": "axi4.read.final_marker",
     "reason": "beat 1/2 for key 3 requires last=False, got True",
-    "scope": "link",
+    "scope": "interface",
     "location": ""
   }
 }

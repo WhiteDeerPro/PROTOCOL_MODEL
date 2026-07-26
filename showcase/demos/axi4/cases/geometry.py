@@ -1,7 +1,7 @@
 """Burst-boundary and byte-lane geometry examples."""
 
-from protocol_model import Verdict
-from protocol_model.link.amba.axi.axi4 import byte_lane_mask, build_axi4_link
+from protocol_model.protocols.amba.axi.axi4 import byte_lane_mask, build_axi4_interface
+from protocol_model.semantics import Verdict
 
 from common import (
     ExecutionMode,
@@ -14,7 +14,7 @@ from common import (
 
 
 def geometry_cases() -> tuple[ExampleCase, ...]:
-    protocol = build_axi4_link()
+    protocol = build_axi4_interface()
     crossing = address("AR", key=1, addr=0x0FFC, length=1, size=2)
     narrow = address("AW", key=2, addr=0x0003, length=3, size=2)
     bad_strobe = address("AW", key=3, addr=0x0003, size=2)
@@ -48,10 +48,10 @@ def geometry_cases() -> tuple[ExampleCase, ...]:
             "Two four-byte transfers starting at 0xFFC cross the boundary.",
             "从 0xFFC 开始的两个四字节传输会跨越该边界。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (crossing,),
             Verdict.FAIL,
-            "axi4.link_session.AR.event_schema",
+            "axi4.interface_session.AR.event_schema",
             "4KB",
         ),
         ExampleCase(
@@ -62,7 +62,7 @@ def geometry_cases() -> tuple[ExampleCase, ...]:
             "The four legal WSTRB masks are derived from the AW geometry.",
             "四拍合法 WSTRB 由 AW 几何信息派生。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (narrow, *narrow_data, write_response(key=2)),
             Verdict.PASS,
         ),
@@ -74,7 +74,7 @@ def geometry_cases() -> tuple[ExampleCase, ...]:
             "At address 0x3 only lane 3 is legal for this first transfer.",
             "该首拍位于地址 0x3，只有字节通道 3 合法。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (bad_strobe, write_data(last=True, strobe=0x10)),
             Verdict.FAIL,
             "axi4.write.byte_lanes",
@@ -88,7 +88,7 @@ def geometry_cases() -> tuple[ExampleCase, ...]:
             "Starting at 0x2C produces a legal four-transfer wrap in 0x20–0x2F.",
             "从 0x2C 开始的四拍传输会在 0x20–0x2F 窗口内合法回绕。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 legal_wrap,
                 read_data(key=8, last=False, data=0x81),
@@ -106,10 +106,10 @@ def geometry_cases() -> tuple[ExampleCase, ...]:
             "Three transfers are not a legal AXI4 WRAP length.",
             "三拍不是 AXI4 允许的 WRAP 长度。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (illegal_wrap,),
             Verdict.FAIL,
-            "axi4.link_session.AR.event_schema",
+            "axi4.interface_session.AR.event_schema",
             "WRAP burst length",
         ),
         ExampleCase(
@@ -120,7 +120,7 @@ def geometry_cases() -> tuple[ExampleCase, ...]:
             "Even at 0xFFF, every transfer reuses the same in-page container.",
             "即使位于 0xFFF，每一拍仍复用同一个页内传输容器。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 legal_fixed,
                 *(
@@ -142,10 +142,10 @@ def geometry_cases() -> tuple[ExampleCase, ...]:
             "AxLEN=16 encodes seventeen transfers and is rejected for FIXED.",
             "AxLEN=16 表示十七拍，因此不适用于 FIXED。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (illegal_fixed,),
             Verdict.FAIL,
-            "axi4.link_session.AR.event_schema",
+            "axi4.interface_session.AR.event_schema",
             "FIXED burst length",
         ),
     )

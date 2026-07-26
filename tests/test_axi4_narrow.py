@@ -3,16 +3,16 @@ from __future__ import annotations
 from random import Random
 import unittest
 
-from protocol_model import CanonicalEvent, EventOffer
-from protocol_model.link.amba.axi.axi4 import (
+from protocol_model.protocols.amba.axi.axi4 import (
     Axi4Config,
     beat_address,
     beat_byte_addresses,
-    build_axi4_link,
+    build_axi4_interface,
     byte_lane_bounds,
     byte_lane_mask,
     stays_in_4kb,
 )
+from protocol_model.semantics import CanonicalEvent, EventOffer
 
 
 def address_event(
@@ -74,7 +74,7 @@ class Axi4NarrowGeometryTest(unittest.TestCase):
             byte_lane_mask(address, 0, bus_bytes=4)
 
     def test_address_schema_rejects_container_overflow(self) -> None:
-        schema = build_axi4_link(Axi4Config(address_width=8)).channels["AW"].event
+        schema = build_axi4_interface(Axi4Config(address_width=8)).event_kinds["AW"].schema
         event = CanonicalEvent(
             "AW",
             key=0,
@@ -96,7 +96,7 @@ class Axi4NarrowGeometryTest(unittest.TestCase):
         )
 
     def test_write_monitor_rejects_strobes_outside_narrow_lanes(self) -> None:
-        protocol = build_axi4_link()
+        protocol = build_axi4_interface()
         session = protocol.open_session()
         state = session.initial_state()
         rng = Random(59)

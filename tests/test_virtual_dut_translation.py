@@ -4,7 +4,7 @@ import unittest
 from dataclasses import dataclass, replace
 
 from protocol_model.virtual_dut.translation.contract import (
-    BridgeProfile,
+    TranslationProfile,
     CapabilityProjection,
     CapabilityRelation,
     CapabilitySet,
@@ -214,7 +214,7 @@ def _batch_plan(
 ):
     stage = BatchToItemStage() if stage is None else stage
     target = ITEM if not suffix_stages else suffix_stages[-1].target
-    profile = BridgeProfile(
+    profile = TranslationProfile(
         "batch_to_item.serial",
         BATCH,
         target,
@@ -283,7 +283,7 @@ class TranslationPlanTest(unittest.TestCase):
         for signature, direction in cases:
             with self.subTest(direction=direction):
                 stage = IdentityTranslationStage("gap", signature)
-                profile = BridgeProfile("gap", BATCH, signature)
+                profile = TranslationProfile("gap", BATCH, signature)
                 with self.assertRaises(PlanClosureError) as raised:
                     compile_translation_plan(profile, prefix_stages=(stage,))
                 self.assertEqual(direction, raised.exception.direction)
@@ -301,7 +301,7 @@ class TranslationPlanTest(unittest.TestCase):
                 )
             ),
         )
-        profile = BridgeProfile("order", ITEM, ITEM)
+        profile = TranslationProfile("order", ITEM, ITEM)
         with self.assertRaises(PlanClosureError) as raised:
             compile_translation_plan(
                 profile, prefix_stages=(needs_alignment,)
@@ -340,14 +340,14 @@ class TranslationPlanTest(unittest.TestCase):
         )
         with self.assertRaises(PlanClosureError) as raised:
             compile_translation_plan(
-                BridgeProfile("missing_status", ITEM, ITEM),
+                TranslationProfile("missing_status", ITEM, ITEM),
                 prefix_stages=(needs_status,),
             )
         self.assertEqual("completion_capability", raised.exception.direction)
         self.assertEqual("status", raised.exception.property_name)
 
         plan = compile_translation_plan(
-            BridgeProfile(
+            TranslationProfile(
                 "has_status",
                 ITEM,
                 ITEM,
@@ -369,13 +369,13 @@ class TranslationPlanTest(unittest.TestCase):
         )
         with self.assertRaises(PlanClosureError) as raised:
             compile_translation_plan(
-                BridgeProfile("lossy", ITEM, ITEM),
+                TranslationProfile("lossy", ITEM, ITEM),
                 prefix_stages=(lossy,),
             )
         self.assertEqual("semantic_effect", raised.exception.direction)
 
         plan = compile_translation_plan(
-            BridgeProfile(
+            TranslationProfile(
                 "allowed_loss",
                 ITEM,
                 ITEM,
@@ -393,7 +393,7 @@ class TranslationPlanTest(unittest.TestCase):
     def test_unimplemented_profile_promises_are_rejected(self) -> None:
         with self.assertRaises(PlanClosureError) as raised:
             compile_translation_plan(
-                BridgeProfile(
+                TranslationProfile(
                     "pin_cycle",
                     ITEM,
                     ITEM,
@@ -406,7 +406,7 @@ class TranslationPlanTest(unittest.TestCase):
     def test_fanout_cannot_be_smuggled_into_unary_positions(self) -> None:
         with self.assertRaisesRegex(TypeError, "prefix accepts unary"):
             compile_translation_plan(
-                BridgeProfile("two_fanouts", BATCH, ITEM),
+                TranslationProfile("two_fanouts", BATCH, ITEM),
                 prefix_stages=(BatchToItemStage(),),
             )
 
@@ -531,7 +531,7 @@ class CapacityPoolTest(unittest.TestCase):
 class SerialTranslationExecutorTest(unittest.TestCase):
     def test_one_to_one_stage_preserves_reverse_context(self) -> None:
         plan = compile_translation_plan(
-            BridgeProfile("wrap", ITEM, WRAPPED_ITEM),
+            TranslationProfile("wrap", ITEM, WRAPPED_ITEM),
             prefix_stages=(WrapItemStage(),),
         )
         executor = SerialTranslationExecutor(plan)
@@ -719,7 +719,7 @@ class SerialTranslationExecutorTest(unittest.TestCase):
     def test_stage_exception_rolls_back_parent_admission(self) -> None:
         executor = SerialTranslationExecutor(
             compile_translation_plan(
-                BridgeProfile("failing", ITEM, ITEM),
+                TranslationProfile("failing", ITEM, ITEM),
                 prefix_stages=(FailingItemStage(),),
             )
         )

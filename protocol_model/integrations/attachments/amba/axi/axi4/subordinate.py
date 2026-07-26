@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from protocol_model.link import LinkProtocol
-from protocol_model.link.amba.axi.axi4 import transfer_count
-from protocol_model.link.amba.axi.axi4.burst import write_strobe_violation
+from protocol_model.interface import InterfaceProtocol
+from protocol_model.protocols.amba.axi.axi4 import transfer_count
+from protocol_model.protocols.amba.axi.axi4.burst import write_strobe_violation
 from protocol_model.semantics import CanonicalEvent, ConstraintScope, SemanticFault
 from protocol_model.virtual_dut.address.access import (
     AccessResult,
@@ -16,7 +16,7 @@ from protocol_model.virtual_dut.address.access import (
     ByteOrder,
 )
 from protocol_model.virtual_dut.attachments.address import AttachmentEmission
-from protocol_model.virtual_dut.attachments.base import ProtocolAttachment
+from protocol_model.virtual_dut.attachments.base import InterfaceAttachment
 from protocol_model.virtual_dut.attachments.validation import (
     incoming_event_fault,
     outgoing_event_fault,
@@ -64,14 +64,14 @@ class Axi4BurstDecode:
 
 @dataclass(frozen=True)
 class Axi4SubordinateState:
-    """AW/W transport state; completed pairs are drained immediately."""
+    """AW/W partial transaction state; completed pairs are drained immediately."""
 
     pending_addresses: tuple[CanonicalEvent, ...] = ()
     completed_data: tuple[tuple[CanonicalEvent, ...], ...] = ()
     current_data: tuple[CanonicalEvent, ...] = ()
 
 
-class Axi4AddressSpaceAttachment(ProtocolAttachment):
+class Axi4AddressSpaceAttachment(InterfaceAttachment):
     """Decode normal AXI4 bursts for synchronous AddressSpace execution.
 
     The attachment owns only the single-port transport relation: W burst
@@ -83,7 +83,7 @@ class Axi4AddressSpaceAttachment(ProtocolAttachment):
 
     def __init__(
         self,
-        protocol: LinkProtocol,
+        protocol: InterfaceProtocol,
         *,
         byte_order: ByteOrder | str = ByteOrder.LITTLE,
     ) -> None:
@@ -117,7 +117,7 @@ class Axi4AddressSpaceAttachment(ProtocolAttachment):
                 state,
                 fault=self._fault(
                     "profile",
-                    f"AXI4 link profile disables {event.kind}",
+                    f"AXI4 interface profile disables {event.kind}",
                 ),
             )
 
@@ -260,7 +260,7 @@ class Axi4AddressSpaceAttachment(ProtocolAttachment):
                     state,
                     fault=self._fault(
                         "profile",
-                        f"AXI4 link profile disables {event.kind}",
+                        f"AXI4 interface profile disables {event.kind}",
                     ),
                 )
         return AttachmentEmission(state, events)

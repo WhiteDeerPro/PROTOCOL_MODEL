@@ -10,16 +10,19 @@ Protocol Model 的目标是：用可执行语义和受约束的状态空间探�
 也不负责建立每一种 DUT 的完整功能模型。
 
 ```text
-协议要求
-  → SemanticFragment
-  → LinkProtocol + 具体 VirtualDut
-  → SystemProtocol + topology elaboration
-  → 有限 trace / 系统状态
-  → verdict + 最小诊断证据
+协议要求 → shared semantics ─┬─→ InterfaceProtocol ─┐
+                              ├─→ VirtualDut behavior ┼─→ SystemProtocol / scenario
+                              └─→ typed forms/codecs ──┘              │
+                                                                      ▼
+                                                     trace / verdict / diagnostic evidence
 ```
 
+这张图只表示构造依赖。约束的判定范围使用 event/interface/module/system 作用域；通信表示则按需要使用
+operation、transaction lifecycle、message、packet 和 flit。三者不合并为一条协议栈，具体边界见
+[通信建模的三张视图](docs/architecture/communication-scope-and-transport.md)。
+
 `network` 是 `SystemProtocol` 内部的 topology 概念；全局可观察通信合同本身称为
-`SystemProtocol`。当前设计分别使用 `LinkProtocol`、`ProtocolLink/SystemProtocol` 和
+`SystemProtocol`。当前设计分别使用 `InterfaceProtocol`、`InterfaceConnection/SystemProtocol` 和
 topology/runtime 表达协议定义、绑定与执行。
 
 后续工作遵守三个原则：
@@ -42,8 +45,8 @@ topology/runtime 表达协议定义、绑定与执行。
 - 类型化 payload domain、reset/ready-valid/quiet observation pattern；
 - cardinality、correlation、AW/W join、read/write obligation 和 per-ID token；
 - 有限因果偏序、拓扑序、并发查询和因果图；
-- AXI4 五通道、burst、4KB、WSTRB、narrow、读写事务及 link-local ordering；
-- 不可变 `LinkProtocol`、profile、`ProtocolLink` 和 `SystemProtocol`；
+- AXI4 五通道、burst、4KB、WSTRB、narrow、读写事务及 interface-local ordering；
+- 不可变 `InterfaceProtocol`、profile、`InterfaceConnection` 和 `SystemProtocol`；
 - VirtualDut 的 source、sink、responder、bridge 原型及声明式 contract 元数据；
 - manifest、显式 `out/` 运行结果、系统拓扑/因果图和文档发布边界。
 
@@ -84,7 +87,7 @@ bridge 的执行基础。
 
 | 图 | 节点/边 | 环的含义 |
 |---|---|---|
-| Topology graph | endpoint、link、bridge 及物理/逻辑连接 | 环可以合法；ring、反馈控制和 token 环都可能正常工作 |
+| Topology graph | endpoint、InterfaceConnection/transport hop、bridge 及物理连接 | 环可以合法；ring、反馈控制和 token 环都可能正常工作 |
 | Causal graph | 已发生事件之间的 happens-before | 必须是严格偏序；出现环说明语义自相矛盾 |
 | Wait-for graph | 当前状态中组件、端口、资源之间的等待 | 环是 deadlock 候选，不单独构成充分证明 |
 
@@ -112,8 +115,8 @@ enabled”的真实 deadlock。
 网络主线分为：
 
 1. typed port 与 role compatibility；
-2. topology elaboration、link ownership 和 event routing；
-3. 每条 link 独立 session state，禁止隐式共享；
+2. topology elaboration、connection ownership 和 event routing；
+3. 每条 InterfaceConnection 独立 session state，禁止隐式共享；
 4. buffer、credit、outstanding、route 和 obligation 的动态资源视图；
 5. SCC 作为廉价候选检测，再用有界可达性确认或排除 deadlock；
 6. 输出最小 wait cycle、被阻塞端口、持有资源、未完成义务和可能的 escape transition；
@@ -157,7 +160,7 @@ QoS 和仲裁不是只能放在一个层次，正确划分如下：
 
 | 内容 | 归属 |
 |---|---|
-| QoS/priority 字段的宽度、握手稳定性和协议规定的 ordering | 基础 LinkProtocol |
+| QoS/priority 字段的宽度、握手稳定性和协议规定的 ordering | 基础 InterfaceProtocol |
 | endpoint 支持哪些 priority、outstanding 或 burst | Protocol profile / capability |
 | round-robin、fixed-priority、age-based 等选择算法 | interconnect/arbiter VirtualDut |
 | 最大等待、公平性、带宽配额、隔离目标 | scenario contract / verification property |
@@ -257,7 +260,7 @@ bridge 输出是否 refinement-compatible，以及两端 assumption/guarantee �
 | 阶段 | 主要交付 | 为什么先做 |
 |---|---|---|
 | P0 | typed operation form、TranslationPlan、fan-out/completion ledger、lease 与串行 executor | 先把已有 pair-specific bridge 提炼成可复用且可解释的转换过程 |
-| P1 | capability/address 投影、construction lowering 与 provenance | 让连接意图可以安全地生成显式 bridge VirtualDut 和两侧 links |
+| P1 | capability/address 投影、construction lowering 与 provenance | 让连接意图可以安全地生成显式 bridge VirtualDut 和两侧 connections |
 | P2 | blocked reason、动态资源、resource-aware/deferred runtime extension、ready-valid ring 与死锁相关依赖子图 | 在局部容量生命周期稳定后，建立跨节点 wait-for 关系 |
 | P3 | opaque backend binding、Store/Route/Arbitrate backend 与 crossbar owner table | 同时接入外部 Vdut，并扩展多入口互连的局部调度能力 |
 | P4 | canonical JSON 与 VCD adapter | 把外部 DUT trace 接入同一语义入口 |
@@ -288,7 +291,7 @@ time domains ──► UART ──► CDC
 
 - `AddressBurst` 等 operation form、类型化 stage/plan、fan-out ledger、lease 与串行 executor；
 - 用公共转译执行器重构 AXI4→APB，并增加第二种 egress 以检验复用边界；
-- capability/address 投影和 construction lowering，生成显式 bridge VirtualDut 与两侧 links；
+- capability/address 投影和 construction lowering，生成显式 bridge VirtualDut 与两侧 connections；
 - 扩展现有 elaboration，闭合 capability、construction provenance 和生成后的 topology；
 - resource/wait reason IR；
 - topology、causal、wait-for 三图分离；

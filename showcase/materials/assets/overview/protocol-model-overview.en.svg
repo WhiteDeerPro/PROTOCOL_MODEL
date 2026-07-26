@@ -105,7 +105,7 @@
   <!-- Link rules -->
   <rect x="470" y="408" width="278" height="116" rx="17" fill="#ECF2FF" stroke="#6D8CE8" stroke-width="1.5"/>
   <rect x="492" y="424" width="116" height="22" rx="11" fill="#DCE6FF"/>
-  <text x="507" y="439" class="term" fill="#3557C8">LINK RULES</text>
+  <text x="507" y="439" class="term" fill="#3557C8">INTERFACE CONTRACT</text>
   <text x="492" y="473" class="card-title">One link's language</text>
   <text x="492" y="497" class="body">What may each side say?</text>
   <text x="492" y="517" class="body">What makes a transaction legal?</text>

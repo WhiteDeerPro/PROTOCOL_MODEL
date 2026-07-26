@@ -22,7 +22,7 @@
 - SVG 是手工总览图的维护源，PNG 由 [`render_png.py`](assets/overview/render_png.py) 显式重建；
 - 示例波形、因果图和运行结果不在本目录手工维护，统一从 [`generated/axi4`](../generated/axi4/) 引用；
 - 准备发布时，对照[当前实现状态](../../docs/architecture/implementation-status.md)和
-  [0.3.0 发布说明](../../docs/releases/0.3.0.md)复核所有 `CURRENT`、`PROPOSED` 和
+  [0.4.0 发布说明](../../docs/releases/0.4.0.md)复核所有 `CURRENT`、`PROPOSED` 和
   `RESEARCH QUESTION` 标签。
 
 当前稿件采用“24 个 AXI4 场景，其中 2 个在同一导航内精讲”的时间快照。数字和状态变化时先更新可执行

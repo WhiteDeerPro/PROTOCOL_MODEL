@@ -1,0 +1,23 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "sensor-dma-capture",
+  "source": "showcase/demos/vdut/sensor_dma_capture/run.py",
+  "command": ".venv/bin/python showcase/demos/vdut/sensor_dma_capture/run.py",
+  "protocol_model_version": "0.4.0",
+  "execution_models": [
+    "SensorFifoBackend",
+    "SerializedMemoryCopyBackend",
+    "ScheduledAddressCrossbarBackend",
+    "QueuedAddressResponderBackend",
+    "SystemSession"
+  ],
+  "renderers": {
+    "structure": "Graphviz dot + demo-local arranged expansion",
+    "sensor_structure": "Graphviz dot + shared VirtualDut structure projection",
+    "dma_structure": "Graphviz dot + shared VirtualDut structure projection",
+    "model_steps": "WaveDrom + model-step state projection",
+    "message_sequence": "Graphviz dot + first-beat SystemTrace projection",
+    "causality": "Graphviz dot + shared SystemTrace projection"
+  },
+  "presentation_boundary": "transaction-semantic execution witness; not random traffic, raw RTL pins, physical time, or a cycle-golden trace"
+}

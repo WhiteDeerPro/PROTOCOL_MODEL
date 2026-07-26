@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Protocol Model expressive connector study</title>
+  <desc id="desc">Different typed terminals become one active protocol relation through a central model connection.</desc>
+
+  <rect width="512" height="512" rx="32" fill="#F5F3EE"/>
+
+  <!-- Two concrete module boundaries face one another like compatible receptacles. -->
+  <path fill="#17191B" d="M48 72h98v70h-28v72h36v84h-36v72h28v70H48z"/>
+  <path fill="#17191B" d="M464 72h-98v70h28v72h-36v84h36v72h-28v70h98z"/>
+
+  <!-- Several typed terminals are organized around one model-owned connection fact. -->
+  <g fill="none" stroke="#6F8583" stroke-width="18" stroke-linecap="square" stroke-linejoin="round">
+    <path d="M118 162h88v66h32"/>
+    <path d="M118 256h120"/>
+    <path d="M118 350h88v-66h32"/>
+    <path d="M394 162h-88v66h-32"/>
+    <path d="M394 256H274"/>
+    <path d="M394 350h-88v-66h-32"/>
+    <path d="M206 162v-42h-34"/>
+    <path d="M206 350v42h34"/>
+    <path d="M306 162v-42h34"/>
+    <path d="M306 350v42h-34"/>
+  </g>
+
+  <!-- Terminal shape varies, but color remains structural rather than protocol-specific. -->
+  <circle cx="164" cy="120" r="16" fill="#6F8583"/>
+  <rect x="226" y="378" width="28" height="28" rx="3" fill="#6F8583"/>
+  <circle cx="348" cy="120" r="16" fill="#6F8583"/>
+  <path fill="#6F8583" d="M272 376l16 16-16 16-16-16z"/>
+
+  <!-- The rose cell is the instant of compatibility becoming an explicit modeled relation. -->
+  <rect x="234" y="234" width="44" height="44" rx="5" fill="#B5747A"/>
+  <path fill="none" stroke="#F5F3EE" stroke-width="6" stroke-linecap="square"
+        d="M246 256h20"/>
+</svg>

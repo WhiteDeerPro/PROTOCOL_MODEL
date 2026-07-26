@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+## 0.4.0 — interface scopes, executable fabrics, and CHI network slices (2026-07-27)
+
+- 建立当前版本的单一 canonical 术语注册表，并将公共词族收敛为 `InterfaceEventKind`、
+  `InterfacePort`/`InterfaceAttachment`、`VirtualDutBackend`、`TranslationProfile` 和
+  `ConstraintRecord`；注册表允许通过有记录的迁移继续演进。
+- 公共接口作用域名称收敛为 `InterfaceProtocol`、`InterfaceSession` 和
+  `InterfaceConnection`；退役旧 `protocol_model.link` 源码树，单向 flit hop 使用独立的
+  transport 对象。
+- observation 增加异步四相 REQ/ACK lowering；InterfaceProtocol 增加 schema、profile refinement、
+  event prohibition 与 bounded resource offer。
+- VirtualDut 增加协议无关 backend、typed transaction translation、统一 AMBA serial bridge、
+  scheduled address crossbar、AXI4 read/write crossbar，以及 sensor、memory-copy、interrupt、
+  queued responder 与 stepped emission 组网原件。
+- SystemProtocol 增加有向 transport topology、resolved hop plan、显式 address contracts 和
+  family-owned network runtime，并在 blocked step 上提供原子回滚。
+- CHI Issue H 增加 REQ/RSP/DAT transport、有限 store-and-forward router、direct-Home
+  `ReadNoSnp` 和 `RetryAck`/P-Credit 重发闭环，以及受限
+  `ReadShared`/`ReadUnique`/dirty-unique/`ReadNotSharedDirty` coherence lifecycle；完整 CHI 与
+  coherence 仍按状态页声明的边界推进。
+- 增加 recipe catalog、source dependency guard 与 453 项默认回归测试；测试目录保存行为合同，
+  不承担生产状态机实现。
+- 文档按渐进导读、canonical 架构、当前状态、路线图和历史 release 分工，减少状态清单的重复维护。
+- Showcase 增加异步握手、bridge chain、AXI fabric/crossbar、Sensor-DMA、interrupt、CHI routed
+  read 与 2×2 clean-coherence mesh 的具名发布证据。
+
 ## 0.3.0 — bottom-up protocol architecture and public showcase (2026-07-16)
 
 首个公开 technical preview。公共入口和建模边界仍可能根据实际使用反馈调整。

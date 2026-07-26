@@ -1,0 +1,598 @@
+{
+  "schema": "protocol-model.showcase.axi4-lite-single-manager-fabric/v1",
+  "system": {
+    "name": "axi4_lite_single_manager_fabric",
+    "virtual_duts": [
+      "manager",
+      "control",
+      "status",
+      "memory",
+      "fabric"
+    ],
+    "connections": [
+      "manager_bus",
+      "control_bus",
+      "status_bus",
+      "memory_bus"
+    ]
+  },
+  "address_windows": {
+    "control": [
+      4096,
+      4100
+    ],
+    "status": [
+      8192,
+      8196
+    ],
+    "memory": [
+      16384,
+      16640
+    ]
+  },
+  "steps": [
+    {
+      "label": "S0 · hold control write data",
+      "action": "W control=0x11223344",
+      "fault": null,
+      "fabric": {
+        "pending_aw": 0,
+        "pending_w": 1,
+        "active_owner_count": 0,
+        "active_owners": [],
+        "next_request_id": 0
+      },
+      "manager_response": "—",
+      "emissions": [
+        {
+          "index": 0,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "fabric.upstream",
+          "kind": "W",
+          "payload": {
+            "data": 287454020,
+            "strb": 15
+          }
+        }
+      ]
+    },
+    {
+      "label": "S1 · route joined control write",
+      "action": "AW 0x1000",
+      "fault": null,
+      "fabric": {
+        "pending_aw": 0,
+        "pending_w": 0,
+        "active_owner_count": 0,
+        "active_owners": [],
+        "next_request_id": 1
+      },
+      "manager_response": "B OKAY",
+      "emissions": [
+        {
+          "index": 1,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "fabric.upstream",
+          "kind": "AW",
+          "payload": {
+            "addr": 4096,
+            "prot": 0
+          }
+        },
+        {
+          "index": 2,
+          "connection": "control_bus",
+          "source": "fabric.control",
+          "destination": "control.axi",
+          "kind": "AW",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        },
+        {
+          "index": 3,
+          "connection": "control_bus",
+          "source": "fabric.control",
+          "destination": "control.axi",
+          "kind": "W",
+          "payload": {
+            "data": 287454020,
+            "strb": 15
+          }
+        },
+        {
+          "index": 4,
+          "connection": "control_bus",
+          "source": "control.axi",
+          "destination": "fabric.control",
+          "kind": "B",
+          "payload": {
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 5,
+          "connection": "manager_bus",
+          "source": "fabric.upstream",
+          "destination": "manager.axi",
+          "kind": "B",
+          "payload": {
+            "resp": "OKAY"
+          }
+        }
+      ]
+    },
+    {
+      "label": "S2 · read control",
+      "action": "AR 0x1000",
+      "fault": null,
+      "fabric": {
+        "pending_aw": 0,
+        "pending_w": 0,
+        "active_owner_count": 0,
+        "active_owners": [],
+        "next_request_id": 2
+      },
+      "manager_response": "R OKAY 0x11223344",
+      "emissions": [
+        {
+          "index": 6,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "fabric.upstream",
+          "kind": "AR",
+          "payload": {
+            "addr": 4096,
+            "prot": 0
+          }
+        },
+        {
+          "index": 7,
+          "connection": "control_bus",
+          "source": "fabric.control",
+          "destination": "control.axi",
+          "kind": "AR",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        },
+        {
+          "index": 8,
+          "connection": "control_bus",
+          "source": "control.axi",
+          "destination": "fabric.control",
+          "kind": "R",
+          "payload": {
+            "data": 287454020,
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 9,
+          "connection": "manager_bus",
+          "source": "fabric.upstream",
+          "destination": "manager.axi",
+          "kind": "R",
+          "payload": {
+            "data": 287454020,
+            "resp": "OKAY"
+          }
+        }
+      ]
+    },
+    {
+      "label": "S3 · read read-only status",
+      "action": "AR 0x2000",
+      "fault": null,
+      "fabric": {
+        "pending_aw": 0,
+        "pending_w": 0,
+        "active_owner_count": 0,
+        "active_owners": [],
+        "next_request_id": 3
+      },
+      "manager_response": "R OKAY 0xa5a50001",
+      "emissions": [
+        {
+          "index": 10,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "fabric.upstream",
+          "kind": "AR",
+          "payload": {
+            "addr": 8192,
+            "prot": 0
+          }
+        },
+        {
+          "index": 11,
+          "connection": "status_bus",
+          "source": "fabric.status",
+          "destination": "status.axi",
+          "kind": "AR",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        },
+        {
+          "index": 12,
+          "connection": "status_bus",
+          "source": "status.axi",
+          "destination": "fabric.status",
+          "kind": "R",
+          "payload": {
+            "data": 2779054081,
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 13,
+          "connection": "manager_bus",
+          "source": "fabric.upstream",
+          "destination": "manager.axi",
+          "kind": "R",
+          "payload": {
+            "data": 2779054081,
+            "resp": "OKAY"
+          }
+        }
+      ]
+    },
+    {
+      "label": "S4 · hold memory write address",
+      "action": "AW 0x4000",
+      "fault": null,
+      "fabric": {
+        "pending_aw": 1,
+        "pending_w": 0,
+        "active_owner_count": 0,
+        "active_owners": [],
+        "next_request_id": 3
+      },
+      "manager_response": "—",
+      "emissions": [
+        {
+          "index": 14,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "fabric.upstream",
+          "kind": "AW",
+          "payload": {
+            "addr": 16384,
+            "prot": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S5 · route joined memory write",
+      "action": "W memory=0xdeadbeef",
+      "fault": null,
+      "fabric": {
+        "pending_aw": 0,
+        "pending_w": 0,
+        "active_owner_count": 0,
+        "active_owners": [],
+        "next_request_id": 4
+      },
+      "manager_response": "B OKAY",
+      "emissions": [
+        {
+          "index": 15,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "fabric.upstream",
+          "kind": "W",
+          "payload": {
+            "data": 3735928559,
+            "strb": 15
+          }
+        },
+        {
+          "index": 16,
+          "connection": "memory_bus",
+          "source": "fabric.memory",
+          "destination": "memory.axi",
+          "kind": "AW",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        },
+        {
+          "index": 17,
+          "connection": "memory_bus",
+          "source": "fabric.memory",
+          "destination": "memory.axi",
+          "kind": "W",
+          "payload": {
+            "data": 3735928559,
+            "strb": 15
+          }
+        },
+        {
+          "index": 18,
+          "connection": "memory_bus",
+          "source": "memory.axi",
+          "destination": "fabric.memory",
+          "kind": "B",
+          "payload": {
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 19,
+          "connection": "manager_bus",
+          "source": "fabric.upstream",
+          "destination": "manager.axi",
+          "kind": "B",
+          "payload": {
+            "resp": "OKAY"
+          }
+        }
+      ]
+    },
+    {
+      "label": "S6 · read memory",
+      "action": "AR 0x4000",
+      "fault": null,
+      "fabric": {
+        "pending_aw": 0,
+        "pending_w": 0,
+        "active_owner_count": 0,
+        "active_owners": [],
+        "next_request_id": 5
+      },
+      "manager_response": "R OKAY 0xdeadbeef",
+      "emissions": [
+        {
+          "index": 20,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "fabric.upstream",
+          "kind": "AR",
+          "payload": {
+            "addr": 16384,
+            "prot": 0
+          }
+        },
+        {
+          "index": 21,
+          "connection": "memory_bus",
+          "source": "fabric.memory",
+          "destination": "memory.axi",
+          "kind": "AR",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        },
+        {
+          "index": 22,
+          "connection": "memory_bus",
+          "source": "memory.axi",
+          "destination": "fabric.memory",
+          "kind": "R",
+          "payload": {
+            "data": 3735928559,
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 23,
+          "connection": "manager_bus",
+          "source": "fabric.upstream",
+          "destination": "manager.axi",
+          "kind": "R",
+          "payload": {
+            "data": 3735928559,
+            "resp": "OKAY"
+          }
+        }
+      ]
+    },
+    {
+      "label": "S7 · read unmapped address",
+      "action": "AR 0x3000",
+      "fault": null,
+      "fabric": {
+        "pending_aw": 0,
+        "pending_w": 0,
+        "active_owner_count": 0,
+        "active_owners": [],
+        "next_request_id": 5
+      },
+      "manager_response": "R DECERR 0x00000000",
+      "emissions": [
+        {
+          "index": 24,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "fabric.upstream",
+          "kind": "AR",
+          "payload": {
+            "addr": 12288,
+            "prot": 0
+          }
+        },
+        {
+          "index": 25,
+          "connection": "manager_bus",
+          "source": "fabric.upstream",
+          "destination": "manager.axi",
+          "kind": "R",
+          "payload": {
+            "data": 0,
+            "resp": "DECERR"
+          }
+        }
+      ]
+    }
+  ],
+  "manager_responses": [
+    {
+      "kind": "B",
+      "payload": {
+        "resp": "OKAY"
+      }
+    },
+    {
+      "kind": "R",
+      "payload": {
+        "data": 287454020,
+        "resp": "OKAY"
+      }
+    },
+    {
+      "kind": "R",
+      "payload": {
+        "data": 2779054081,
+        "resp": "OKAY"
+      }
+    },
+    {
+      "kind": "B",
+      "payload": {
+        "resp": "OKAY"
+      }
+    },
+    {
+      "kind": "R",
+      "payload": {
+        "data": 3735928559,
+        "resp": "OKAY"
+      }
+    },
+    {
+      "kind": "R",
+      "payload": {
+        "data": 0,
+        "resp": "DECERR"
+      }
+    }
+  ],
+  "assertions": {
+    "fault_free": true,
+    "control_readback": "0x11223344",
+    "status_readback": "0xa5a50001",
+    "memory_readback": "0xdeadbeef",
+    "unmapped_response": "DECERR",
+    "final_quiescent": true
+  },
+  "event_count": 26,
+  "causal_edges": [
+    [
+      1,
+      2
+    ],
+    [
+      1,
+      3
+    ],
+    [
+      2,
+      4
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      1,
+      5
+    ],
+    [
+      0,
+      5
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      6,
+      7
+    ],
+    [
+      7,
+      8
+    ],
+    [
+      6,
+      9
+    ],
+    [
+      8,
+      9
+    ],
+    [
+      10,
+      11
+    ],
+    [
+      11,
+      12
+    ],
+    [
+      10,
+      13
+    ],
+    [
+      12,
+      13
+    ],
+    [
+      15,
+      16
+    ],
+    [
+      15,
+      17
+    ],
+    [
+      16,
+      18
+    ],
+    [
+      17,
+      18
+    ],
+    [
+      14,
+      19
+    ],
+    [
+      15,
+      19
+    ],
+    [
+      18,
+      19
+    ],
+    [
+      20,
+      21
+    ],
+    [
+      21,
+      22
+    ],
+    [
+      20,
+      23
+    ],
+    [
+      22,
+      23
+    ],
+    [
+      24,
+      25
+    ]
+  ]
+}

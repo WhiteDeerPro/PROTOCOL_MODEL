@@ -52,7 +52,7 @@ class BurstAssembler(
                 fault=SemanticFault(
                     f"{self.name}.alphabet",
                     f"expected {self.beat_kind!r}, got {event.kind!r}",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                 ),
             )
         if event.trace_index is None:
@@ -60,8 +60,8 @@ class BurstAssembler(
                 state,
                 fault=SemanticFault(
                     f"{self.name}.trace_index",
-                    "burst beats must be normalized by a LinkSession",
-                    ConstraintScope.LINK,
+                    "burst beats must be normalized by an InterfaceSession",
+                    ConstraintScope.INTERFACE,
                 ),
             )
         final = True if self.final_field is None else event.payload.get(self.final_field)
@@ -71,7 +71,7 @@ class BurstAssembler(
                 fault=SemanticFault(
                     f"{self.name}.final_field",
                     f"{self.final_field!r} must be a bool payload field",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                 ),
             )
         predecessor = (
@@ -146,7 +146,7 @@ class FifoJoin:
                         f"{self.name}.beat_count",
                         f"descriptor key {descriptor.key!r} requires "
                         f"{descriptor.expected_beats} beats, got {len(burst.events)}",
-                        ConstraintScope.LINK,
+                        ConstraintScope.INTERFACE,
                     ),
                 )
             if self.data_rule is not None:
@@ -158,7 +158,7 @@ class FifoJoin:
                             fault=SemanticFault(
                                 f"{self.name}.{self.data_rule_name}",
                                 reason,
-                                ConstraintScope.LINK,
+                                ConstraintScope.INTERFACE,
                             ),
                         )
             descriptors.pop(0)
@@ -181,7 +181,7 @@ class FifoJoin:
                 fault=SemanticFault(
                     f"{self.name}.count",
                     f"descriptor produced invalid beat count {expected!r}",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                 ),
             )
         descriptor = DescriptorToken(
@@ -256,7 +256,7 @@ class CompletionLedger:
                 fault=SemanticFault(
                     f"{self.name}.orphan_completion",
                     f"completion key {event.key!r} has no joined transaction",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                 ),
             )
         token = state.pending[index]

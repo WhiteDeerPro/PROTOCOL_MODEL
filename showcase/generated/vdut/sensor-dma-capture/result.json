@@ -1,0 +1,675 @@
+{
+  "schema": "protocol-model.showcase.sensor-dma/v1",
+  "system": {
+    "name": "sensor_dma_capture",
+    "virtual_duts": [
+      "dma",
+      "sensor",
+      "memory",
+      "crossbar"
+    ],
+    "links": [
+      "dma_bus",
+      "sensor_bus",
+      "memory_bus"
+    ]
+  },
+  "configuration": {
+    "sample_policy": "incrementing",
+    "sample_base": "0x10203040",
+    "sensor_capacity": 2,
+    "sensor_opportunities": 4,
+    "sensor_full_policy": "drop_newest",
+    "copy_beats": 2,
+    "beat_bytes": 4
+  },
+  "steps": [
+    {
+      "label": "produce 4 samples (retain 2, drop 2)",
+      "blocked": null,
+      "fault": null,
+      "emissions": [],
+      "post_state": {
+        "dma": {
+          "phase": "need_read",
+          "beat_index": 0,
+          "bytes_copied": 0,
+          "buffered_data": null
+        },
+        "sensor": {
+          "fifo": [
+            "0x10203040",
+            "0x10203041"
+          ],
+          "queue_depth": 2,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 0
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    },
+    {
+      "label": "beat 0: DMA issues sensor read",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 0,
+          "link": "dma_bus",
+          "source": "dma.axi",
+          "destination": "crossbar.s_dma",
+          "kind": "AR",
+          "payload": {
+            "addr": 4096,
+            "prot": 0
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "read_pending",
+          "beat_index": 0,
+          "bytes_copied": 0,
+          "buffered_data": null
+        },
+        "sensor": {
+          "fifo": [
+            "0x10203040",
+            "0x10203041"
+          ],
+          "queue_depth": 2,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 1
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    },
+    {
+      "label": "beat 0: crossbar routes sensor read/response",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 1,
+          "link": "sensor_bus",
+          "source": "crossbar.m_sensor",
+          "destination": "sensor.axi",
+          "kind": "AR",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        },
+        {
+          "index": 2,
+          "link": "sensor_bus",
+          "source": "sensor.axi",
+          "destination": "crossbar.m_sensor",
+          "kind": "R",
+          "payload": {
+            "data": 270544960,
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 3,
+          "link": "dma_bus",
+          "source": "crossbar.s_dma",
+          "destination": "dma.axi",
+          "kind": "R",
+          "payload": {
+            "data": 270544960,
+            "resp": "OKAY"
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "need_write",
+          "beat_index": 0,
+          "bytes_copied": 0,
+          "buffered_data": 270544960
+        },
+        "sensor": {
+          "fifo": [
+            "0x10203041"
+          ],
+          "queue_depth": 1,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 0
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    },
+    {
+      "label": "beat 0: DMA issues memory write",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 4,
+          "link": "dma_bus",
+          "source": "dma.axi",
+          "destination": "crossbar.s_dma",
+          "kind": "AW",
+          "payload": {
+            "addr": 8192,
+            "prot": 0
+          }
+        },
+        {
+          "index": 5,
+          "link": "dma_bus",
+          "source": "dma.axi",
+          "destination": "crossbar.s_dma",
+          "kind": "W",
+          "payload": {
+            "data": 270544960,
+            "strb": 15
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "write_pending",
+          "beat_index": 0,
+          "bytes_copied": 0,
+          "buffered_data": 270544960
+        },
+        "sensor": {
+          "fifo": [
+            "0x10203041"
+          ],
+          "queue_depth": 1,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 1
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    },
+    {
+      "label": "beat 0: crossbar routes memory write",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 6,
+          "link": "memory_bus",
+          "source": "crossbar.m_memory",
+          "destination": "memory.axi",
+          "kind": "AW",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        },
+        {
+          "index": 7,
+          "link": "memory_bus",
+          "source": "crossbar.m_memory",
+          "destination": "memory.axi",
+          "kind": "W",
+          "payload": {
+            "data": 270544960,
+            "strb": 15
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "write_pending",
+          "beat_index": 0,
+          "bytes_copied": 0,
+          "buffered_data": 270544960
+        },
+        "sensor": {
+          "fifo": [
+            "0x10203041"
+          ],
+          "queue_depth": 1,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 0
+          },
+          "active_owners": 1
+        },
+        "memory": {
+          "queue_depth": 1
+        }
+      }
+    },
+    {
+      "label": "beat 0: memory services write/completion",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 8,
+          "link": "memory_bus",
+          "source": "memory.axi",
+          "destination": "crossbar.m_memory",
+          "kind": "B",
+          "payload": {
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 9,
+          "link": "dma_bus",
+          "source": "crossbar.s_dma",
+          "destination": "dma.axi",
+          "kind": "B",
+          "payload": {
+            "resp": "OKAY"
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "need_read",
+          "beat_index": 1,
+          "bytes_copied": 4,
+          "buffered_data": null
+        },
+        "sensor": {
+          "fifo": [
+            "0x10203041"
+          ],
+          "queue_depth": 1,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 0
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    },
+    {
+      "label": "beat 1: DMA issues sensor read",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 10,
+          "link": "dma_bus",
+          "source": "dma.axi",
+          "destination": "crossbar.s_dma",
+          "kind": "AR",
+          "payload": {
+            "addr": 4096,
+            "prot": 0
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "read_pending",
+          "beat_index": 1,
+          "bytes_copied": 4,
+          "buffered_data": null
+        },
+        "sensor": {
+          "fifo": [
+            "0x10203041"
+          ],
+          "queue_depth": 1,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 1
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    },
+    {
+      "label": "beat 1: crossbar routes sensor read/response",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 11,
+          "link": "sensor_bus",
+          "source": "crossbar.m_sensor",
+          "destination": "sensor.axi",
+          "kind": "AR",
+          "payload": {
+            "addr": 0,
+            "prot": 0
+          }
+        },
+        {
+          "index": 12,
+          "link": "sensor_bus",
+          "source": "sensor.axi",
+          "destination": "crossbar.m_sensor",
+          "kind": "R",
+          "payload": {
+            "data": 270544961,
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 13,
+          "link": "dma_bus",
+          "source": "crossbar.s_dma",
+          "destination": "dma.axi",
+          "kind": "R",
+          "payload": {
+            "data": 270544961,
+            "resp": "OKAY"
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "need_write",
+          "beat_index": 1,
+          "bytes_copied": 4,
+          "buffered_data": 270544961
+        },
+        "sensor": {
+          "fifo": [],
+          "queue_depth": 0,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 0
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    },
+    {
+      "label": "beat 1: DMA issues memory write",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 14,
+          "link": "dma_bus",
+          "source": "dma.axi",
+          "destination": "crossbar.s_dma",
+          "kind": "AW",
+          "payload": {
+            "addr": 8196,
+            "prot": 0
+          }
+        },
+        {
+          "index": 15,
+          "link": "dma_bus",
+          "source": "dma.axi",
+          "destination": "crossbar.s_dma",
+          "kind": "W",
+          "payload": {
+            "data": 270544961,
+            "strb": 15
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "write_pending",
+          "beat_index": 1,
+          "bytes_copied": 4,
+          "buffered_data": 270544961
+        },
+        "sensor": {
+          "fifo": [],
+          "queue_depth": 0,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 1
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    },
+    {
+      "label": "beat 1: crossbar routes memory write",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 16,
+          "link": "memory_bus",
+          "source": "crossbar.m_memory",
+          "destination": "memory.axi",
+          "kind": "AW",
+          "payload": {
+            "addr": 4,
+            "prot": 0
+          }
+        },
+        {
+          "index": 17,
+          "link": "memory_bus",
+          "source": "crossbar.m_memory",
+          "destination": "memory.axi",
+          "kind": "W",
+          "payload": {
+            "data": 270544961,
+            "strb": 15
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "write_pending",
+          "beat_index": 1,
+          "bytes_copied": 4,
+          "buffered_data": 270544961
+        },
+        "sensor": {
+          "fifo": [],
+          "queue_depth": 0,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 0
+          },
+          "active_owners": 1
+        },
+        "memory": {
+          "queue_depth": 1
+        }
+      }
+    },
+    {
+      "label": "beat 1: memory services write/completion",
+      "blocked": null,
+      "fault": null,
+      "emissions": [
+        {
+          "index": 18,
+          "link": "memory_bus",
+          "source": "memory.axi",
+          "destination": "crossbar.m_memory",
+          "kind": "B",
+          "payload": {
+            "resp": "OKAY"
+          }
+        },
+        {
+          "index": 19,
+          "link": "dma_bus",
+          "source": "crossbar.s_dma",
+          "destination": "dma.axi",
+          "kind": "B",
+          "payload": {
+            "resp": "OKAY"
+          }
+        }
+      ],
+      "post_state": {
+        "dma": {
+          "phase": "done",
+          "beat_index": 2,
+          "bytes_copied": 8,
+          "buffered_data": null
+        },
+        "sensor": {
+          "fifo": [],
+          "queue_depth": 0,
+          "capacity": 2,
+          "accepted_samples": 2,
+          "overrun_count": 2
+        },
+        "crossbar": {
+          "ingress_queue_usage": {
+            "s_dma": 0
+          },
+          "active_owners": 0
+        },
+        "memory": {
+          "queue_depth": 0
+        }
+      }
+    }
+  ],
+  "assertions": {
+    "fault_free": true,
+    "blocked_steps": 0,
+    "sensor_overruns": 2,
+    "dma_done": true,
+    "final_quiescent": true,
+    "memory_bytes": "40 30 20 10 41 30 20 10"
+  },
+  "event_count": 20,
+  "causal_edges": [
+    [
+      1,
+      2
+    ],
+    [
+      0,
+      3
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      6,
+      8
+    ],
+    [
+      7,
+      8
+    ],
+    [
+      4,
+      9
+    ],
+    [
+      5,
+      9
+    ],
+    [
+      8,
+      9
+    ],
+    [
+      11,
+      12
+    ],
+    [
+      10,
+      13
+    ],
+    [
+      12,
+      13
+    ],
+    [
+      16,
+      18
+    ],
+    [
+      17,
+      18
+    ],
+    [
+      14,
+      19
+    ],
+    [
+      15,
+      19
+    ],
+    [
+      18,
+      19
+    ]
+  ]
+}

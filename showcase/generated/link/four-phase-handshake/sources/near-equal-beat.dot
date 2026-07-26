@@ -1,0 +1,25 @@
+digraph near_equal {
+  rankdir=LR;
+  label="Near-equal independent clocks / 近同频异步：1 GHz + 1 Hz";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.32, nodesep=0.5, ranksep=0.55, splines=polyline];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=10, margin="0.16,0.12"];
+  edge [fontname="sans-serif", fontsize=9, color="#526b7a"];
+
+  clocks [label="write = 1,000,000,001 Hz\nread  = 1,000,000,000 Hz\nΔf = +1 Hz", fillcolor="#e8f1fb", color="#2b6cb0"];
+  beat [label="relative-phase beat\nTbeat = 1 / |Δf| = 1 s\n≈ 10⁹ cycles per sweep", fillcolor="#f5efff", color="#7356a8"];
+  slip [label="period slip per paired cycle\n≈ 1 attosecond\nphase moves very slowly", fillcolor="#fff7d6", color="#b7791f"];
+  fifo [label="continuous one-word-per-edge traffic\nnet drift = +1 word/s\ndepth 8 fills in ≈ 8 s", fillcolor="#ffedd5", color="#c05621"];
+  policy [label="Async FIFO preserves CDC safety\nand short-term elasticity.\nLong-term balance still needs\nbackpressure / rate matching / idle insertion.", fillcolor="#ecfdf5", color="#2f855a"];
+
+  clocks -> beat -> slip -> fifo -> policy;
+  sim [shape=note, label="A cycle-expanded one-beat trace would need about one billion columns.\nThe showcase records the exact rate/beat relations analytically instead.", fillcolor="#f8fafc", color="#64748b"];
+  beat -> sim [style=dashed, arrowhead=none];
+
+  t0 [label="t=0 s\nnet +0 word", fillcolor="#f8fafc", color="#64748b"];
+  t1 [label="t=1 s\nnet +1 word", fillcolor="#f8fafc", color="#64748b"];
+  t8 [label="t≈8 s\ndepth-8 reaches full", fillcolor="#fee2e2", color="#b91c1c"];
+  t0 -> t1 -> t8 [label="compressed occupancy scale", style=dashed];
+  jitter [shape=note, label="Real clock jitter and ppm error can exceed this ideal 1 Hz offset.\nThe example isolates the cumulative-rate principle.", fillcolor="#f8fafc", color="#64748b"];
+  clocks -> jitter [style=dashed, arrowhead=none];
+}

@@ -2,35 +2,38 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
-    AddressRoute,
-    AddressSpace,
-    CanonicalEvent,
-    CaptureModel,
-    MemoryRegion,
-    ProtocolLink,
-    ProtocolPort,
-    SystemAction,
-    SystemProtocol,
-    VirtualDut,
-    VirtualDutPortRef,
+from protocol_model.integrations.recipes.amba.endpoints import (
     build_apb_address_space_vdut,
 )
+from protocol_model.semantics import CanonicalEvent
+from protocol_model.system import (
+    InterfaceConnection,
+    SystemAction,
+    SystemProtocol,
+    VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.address import (
+    AddressSpace,
+    MemoryRegion,
+)
+from protocol_model.virtual_dut.backend import CaptureBackend
+from protocol_model.virtual_dut.boundary import InterfacePort, VirtualDut
+from protocol_model.virtual_dut.fabric import AddressRoute
 from protocol_model.integrations.recipes.amba.bridges import (
     build_axi4_lite_to_apb_bridge_vdut,
 )
-from protocol_model.link.amba.apb.apb4 import build_apb4_link
-from protocol_model.link.amba.axi.axi4_lite import build_axi4_lite_link
+from protocol_model.protocols.amba.apb.apb4 import build_apb4_interface
+from protocol_model.protocols.amba.axi.axi4_lite import build_axi4_lite_interface
 
 
 class Axi4LiteToApbBridgeTest(unittest.TestCase):
     def _system(self) -> SystemProtocol:
-        axi = build_axi4_lite_link()
-        apb = build_apb4_link()
+        axi = build_axi4_lite_interface()
+        apb = build_apb4_interface()
         manager = VirtualDut(
             "manager",
-            {"axi": ProtocolPort("axi", axi, "manager")},
-            model=CaptureModel(),
+            {"axi": InterfacePort("axi", axi, "manager")},
+            backend=CaptureBackend(),
         )
         bridge = build_axi4_lite_to_apb_bridge_vdut(
             "bridge",
@@ -44,7 +47,7 @@ class Axi4LiteToApbBridgeTest(unittest.TestCase):
             AddressSpace((MemoryRegion("ram", 0x100, base_address=0x1000),)),
         )
         links = (
-            ProtocolLink(
+            InterfaceConnection(
                 "axi",
                 axi,
                 {
@@ -52,7 +55,7 @@ class Axi4LiteToApbBridgeTest(unittest.TestCase):
                     "subordinate": VirtualDutPortRef("bridge", "s_axi"),
                 },
             ),
-            ProtocolLink(
+            InterfaceConnection(
                 "apb",
                 apb,
                 {
@@ -99,40 +102,40 @@ class Axi4LiteToApbBridgeTest(unittest.TestCase):
             self.assertIsNone(transition.fault)
         self.assertEqual(
             ("axi", "apb", "apb", "axi"),
-            tuple(item.link for item in written.emissions),
+            tuple(item.connection for item in written.emissions),
         )
         self.assertEqual("B", written.emissions[-1].event.kind)
         self.assertEqual(0x11223344, read.emissions[-1].event.payload["data"])
         self.assertEqual("DECERR", missing.emissions[-1].event.payload["resp"])
         self.assertEqual(
-            ("axi", "axi"), tuple(item.link for item in missing.emissions)
+            ("axi", "axi"), tuple(item.connection for item in missing.emissions)
         )
         self.assertTrue(session.is_quiescent(missing.state))
 
     def test_rejects_width_or_protection_profiles_it_cannot_preserve(self) -> None:
-        axi = build_axi4_lite_link()
-        apb = build_apb4_link()
+        axi = build_axi4_lite_interface()
+        apb = build_apb4_interface()
         route = (AddressRoute("peripheral", 0, 0x100, "m_apb"),)
 
         with self.assertRaisesRegex(ValueError, "equal data widths"):
             build_axi4_lite_to_apb_bridge_vdut(
                 "width_bridge",
                 axi,
-                build_apb4_link(data_width=16),
+                build_apb4_interface(data_width=16),
                 route,
             )
         with self.assertRaisesRegex(ValueError, "PPROT"):
             build_axi4_lite_to_apb_bridge_vdut(
                 "protection_bridge",
                 axi,
-                build_apb4_link(pprot_present=False),
+                build_apb4_interface(pprot_present=False),
                 route,
             )
         with self.assertRaisesRegex(ValueError, "PSTRB"):
             build_axi4_lite_to_apb_bridge_vdut(
                 "strobe_bridge",
                 axi,
-                build_apb4_link(pstrb_present=False),
+                build_apb4_interface(pstrb_present=False),
                 route,
             )
 

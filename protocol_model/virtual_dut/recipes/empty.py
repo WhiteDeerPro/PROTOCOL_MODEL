@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 
 from ..attachments.empty import EmptyEndpointAttachment, EmptyEndpointMode
-from ..backend.simple import NoOpModel
-from ..binding import PortAttachmentBinding, VirtualDutBuilder
+from ..backend.simple import NoOpBackend
+from ..binding import InterfaceAttachmentBinding, VirtualDutBuilder
 from ..boundary.module import VirtualDut
-from ..boundary.port import ProtocolPort
+from ..boundary.port import InterfacePort
 
 
 def _build_empty_endpoint(
     name: str,
-    protocol: LinkProtocol,
+    protocol: InterfaceProtocol,
     role: str,
     mode: EmptyEndpointMode,
     *,
@@ -21,8 +21,8 @@ def _build_empty_endpoint(
     capability: object | None,
 ) -> VirtualDut:
     attachment = EmptyEndpointAttachment(protocol, role, mode)
-    binding = PortAttachmentBinding(
-        ProtocolPort(
+    binding = InterfaceAttachmentBinding(
+        InterfacePort(
             port_name,
             protocol,
             role,
@@ -38,7 +38,7 @@ def _build_empty_endpoint(
     return (
         VirtualDutBuilder(name)
         .bind(binding)
-        .with_model(NoOpModel())
+        .with_backend(NoOpBackend())
         .describe(description)
         .build()
     )
@@ -46,7 +46,7 @@ def _build_empty_endpoint(
 
 def build_idle_source_vdut(
     name: str,
-    protocol: LinkProtocol,
+    protocol: InterfaceProtocol,
     role: str,
     *,
     port_name: str = "link",
@@ -66,7 +66,7 @@ def build_idle_source_vdut(
 
 def build_blackhole_sink_vdut(
     name: str,
-    protocol: LinkProtocol,
+    protocol: InterfaceProtocol,
     role: str,
     *,
     port_name: str = "link",

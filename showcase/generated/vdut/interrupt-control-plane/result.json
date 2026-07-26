@@ -1,0 +1,306 @@
+{
+  "schema": "protocol-model.showcase.interrupt-control-plane/v1",
+  "system": {
+    "name": "edge_interrupt_control_plane",
+    "virtual_duts": [
+      "source_a",
+      "source_b",
+      "controller",
+      "cpu_target"
+    ],
+    "links": [
+      "source_a_irq",
+      "source_b_irq",
+      "cpu_irq"
+    ]
+  },
+  "configuration": {
+    "controller_capacity": 4,
+    "priority_order": "lower_numeric_value_first",
+    "preemption": false,
+    "target_completion": "explicit_eoi",
+    "notifications": [
+      {
+        "source": "source_a",
+        "interrupt_id": 40,
+        "priority": 7,
+        "arrival": 0
+      },
+      {
+        "source": "source_b",
+        "interrupt_id": 11,
+        "priority": 1,
+        "arrival": 1
+      }
+    ]
+  },
+  "steps": [
+    {
+      "label": "A notifies low urgency · id 40 / priority 7",
+      "short_label": "A NOTIFY · 40/p7",
+      "fault": null,
+      "blocked": null,
+      "emissions": [
+        {
+          "index": 0,
+          "link": "source_a_irq",
+          "source": "source_a.irq",
+          "destination": "controller.from_a",
+          "kind": "INTERRUPT_NOTIFY",
+          "reference": 9,
+          "payload": {
+            "interrupt_id": 40,
+            "priority": 7
+          }
+        },
+        {
+          "index": 1,
+          "link": "source_a_irq",
+          "source": "controller.from_a",
+          "destination": "source_a.irq",
+          "kind": "INTERRUPT_COMPLETE",
+          "reference": 9,
+          "payload": {
+            "interrupt_id": 40
+          }
+        }
+      ],
+      "post_state": {
+        "controller": {
+          "pending": [
+            "id=40 p=7 arrival=0"
+          ],
+          "active": null,
+          "occupancy": 1,
+          "completed_count": 0
+        },
+        "cpu_target": {
+          "active": null,
+          "handled": []
+        },
+        "source_completion_count": {
+          "source_a": 1,
+          "source_b": 0
+        }
+      }
+    },
+    {
+      "label": "B later notifies high urgency · id 11 / priority 1",
+      "short_label": "B NOTIFY · 11/p1",
+      "fault": null,
+      "blocked": null,
+      "emissions": [
+        {
+          "index": 2,
+          "link": "source_b_irq",
+          "source": "source_b.irq",
+          "destination": "controller.from_b",
+          "kind": "INTERRUPT_NOTIFY",
+          "reference": 2,
+          "payload": {
+            "interrupt_id": 11,
+            "priority": 1
+          }
+        },
+        {
+          "index": 3,
+          "link": "source_b_irq",
+          "source": "controller.from_b",
+          "destination": "source_b.irq",
+          "kind": "INTERRUPT_COMPLETE",
+          "reference": 2,
+          "payload": {
+            "interrupt_id": 11
+          }
+        }
+      ],
+      "post_state": {
+        "controller": {
+          "pending": [
+            "id=40 p=7 arrival=0",
+            "id=11 p=1 arrival=1"
+          ],
+          "active": null,
+          "occupancy": 2,
+          "completed_count": 0
+        },
+        "cpu_target": {
+          "active": null,
+          "handled": []
+        },
+        "source_completion_count": {
+          "source_a": 1,
+          "source_b": 1
+        }
+      }
+    },
+    {
+      "label": "controller selects and delivers highest priority",
+      "short_label": "select · 11/p1",
+      "fault": null,
+      "blocked": null,
+      "emissions": [
+        {
+          "index": 4,
+          "link": "cpu_irq",
+          "source": "controller.to_cpu",
+          "destination": "cpu_target.irq",
+          "kind": "INTERRUPT_NOTIFY",
+          "reference": 0,
+          "payload": {
+            "interrupt_id": 11,
+            "priority": 1
+          }
+        }
+      ],
+      "post_state": {
+        "controller": {
+          "pending": [
+            "id=40 p=7 arrival=0"
+          ],
+          "active": {
+            "origin": "id=11 p=1 arrival=1",
+            "delivery_reference": 0
+          },
+          "occupancy": 2,
+          "completed_count": 0
+        },
+        "cpu_target": {
+          "active": 11,
+          "handled": []
+        },
+        "source_completion_count": {
+          "source_a": 1,
+          "source_b": 1
+        }
+      }
+    },
+    {
+      "label": "CPU explicitly EOI id 11; controller delivers id 40",
+      "short_label": "EOI 11 → deliver 40",
+      "fault": null,
+      "blocked": null,
+      "emissions": [
+        {
+          "index": 5,
+          "link": "cpu_irq",
+          "source": "cpu_target.irq",
+          "destination": "controller.to_cpu",
+          "kind": "INTERRUPT_COMPLETE",
+          "reference": 0,
+          "payload": {
+            "interrupt_id": 11
+          }
+        },
+        {
+          "index": 6,
+          "link": "cpu_irq",
+          "source": "controller.to_cpu",
+          "destination": "cpu_target.irq",
+          "kind": "INTERRUPT_NOTIFY",
+          "reference": 1,
+          "payload": {
+            "interrupt_id": 40,
+            "priority": 7
+          }
+        }
+      ],
+      "post_state": {
+        "controller": {
+          "pending": [],
+          "active": {
+            "origin": "id=40 p=7 arrival=0",
+            "delivery_reference": 1
+          },
+          "occupancy": 1,
+          "completed_count": 1
+        },
+        "cpu_target": {
+          "active": 40,
+          "handled": [
+            11
+          ]
+        },
+        "source_completion_count": {
+          "source_a": 1,
+          "source_b": 1
+        }
+      }
+    },
+    {
+      "label": "CPU explicitly EOI id 40",
+      "short_label": "EOI 40",
+      "fault": null,
+      "blocked": null,
+      "emissions": [
+        {
+          "index": 7,
+          "link": "cpu_irq",
+          "source": "cpu_target.irq",
+          "destination": "controller.to_cpu",
+          "kind": "INTERRUPT_COMPLETE",
+          "reference": 1,
+          "payload": {
+            "interrupt_id": 40
+          }
+        }
+      ],
+      "post_state": {
+        "controller": {
+          "pending": [],
+          "active": null,
+          "occupancy": 0,
+          "completed_count": 2
+        },
+        "cpu_target": {
+          "active": null,
+          "handled": [
+            11,
+            40
+          ]
+        },
+        "source_completion_count": {
+          "source_a": 1,
+          "source_b": 1
+        }
+      }
+    }
+  ],
+  "assertions": {
+    "fault_free": true,
+    "blocked_steps": 0,
+    "handled_order": [
+      11,
+      40
+    ],
+    "expected_handled_order": [
+      11,
+      40
+    ],
+    "completed_count": 2,
+    "final_quiescent": true
+  },
+  "event_count": 8,
+  "causal_edges": [
+    [
+      0,
+      1
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      5,
+      6
+    ],
+    [
+      6,
+      7
+    ]
+  ]
+}

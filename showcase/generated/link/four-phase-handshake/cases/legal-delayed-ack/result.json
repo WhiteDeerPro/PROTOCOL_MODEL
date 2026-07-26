@@ -1,0 +1,101 @@
+{
+  "schema": "protocol-model.showcase.four-phase-case/v1",
+  "name": "legal-delayed-ack",
+  "title": "合法传输：接收端任意等待后确认",
+  "purpose": "REQ 保持期间 payload 稳定；ACK 上升只产生一个 TRANSFER。",
+  "data_window": "req_assert_to_ack_assert",
+  "expected": "PASS",
+  "observed": "PASS",
+  "expectation": "MET",
+  "fault": null,
+  "emissions": [
+    {
+      "kind": "TRANSFER",
+      "key": 17,
+      "payload": {
+        "data": 90
+      },
+      "timestamp": 12.4,
+      "sequence": 4
+    }
+  ],
+  "final_state": {
+    "phase": "idle_00",
+    "quiescent": true
+  },
+  "samples": [
+    {
+      "sequence": 0,
+      "timestamp_ns": 0.0,
+      "req": false,
+      "ack": false,
+      "event": null
+    },
+    {
+      "sequence": 1,
+      "timestamp_ns": 2.7,
+      "req": true,
+      "ack": false,
+      "event": {
+        "kind": "TRANSFER",
+        "key": 17,
+        "payload": {
+          "data": 90
+        }
+      }
+    },
+    {
+      "sequence": 2,
+      "timestamp_ns": 5.2,
+      "req": true,
+      "ack": false,
+      "event": {
+        "kind": "TRANSFER",
+        "key": 17,
+        "payload": {
+          "data": 90
+        }
+      }
+    },
+    {
+      "sequence": 3,
+      "timestamp_ns": 9.9,
+      "req": true,
+      "ack": false,
+      "event": {
+        "kind": "TRANSFER",
+        "key": 17,
+        "payload": {
+          "data": 90
+        }
+      }
+    },
+    {
+      "sequence": 4,
+      "timestamp_ns": 12.4,
+      "req": true,
+      "ack": true,
+      "event": {
+        "kind": "TRANSFER",
+        "key": 17,
+        "payload": {
+          "data": 90
+        }
+      }
+    },
+    {
+      "sequence": 5,
+      "timestamp_ns": 15.0,
+      "req": false,
+      "ack": true,
+      "event": null
+    },
+    {
+      "sequence": 6,
+      "timestamp_ns": 18.6,
+      "req": false,
+      "ack": false,
+      "event": null
+    }
+  ]
+}

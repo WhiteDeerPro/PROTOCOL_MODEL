@@ -1,10 +1,10 @@
-"""Ready/valid signal observations lowered to canonical link events."""
+"""Ready/valid signal observations lowered to canonical interface events."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
 
-from protocol_model.link import EventSchema
+from protocol_model.semantics import EventSchema
 from protocol_model.semantics import (
     CanonicalEvent,
     ConstraintScope,
@@ -60,25 +60,25 @@ class ReadyValidObserver(
                 SemanticConstraint(
                     f"{self.name}.valid_payload",
                     "VALID observations carry a canonical channel event",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                     targets=target,
                 ),
                 SemanticConstraint(
                     f"{self.name}.valid_stability",
                     "VALID remains asserted from a stalled offer through acceptance",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                     targets=target,
                 ),
                 SemanticConstraint(
                     f"{self.name}.payload_stability",
                     "the offered canonical event remains stable while stalled",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                     targets=target,
                 ),
                 SemanticConstraint(
                     f"{self.name}.transfer_acceptance",
                     "a canonical transfer is emitted exactly on a VALID and READY observation",
-                    ConstraintScope.LINK,
+                    ConstraintScope.INTERFACE,
                     targets=target,
                 ),
             ),
@@ -96,7 +96,7 @@ class ReadyValidObserver(
         return SemanticStep(
             state,
             fault=SemanticFault(
-                f"{self.name}.{rule}", reason, ConstraintScope.LINK, self.lane
+                f"{self.name}.{rule}", reason, ConstraintScope.INTERFACE, self.lane
             ),
         )
 

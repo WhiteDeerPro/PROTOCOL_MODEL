@@ -1,0 +1,166 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP · not clock",
+      "wave": "======",
+      "data": [
+        "S0",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5"
+      ]
+    },
+    [
+      "action",
+      {
+        "name": "caller action",
+        "wave": "======",
+        "data": [
+          "inject manager0.AR",
+          "inject manager1.AR",
+          "advance crossbar",
+          "advance target0",
+          "advance crossbar",
+          "advance target0"
+        ]
+      },
+      {
+        "name": "step outcome",
+        "wave": "======",
+        "data": [
+          "enqueue req0",
+          "enqueue req1",
+          "grant req0",
+          "return req0",
+          "grant req1",
+          "return req1"
+        ]
+      }
+    ],
+    [
+      "events",
+      {
+        "name": "manager → crossbar",
+        "wave": "======",
+        "data": [
+          "e0 AR @0x1000",
+          "e1 AR @0x1004",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "crossbar → target0",
+        "wave": "======",
+        "data": [
+          "—",
+          "—",
+          "e2 AR @0x0000",
+          "—",
+          "e5 AR @0x0004",
+          "—"
+        ]
+      },
+      {
+        "name": "target0 → crossbar",
+        "wave": "======",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "e3 R OK D=11111111",
+          "—",
+          "e6 R OK D=11111111"
+        ]
+      },
+      {
+        "name": "crossbar → manager",
+        "wave": "======",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "e4 R OK D=11111111",
+          "—",
+          "e7 R OK D=11111111"
+        ]
+      }
+    ],
+    [
+      "post-state",
+      {
+        "name": "q[s_manager0] usage",
+        "wave": "======",
+        "data": [
+          "1/2",
+          "1/2",
+          "0/2",
+          "0/2",
+          "0/2",
+          "0/2"
+        ]
+      },
+      {
+        "name": "q[s_manager1] usage",
+        "wave": "======",
+        "data": [
+          "0/2",
+          "1/2",
+          "1/2",
+          "1/2",
+          "0/2",
+          "0/2"
+        ]
+      },
+      {
+        "name": "target0 active owner",
+        "wave": "======",
+        "data": [
+          "free",
+          "free",
+          "req0 · m0",
+          "free",
+          "req1 · m1",
+          "free"
+        ]
+      },
+      {
+        "name": "target0 RR next scan",
+        "wave": "======",
+        "data": [
+          "manager0",
+          "manager0",
+          "manager1",
+          "manager1",
+          "manager0",
+          "manager0"
+        ]
+      },
+      {
+        "name": "crossbar advance_index",
+        "wave": "======",
+        "data": [
+          "0",
+          "0",
+          "1",
+          "1",
+          "2",
+          "2"
+        ]
+      }
+    ]
+  ],
+  "head": {
+    "text": "AXI4-Lite 2×2 crossbar · shared-egress model-step witness"
+  },
+  "foot": {
+    "text": "1 column = 1 completed SystemSession action/service opportunity · POST-STATE · NOT ACLK, AXI pins, RTL or VCD"
+  },
+  "config": {
+    "hscale": 5
+  }
+}

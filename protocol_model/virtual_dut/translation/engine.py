@@ -151,6 +151,11 @@ class _ExecutionFailure(Exception):
 class SerialTranslationExecutor:
     """Execute one linear plan with one active egress child.
 
+    This is a concrete execution profile and produces deterministic execution
+    witnesses.  Its strict scheduling is not, by itself, a cycle-exact golden
+    contract for an external RTL bridge; a wider bridge contract needs a
+    separate observation and conformance relation.
+
     The executor consumes typed operations, not ``CanonicalEvent`` values.
     An attachment-aware VirtualDut backend can decode into
     ``DecodedOperation``, call this engine, encode the returned emissions, and

@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
+from protocol_model.observation import (
     AtomicFrame,
-    CanonicalEvent,
-    EventSchema,
-    NaturalDomain,
     ReadyValidObserver,
     ReadyValidSignals,
     ResetEpochObserver,
 )
+from protocol_model.semantics import CanonicalEvent, EventSchema, NaturalDomain
 
 
 class ObservationLayerTest(unittest.TestCase):

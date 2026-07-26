@@ -7,11 +7,11 @@ from typing import Callable, Sequence
 
 from protocol_model.semantics import ConstraintScope, SemanticFault
 
-from .base import VirtualDutModel
+from .base import VirtualDutBackend
 from .transition import DutTransition, PortEmission, PortInput
 
 
-class NoOpModel(VirtualDutModel):
+class NoOpBackend(VirtualDutBackend):
     """Consume delivered port inputs without state changes or emissions."""
 
     def initial_state(self) -> object:
@@ -26,8 +26,8 @@ class CaptureState:
     received: tuple[PortInput, ...] = ()
 
 
-class CaptureModel(VirtualDutModel):
-    """Small boundary model useful for collecting protocol-visible inputs."""
+class CaptureBackend(VirtualDutBackend):
+    """Small backend useful for collecting protocol-visible inputs."""
 
     def __init__(
         self, accepts: Callable[[PortInput], bool] = lambda _action: True
@@ -52,37 +52,37 @@ class CaptureModel(VirtualDutModel):
 
 
 @dataclass(frozen=True)
-class FunctionModelState:
+class FunctionBackendState:
     received: int = 0
     emitted: int = 0
 
 
-class FunctionModel(VirtualDutModel):
-    """A compact protocol-facing model for pure event transformations."""
+class FunctionBackend(VirtualDutBackend):
+    """A compact backend for pure protocol-visible event transformations."""
 
     def __init__(
         self, function: Callable[[PortInput], Sequence[PortEmission]]
     ) -> None:
         self.function = function
 
-    def initial_state(self) -> FunctionModelState:
-        return FunctionModelState()
+    def initial_state(self) -> FunctionBackendState:
+        return FunctionBackendState()
 
     def accept(self, state: object, action: PortInput) -> DutTransition:
-        assert isinstance(state, FunctionModelState)
+        assert isinstance(state, FunctionBackendState)
         try:
             emissions = tuple(self.function(action))
         except Exception as error:
             return DutTransition(
                 state,
                 fault=SemanticFault(
-                    "function_model.backend",
-                    f"VirtualDut model failed: {error}",
+                    "function_backend.failure",
+                    f"VirtualDut backend failed: {error}",
                     ConstraintScope.VIRTUAL_DUT,
                 ),
             )
         return DutTransition(
-            FunctionModelState(
+            FunctionBackendState(
                 state.received + 1, state.emitted + len(emissions)
             ),
             emissions,

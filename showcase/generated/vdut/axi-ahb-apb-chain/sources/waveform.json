@@ -1,0 +1,116 @@
+{
+  "signal": [
+    {
+      "name": "SCENARIO STEP",
+      "wave": "=======",
+      "data": [
+        "S0 ctrl W data",
+        "S1 ctrl AW",
+        "S2 stat W data",
+        "S3 stat AW",
+        "S4 ctrl AR",
+        "S5 stat AR",
+        "S6 miss AR"
+      ]
+    },
+    [
+      "request",
+      {
+        "name": "AXI request",
+        "wave": "=======",
+        "data": [
+          "W=11223344",
+          "AW@1000",
+          "W=aabbccdd",
+          "AW@2000",
+          "AR@1000",
+          "AR@2000",
+          "AR@3000"
+        ]
+      },
+      {
+        "name": "AHB request",
+        "wave": "x=x====",
+        "data": [
+          "WR@1000 + WD=11223344",
+          "WR@2000 + WD=aabbccdd",
+          "RD@1000",
+          "RD@2000",
+          "RD@3000"
+        ]
+      },
+      {
+        "name": "APB upstream request",
+        "wave": "x=x====",
+        "data": [
+          "WR@1000",
+          "WR@2000",
+          "RD@1000",
+          "RD@2000",
+          "RD@3000"
+        ]
+      },
+      {
+        "name": "control endpoint",
+        "wave": "x=x.=x.",
+        "data": [
+          "WR@1000 + WR OK",
+          "RD@1000 + RR OK=11223344"
+        ]
+      },
+      {
+        "name": "status endpoint",
+        "wave": "x..=x=x",
+        "data": [
+          "WR@2000 + WR OK",
+          "RD@2000 + RR OK=aabbccdd"
+        ]
+      }
+    ],
+    [
+      "return",
+      {
+        "name": "APB upstream completion",
+        "wave": "x=x====",
+        "data": [
+          "WR OK",
+          "WR OK",
+          "RR OK=11223344",
+          "RR OK=aabbccdd",
+          "RR ERR=00000000"
+        ]
+      },
+      {
+        "name": "AHB completion",
+        "wave": "x=x====",
+        "data": [
+          "WR OKAY",
+          "WR OKAY",
+          "RR OKAY=11223344",
+          "RR OKAY=aabbccdd",
+          "RR ERROR=00000000"
+        ]
+      },
+      {
+        "name": "AXI completion",
+        "wave": "x=x====",
+        "data": [
+          "B OKAY",
+          "B OKAY",
+          "R OKAY=11223344",
+          "R OKAY=aabbccdd",
+          "R SLVERR=00000000"
+        ]
+      }
+    ]
+  ],
+  "head": {
+    "text": "AXI4-Lite → AHB-Lite → APB4 transaction propagation / 跨协议事务传播"
+  },
+  "foot": {
+    "text": "1 column = 1 scenario action plus causally triggered events · MODEL ORDER ONLY · NOT PINS/CYCLES/RTL / 非引脚时序"
+  },
+  "config": {
+    "hscale": 5
+  }
+}

@@ -1,0 +1,26 @@
+digraph interrupt_control_plane_topology {
+  rankdir=LR;
+  label="Edge-interrupt control plane · three notification InterfaceConnection instances";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.28, nodesep=0.6, ranksep=0.85,
+         splines=polyline, ordering=out, newrank=true];
+  node [fontname="sans-serif", fontsize=10, shape=box,
+        style="rounded,filled", margin="0.15,0.1"];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d", penwidth=1.35];
+
+  source_a [label="source_a · VirtualDut\nscenario-driven notifier boundary\nid 40 · priority 7",
+    fillcolor="#eff6ff", color="#2563eb", group="a"];
+  source_b [label="source_b · VirtualDut\nscenario-driven notifier boundary\nid 11 · priority 1",
+    fillcolor="#eff6ff", color="#2563eb", group="b"];
+  controller [label="controller · VirtualDut\nretain capacity 4\nlower priority value first\none active target delivery",
+    fillcolor="#fff7ed", color="#ea580c", penwidth=1.7];
+  cpu [label="cpu_target · VirtualDut\none active slot\nexplicit EOI service",
+    fillcolor="#ecfdf5", color="#059669"];
+
+  { rank=same; source_a; source_b; }
+  source_a -> source_b [style=invis, weight=80];
+
+  source_a -> controller [dir=none, label=<<B>interrupt_edge_notification</B><BR/><FONT POINT-SIZE="8">source_a_irq · source_a.irq ↔ controller.from_a</FONT>>];
+  source_b -> controller [dir=none, label=<<B>interrupt_edge_notification</B><BR/><FONT POINT-SIZE="8">source_b_irq · source_b.irq ↔ controller.from_b</FONT>>];
+  controller -> cpu [dir=none, label=<<B>interrupt_edge_notification</B><BR/><FONT POINT-SIZE="8">cpu_irq · controller.to_cpu ↔ cpu_target.irq</FONT>>];
+}

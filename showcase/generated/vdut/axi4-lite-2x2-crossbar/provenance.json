@@ -1,0 +1,30 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "axi4-lite-2x2-crossbar",
+  "source": "showcase/demos/vdut/axi4_lite_2x2_crossbar/run.py",
+  "command": "python3 showcase/demos/vdut/axi4_lite_2x2_crossbar/run.py",
+  "protocol_model_version": "0.4.0",
+  "execution_models": [
+    "SystemSession",
+    "ScheduledAddressCrossbarBackend",
+    "QueuedAddressResponderBackend"
+  ],
+  "renderers": {
+    "topology": "Graphviz dot + shared system topology projection",
+    "interconnect_interface_map": "Graphviz dot + shared typed address-interconnect projection",
+    "model_steps": "WaveDrom 3.6.2 + model-step state projection",
+    "vdut_structure": "Graphviz dot + shared VirtualDut projection, demo-local vertical arrangement",
+    "causality": "Graphviz dot + shared trace projection, disconnected transactions stacked for reading",
+    "trace_conformance": "Graphviz dot + demo-local explanatory projection"
+  },
+  "interconnect_interface_map": {
+    "view_kind": "interconnect_interface_map",
+    "scope": "system",
+    "evidence_basis": "resolved",
+    "projection_intent": "direct",
+    "time_basis": "none",
+    "source_schema": "protocol-model.address-interconnect-view/v1",
+    "detail": "standard"
+  },
+  "presentation_boundary": "transaction-semantic execution witness with explicit service opportunities; not raw RTL, a cycle golden trace, or a completed RTL conformance checker"
+}

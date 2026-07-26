@@ -1,0 +1,22 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "four-phase-handshake",
+  "source": "showcase/demos/link/four_phase_handshake/run.py",
+  "command": "python3 showcase/demos/link/four_phase_handshake/run.py",
+  "protocol_model_version": "0.4.0",
+  "execution_models": [
+    "FourPhaseObserver",
+    "InterfaceSession"
+  ],
+  "data_window": "req_assert_to_ack_assert",
+  "reset_policy": "not exercised by these three showcase cases",
+  "frequency_models": {
+    "high_delta": "ideal finite eight-beat FIFO capacity/admission edge simulation; independent 1 ns read-domain phase offset",
+    "near_equal": "exact integer frequency and rational period relations; no billion-cycle expansion"
+  },
+  "renderers": {
+    "waveform": "WaveDrom 3.6.2 (package.json)",
+    "diagram": "Graphviz dot"
+  },
+  "presentation_boundary": "edge-complete logical snapshots and analytic FIFO capacity; not synchronizer structure, Gray-pointer RTL, metastability/MTBF, STA, physical clocks or RTL/VCD"
+}

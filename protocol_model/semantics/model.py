@@ -10,7 +10,8 @@ class ConstraintScope(str, Enum):
     """The smallest scope at which a constraint can be decided."""
 
     EVENT = "event"
-    LINK = "link"
+    TRANSPORT = "transport"
+    INTERFACE = "interface"
     VIRTUAL_DUT = "virtual_dut"
     SYSTEM = "system"
 
@@ -20,6 +21,65 @@ class ConstraintKind(str, Enum):
     RELATION = "relation"
     RESOURCE = "resource"
     PROGRESS = "progress"
+
+
+class ResourceExhaustionPolicy(str, Enum):
+    """How an executable boundary handles an unsatisfied resource demand.
+
+    ``BLOCK`` means the triggering action was not accepted and may be retried.
+    ``ERROR_COMPLETION`` accepts the action but completes it with an ordinary
+    protocol-visible error.  ``FAULT`` reports a model/use-contract violation.
+    The latter two are therefore not forms of backpressure.
+    """
+
+    BLOCK = "block"
+    ERROR_COMPLETION = "error_completion"
+    FAULT = "fault"
+
+
+@dataclass(frozen=True)
+class ResourceDemand:
+    """Typed reason why an executable transition cannot accept an action."""
+
+    resource: str
+    scope: ConstraintScope
+    required: int = 1
+    available: int | None = None
+    capacity: int | None = None
+    reason: str = ""
+    location: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.resource:
+            raise ValueError("resource demand requires a resource name")
+        if not isinstance(self.scope, ConstraintScope):
+            raise TypeError("resource demand requires a constraint scope")
+        if (
+            not isinstance(self.required, int)
+            or isinstance(self.required, bool)
+            or self.required <= 0
+        ):
+            raise ValueError("resource demand required amount must be positive")
+        if self.available is not None and (
+            not isinstance(self.available, int)
+            or isinstance(self.available, bool)
+            or self.available < 0
+        ):
+            raise ValueError("resource demand available amount must be non-negative")
+        if self.capacity is not None and (
+            not isinstance(self.capacity, int)
+            or isinstance(self.capacity, bool)
+            or self.capacity <= 0
+        ):
+            raise ValueError("resource demand capacity must be positive")
+        if (
+            self.available is not None
+            and self.capacity is not None
+            and self.available > self.capacity
+        ):
+            raise ValueError("resource demand availability exceeds capacity")
+        if self.available is not None and self.available >= self.required:
+            raise ValueError("resource demand must describe an unsatisfied request")
 
 
 @dataclass(frozen=True)

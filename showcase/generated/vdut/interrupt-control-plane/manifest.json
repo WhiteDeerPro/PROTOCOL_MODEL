@@ -1,0 +1,192 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "vdut-interrupt-control-plane",
+  "run_id": "interrupt-control-plane",
+  "generated_at": "2026-07-26T19:11:57.167319+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "system",
+      "identity": "edge_interrupt_control_plane",
+      "definition": "edge_interrupt_control_plane",
+      "parameters": {},
+      "lineage": [],
+      "metadata": {
+        "virtual_duts": [
+          "controller",
+          "cpu_target",
+          "source_a",
+          "source_b"
+        ],
+        "connections": [
+          "cpu_irq",
+          "source_a_irq",
+          "source_b_irq"
+        ],
+        "boundary": []
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "interrupt_edge_notification",
+      "definition": "interrupt_edge_notification",
+      "parameters": {
+        "interrupt_id_width": 16,
+        "priority_width": 8,
+        "reference_width": 16,
+        "maximum_outstanding": 4,
+        "trigger_mode": "edge"
+      },
+      "lineage": [],
+      "metadata": {
+        "interface_family": "control.interrupt_notification",
+        "roles": [
+          "handler",
+          "notifier"
+        ],
+        "event_kinds": [
+          "complete",
+          "notify"
+        ],
+        "monitors": [
+          "interrupt_notification.lifecycle"
+        ],
+        "resources": [
+          {
+            "name": "interrupt_notification.pending",
+            "scope": "interface",
+            "capacity": 4,
+            "acquired_by": [
+              "INTERRUPT_NOTIFY"
+            ],
+            "released_by": [
+              "matching INTERRUPT_COMPLETE",
+              "reset"
+            ],
+            "description": "edge occurrences accepted but not locally completed"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "priority-and-explicit-eoi",
+      "expected": "later id 11/p1 is delivered before earlier id 40/p7; each next delivery waits for explicit EOI",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "event_count": 8,
+    "causal_edge_count": 5,
+    "handled_order": [
+      11,
+      40
+    ],
+    "controller_completed_count": 2,
+    "final_quiescent": true
+  },
+  "metadata": {
+    "publication": "showcase/generated/vdut/interrupt-control-plane",
+    "control_scope": "edge interrupt notification",
+    "notifier_source": "scenario-driven CaptureBackend boundaries",
+    "addressable": false,
+    "raw_pin_capture": false,
+    "time_basis": "model_step"
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "causality.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "vdut_structure",
+      "path": "controller-structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "message_sequence",
+      "path": "message-sequence.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_step_view",
+      "path": "model-steps.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "vdut_structure_source",
+      "path": "sources/controller-structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "message_sequence_source",
+      "path": "sources/message-sequence.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "execution_step_view_source",
+      "path": "sources/model-steps.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

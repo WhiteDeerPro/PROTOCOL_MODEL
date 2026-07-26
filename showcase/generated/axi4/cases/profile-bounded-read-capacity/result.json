@@ -11,9 +11,9 @@
     "zh-CN": "在容量配置为一时，第二个 AR 超限并被回滚。"
   },
   "execution": {
-    "mode": "link-events",
+    "mode": "interface-events",
     "protocol": "axi4_one_read",
-    "model": "LinkSession"
+    "model": "InterfaceSession"
   },
   "presentation": {
     "level": "catalog",
@@ -103,18 +103,18 @@
       "axi4.write.pending_descriptors": 0
     },
     "final": {
-      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
       "axi4.write.pending_descriptors": 0,
       "axi4.read.pending_transactions": 1,
+      "axi4.write.pending_completions": 0,
       "axi4.write.assembling_data": 0,
-      "axi4.exclusive.reservations": 0,
-      "axi4.write.pending_data_bursts": 0
+      "axi4.exclusive.reservations": 0
     }
   },
   "fault": {
     "rule": "axi4_one_read.axi4.read.pending_transactions.capacity",
     "reason": "resource 'axi4.read.pending_transactions' usage 2 exceeds profile capacity 1",
-    "scope": "link",
+    "scope": "interface",
     "location": "axi4.read.pending_transactions"
   }
 }

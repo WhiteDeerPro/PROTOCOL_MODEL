@@ -3,6 +3,9 @@
 本模块管理的是模型运行之后的可观察结果，不参与协议判定。核心原则是：语义、视图、渲染、
 存储和文档发布分别拥有清晰边界，任何一种图形工具都不能反向塑造协议模型。
 
+本页聚焦文件生命周期和发布契约；图所表达的事实、ViewIR 分类及 renderer 选择见
+[可视化视图与 Artifact 管理](visualization-and-artifacts.md)。
+
 ## 数据流
 
 ```text
@@ -23,7 +26,7 @@ SemanticRun / SystemTrace / SystemProtocol
    caller-selected path / atomic write / index
                  │
                  ▼
-           run manifest v3
+           run manifest v4
                  │ explicit publish
                  ▼
         DocumentationStore
@@ -40,8 +43,9 @@ manifest 职责；存储层保持对 AXI、TileLink 或 ready-valid 的无关性
 - `RunArtifactStore` 拥有一次运行目录、路径约束、原子写入、文件注册和 manifest。调用方可以显式提供目录；
   `out/` 只是省略目录参数时的临时默认。
 - `RunBundle` 是供一次验证运行使用的薄门面，只组合存储与可视化发布，不实现协议知识。
-- `ProtocolRecord`、`ConstraintEvidence` 是稳定的报告记录，避免 manifest 直接序列化运行时对象。
-- records projection 负责把 `LinkProtocol`、`SystemProtocol` 显式降低为报告记录。它是展示边界，
+- `ProtocolRecord`、`ConstraintRecord` 是稳定的报告记录，避免 manifest 直接序列化运行时对象。约束从协议
+  声明导出时状态为 `declared`；只有附着具体 trace、case 或 proof witness 后才构成验证证据。
+- records projection 负责把 `InterfaceProtocol`、`SystemProtocol` 显式降低为报告记录。它是展示边界，
   不是兼容层。
 - `DocumentationStore` 管理被版本控制的发布树；目标既可以是 `docs/`，也可以是 `showcase/generated/`。
   覆盖、删除和重建子树都必须由具名发布动作显式调用。
@@ -53,10 +57,14 @@ manifest 职责；存储层保持对 AXI、TileLink 或 ready-valid 的无关性
 - `VisualizationPublisher` 同时保存可检查的源文件和渲染结果，并向 `RunArtifactStore` 注册二者。
 - `system_topology_dot()` 与 `system_trace_dot()` 是当前架构的系统级视图，只依赖 record/trace 投影。
 
+事务消息、operation lifetime、阻塞与状态变化采用独立的
+[transaction time-space view](../visualization/transaction-time-space-view.md)。该视图与 topology、waveform
+和 causal graph 共享 event/operation 引用，但不把这些图合并成一种证据。
+
 ### 协议局部投影
 
 协议特有的波形布局仍属于该协议。例如 AXI 五通道如何分组、字段宽度如何显示，不应进入通用
-可视化包。AXI lane/field 投影后续位于 `protocol_model/link/amba/axi/axi4/visualization.py`；TileLink 也应在
+可视化包。AXI lane/field 投影后续位于 `protocol_model/protocols/amba/axi/axi4/visualization.py`；TileLink 也应在
 自身协议包中产生 WaveJSON/DOT IR，再交给 publisher。
 
 ### 场景报告
@@ -76,20 +84,26 @@ workspace；测试优先使用临时目录。`docs/` 和 `showcase/generated/` �
 写入后两者必须是显式发布动作：从已经 finalize 的 run 或确定性 source IR 中选择内容，保存生成参数和来源，
 再由 `DocumentationStore` 或专用脚本替换其拥有的子树。
 
+当前 provenance 中的“来源”表示具名生成入口、命令、模型版本、参数和解释边界，用来回答资源怎样重建；它
+不是 commit 或源码内容认证，也不能脱离版本控制单独定位历史 dirty worktree。维护型发布树的历史身份当前由
+release/tag 与仓库版本共同提供。在同一 checkout 和声明工具链下，具名脚本应重建语义等价的结果，但时间戳、
+无语义顺序和 renderer 输出不承诺字节一致。只有以后需要签名或 content-addressed publication 时，再为该用途
+增加可验证的 source digest。
+
 宣传 Demo 可以把“运行 + 发布”封装成一个具名命令，因为用户调用该命令的目的就是重建公开资源。这个例外
 不授权普通测试顺带更新图片；生成脚本仍应先在 staging 中完成全部渲染，成功后再发布，避免留下半套资源。
 
-## Manifest v3
+## Manifest v4
 
-`manifest.json` 使用 `protocol-model.run/v3`，包含：
+`manifest.json` 使用 `protocol-model.run/v4`，包含：
 
 - `subject` 和 `run_id`；
 - 顶层 verdict、cases、state 与 metadata；
-- 通用 `protocols` 记录，可同时描述 link 和 system scope；
+- 通用 `protocols` 记录，可同时描述 interface、transport 和 system scope；
 - 每个 artifact 的 kind、media type、case 和 source 标记。
 
 manifest 当前不保存 Python 类型路径，也不暴露运行时对象。即使 point-to-point 场景被提升为
-`SystemProtocol`，也可以同时记录其 system protocol 与实际使用的 link protocols。
+`SystemProtocol`，也可以同时记录其 system protocol 与实际使用的 interface protocols。
 
 ## 一次运行的目录约定
 

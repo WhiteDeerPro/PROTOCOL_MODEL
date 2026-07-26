@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import CanonicalEvent, ConstraintScope, SemanticFault
 from protocol_model.virtual_dut.address.access import (
     AccessResult,
@@ -42,7 +42,7 @@ class Axi4LiteRequesterAttachment(AddressRequesterAttachment):
 
     def __init__(
         self,
-        protocol: LinkProtocol,
+        protocol: InterfaceProtocol,
         *,
         byte_order: ByteOrder | str = ByteOrder.LITTLE,
     ) -> None:

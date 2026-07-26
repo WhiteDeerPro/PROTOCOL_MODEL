@@ -49,7 +49,7 @@ class ArtifactStorageTest(unittest.TestCase):
             )
 
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            self.assertEqual("protocol-model.run/v3", manifest["schema"])
+            self.assertEqual("protocol-model.run/v4", manifest["schema"])
             self.assertEqual("system", manifest["protocols"][0]["scope"])
             self.assertEqual(2, len(manifest["artifacts"]))
             source = next(item for item in manifest["artifacts"] if item["source"])

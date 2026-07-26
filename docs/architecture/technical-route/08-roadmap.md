@@ -2,29 +2,57 @@
 
 [返回架构地图](README.md) · [查看总览图](overview.svg) · [项目 Roadmap](../../../ROADMAP.md)
 
-这条路线按“下一层真实需要什么”递归补基础能力，而不是按协议名称或软件包数量推进。
+这条路线按“下一个真实场景缺少什么”递归补共享能力，而不是把工程误画成唯一的上下层，或按协议名称与
+软件包数量推进。三张视图见[通信建模的三张视图](../communication-scope-and-transport.md)。
 
 ## 当前已经打通的一条小型完整路径
 
 ```text
 基础语义
   → 通用 pattern
-  → AXI/APB/AHB LinkProtocol
-  → ProtocolAttachment + binding
+  → AXI/APB/AHB InterfaceProtocol
+  → InterfaceAttachment + binding
   → AddressSpace / AddressFabric VirtualDut
-  → point-to-point / bridge SystemProtocol
+  → point-to-point / bridge-chain / single-ingress fabric / scheduled N×M crossbar SystemProtocol
   → 同步执行、trace、causality、artifact
 ```
 
-它已经能回答：单 link 上发生的事务是否合法；一个 APB endpoint 如何执行地址访问；一个简单 fabric
+它已经能回答：单个 interface connection 上发生的事务是否合法；一个 APB endpoint 如何执行地址访问；一个简单 fabric
 如何解码、转发并归还 completion；多个具体模块如何组成可执行系统。
 
 ## 依赖驱动的推进顺序
 
-当前瓶颈不是可声明的协议名称数量，而是跨协议组合时两端能力是否匹配、burst 如何拆分、资源何时释放、
-等待是否形成闭环。继续增加协议容易复制协议专用 adapter/backend，却不给这些共同问题提供构造能力。
+当前瓶颈不是可声明的协议名称数量，也不再是首个 serial bridge 或 CHI credit hop。统一 bridge、最小
+SystemProtocol、CHI REQ/RSP/DAT transport 和 direct read/retry lifecycle 已提供实验平台；下一步需要让
+协议资源、participant、系统身份与通用 runtime 的边界继续闭合。
 
-因此下一阶段按以下顺序推进。
+### C1 · 当前主线：从 participant/network 闭环到一致性 authority
+
+第一条 participant→本地行为路径已经闭合：`ChiAddressHomeNode` 将 aligned full-DAT-width `ReadNoSnp`
+转换成 `AddressRead`，并让 `AddressTarget` 独占本地 memory state。`PCrdReturn`、NodeID ownership、
+feature-flow closure 和 clean `ReadShared/ReadUnique` participant 也已落地。当前
+`ChiCoherenceNetworkSession` 可把这些 participant 与调用方构造的 XP/Link topology 组合起来，
+逐小步闭合 REQ、SNP、RSP、DAT 和 CompAck。第一条 dirty-unique 纵向路径也已闭合：
+`UC→本地写→UD→SnpRespData_I_PD→CompData_UD_PD`，最新数据和写回责任可经同一网络转移。
+MESI no-SD 路径也已闭合：
+`ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck
+→Home backing/directory commit`；它把 dirty unique line 收束为两个 clean shared copy，不引入 `SD`。
+`SC→ReadUnique→UC→local write→UD` 的重取数据式 upgrade 也已闭合。
+
+1. 建立 address→Home authority 与 coherence-domain membership，使 eligible Snoopee 不再只能由 fixture 手工列出；
+2. 在已有 `UD`/PassDirty、no-SD downgrade 和 ReadUnique upgrade 基础上补
+   `CleanUnique`/`MakeUnique`、dirty eviction/writeback，继续闭合 MESI 的常用生命周期；
+3. 增加同 line transient/hazard、Retry/error 组合、多 waiter policy、多个 pending emission batch 与
+   wait-for projection；
+4. 再以 `SD`/Owned、shared-dirty authority 与 forwarding/DCT 检验 MOESI-like 扩展；
+5. 第二种 packet network 提出相同接口后，再把 family scheduler 的稳定形状投影到通用 system runtime。
+
+当前 read/retry/coherence profile 仍固定单 Requester/Home、受限 opcode 与 full-line DAT；AddressTarget 路径另
+固定对齐和成功 completion。它们是上述工作的可执行起点；准确覆盖仍只在
+[实现状态](../implementation-status.md)维护。
+
+scheduled AXI4-Lite N×M crossbar 与 direct-neighbor address closure 已形成 S3 的第一条纵向切片；因此下一阶段
+按以下顺序推进。
 
 ### S1 · 已具备的局部 attachment baseline
 
@@ -37,20 +65,22 @@ StreamTransfer contract：
 - AXI4-Stream 已能 capture，width conversion 与 autonomous source 后续处理。
 
 这里列出的 Exclusive、width conversion 和 autonomous source 是各 profile 的后续扩展，不阻塞 typed bridge
-T1–T6。当前 baseline 的成立依据是 attachment 的运输状态、quiescent 条件、错误映射和 backend binding
+T1–T6。当前 baseline 的成立依据是 attachment 的接口侧状态、quiescent 条件、错误映射和 backend binding
 已经可被执行和检查。
 
-### S2 · 类型化 bridge 与容量资源
+### S2 · 已完成的类型化 bridge 与容量资源
 
-AXI4-Lite→APB 与 full AXI4→APB 已提供实际抽取压力。typed stage、fanout ledger、capacity lease 和
-operation-level serial executor 已实现；下一步用显式 route/profile 补 attachment transaction 外壳和
-`AddressBurst` stages，再接入第一个协议对。这一步不以自动 capability planner 为前置条件。等第二个
-egress 证明 plan/executor 可复用后，再进入基于 capability 的 construction-time 自动选择。
+typed stage、`AddressBurst`、fanout ledger、capacity lease、attachment-aware backend 和 operation-level
+serial executor 已落地。统一 composition root 已覆盖 AXI4、AXI4-Lite、AHB、APB 四种 address family，
+AHB/APB/AXI egress 和 AXI→AHB→APB chain 已证明 plan/executor 不依赖某一个协议对。
+
+当前 serial profile 仍有意保持一个 ingress、一个 egress 和一个 active child。width split/merge、并发 child、
+ID remap pool、READY/backpressure 和 crossbar 不属于 S2 已完成范围；它们按下一层真实需求继续推进。
 
 稳定架构见[Bridge 与类型化事务转译](../typed-transaction-translation.md)，具体阶段与验收只在
 [V1 实施计划](../translation-implementation.md)维护。
 
-### S3 · capability、address projection 与自动构造
+### S3 · 当前主线：capability、address projection 与系统构造
 
 VirtualDut 将对系统可见但不泄漏内部实现的事实投影出来：
 
@@ -62,11 +92,16 @@ Builder construction lowering 与 core elaboration 只消费这些边界事实�
 AddressSpace。前者在用户授权后选择 translation plan，后者检查展开后的 topology；未授权时保持 direct
 或报告 mismatch，不在 runtime 插入 adapter。
 
-### S4 · Resource-aware runtime extension
+当前已先行实现 generated address router 的 route boundary projection、`AddressClaim`/router contract 和
+direct-neighbor resolution。Endpoint claim 自动派生、external/opaque projection、typed port capability、
+multi-hop resolution 与 bridge auto-lowering 仍是本阶段后续内容。
 
-V1 的同步边界在入口容量满时仍报告结构化 fault。后续需要补两阶段 admission 或等价契约，使 runtime 能
-区分“事件尚未被接纳”和“工作已经接纳但等待资源”，并表示 blocked reason、deferred emission、held lease
-与 waiting demand。这个阶段扩展现有 fixed-point runtime，不要求同时引入物理时钟。
+### S4 · 收束 resource-aware runtime
+
+当前 runtime 已能用 `ResourceDemand` 表示未接纳工作，以 `BLOCK` 整步回滚，并通过显式 advance 推进部分
+queued backend。后续需要把 admission 从整个外部 action 细化到 emission/egress，补齐跨 connection lineage、
+held lease、waiting demand 和可恢复的 wakeup 条件。这个阶段扩展现有 fixed-point runtime，不要求同时引入
+物理时钟。
 
 ### S5 · wait-for 与 deadlock 证据
 

@@ -1,0 +1,241 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "vdut-sensor-dma-capture",
+  "run_id": "sensor-dma-capture",
+  "generated_at": "2026-07-26T19:11:57.958203+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "system",
+      "identity": "sensor_dma_capture",
+      "definition": "sensor_dma_capture",
+      "parameters": {},
+      "lineage": [],
+      "metadata": {
+        "virtual_duts": [
+          "crossbar",
+          "dma",
+          "memory",
+          "sensor"
+        ],
+        "connections": [
+          "dma_bus",
+          "memory_bus",
+          "sensor_bus"
+        ],
+        "boundary": []
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "axi4_lite",
+      "definition": "axi4_lite",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 32
+      },
+      "lineage": [],
+      "metadata": {
+        "interface_family": "amba.axi4_lite",
+        "roles": [
+          "manager",
+          "subordinate"
+        ],
+        "event_kinds": [
+          "AR",
+          "AW",
+          "B",
+          "R",
+          "W"
+        ],
+        "monitors": [
+          "axi4_lite.read",
+          "axi4_lite.write"
+        ],
+        "resources": [
+          {
+            "name": "axi4_lite.read.pending_transactions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AR"
+            ],
+            "released_by": [
+              "R",
+              "reset"
+            ],
+            "description": "accepted AR transfers awaiting R"
+          },
+          {
+            "name": "axi4_lite.write.pending_descriptors",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW without available W"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "accepted AW transfers awaiting FIFO-matched W"
+          },
+          {
+            "name": "axi4_lite.write.pending_data_bursts",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "W without available AW"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "single W transfers observed before FIFO-matched AW"
+          },
+          {
+            "name": "axi4_lite.write.pending_completions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW/W FIFO join"
+            ],
+            "released_by": [
+              "B",
+              "reset"
+            ],
+            "description": "joined AW/W transactions awaiting B"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "sensor-overrun-and-dma-copy",
+      "expected": "retain the oldest two samples, record two overruns, and copy retained data into memory",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "event_count": 20,
+    "causal_edge_count": 16,
+    "final_memory": "4030201041302010",
+    "final_quiescent": true
+  },
+  "metadata": {
+    "publication": "showcase/generated/vdut/sensor-dma-capture",
+    "network_scope": "non-coherent AXI4-Lite 1x2 address network",
+    "sample_source": "deterministic incrementing policy",
+    "raw_pin_capture": false,
+    "time_basis": "model_step"
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "causality.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "vdut_structure",
+      "path": "dma-structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "message_sequence",
+      "path": "message-sequence.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_step_view",
+      "path": "model-steps.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "vdut_structure",
+      "path": "sensor-structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "vdut_structure_source",
+      "path": "sources/dma-structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "message_sequence_source",
+      "path": "sources/message-sequence.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "execution_step_view_source",
+      "path": "sources/model-steps.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "vdut_structure_source",
+      "path": "sources/sensor-structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology",
+      "path": "structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

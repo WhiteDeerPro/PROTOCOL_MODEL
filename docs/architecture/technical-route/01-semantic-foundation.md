@@ -1,12 +1,12 @@
 # 基础语义：建立所有协议共享的词汇
 
-[返回架构地图](README.md) · [查看总览图](overview.svg) · [术语表](glossary.md)
+[返回架构地图](README.md) · [查看总览图](overview.svg) · [术语表](../terminology.md)
 
 这一层解决的不是“AXI 有哪些信号”，而是更基础的问题：不同协议的通信事实怎样用同一种结构表达，
 规则怎样说明适用范围，有限 trace 怎样区分“已经违规”和“还没完成”。
 
 <a id="canonical-event"></a>
-## 1. CanonicalEvent：已经发生的一件通信事实
+## 1. CanonicalEvent：统一的通信事件值
 
 原始波形会说 `PSEL=1`、`PENABLE=1`、`PREADY=1`；UVM monitor 可能给出一个 APB transaction。基础语义
 不直接依赖这些来源，而把它们归一化为：
@@ -24,7 +24,8 @@ CanonicalEvent(
 - `payload` 保存这类动作的字段；
 - source、clock、timestamp、trace index 等元数据用于追踪来源和执行位置。
 
-CanonicalEvent 不是 pin，也不是完整设备行为。它只是后续各层都能共同理解的“通信事实”。实现见
+CanonicalEvent 不是 pin，也不是完整设备行为。observation、generator 或调用方可以先构造一个候选值；
+只有 session 接受并赋予 trace index 后，它才成为该次运行中已提交的通信事实。实现见
 [`semantics/event.py`](../../../protocol_model/semantics/event.py)。
 
 <a id="schema"></a>
@@ -46,7 +47,7 @@ Schema 有两个方向的用途：
 
 `EventOffer` 只是“当前允许生成哪类事件、哪些字段已经固定”的部分赋值，不是已经发生的事件，也不是
 完整状态空间探索。当前生成属于 state-aware sampling。实现见
-[`link/protocol.py`](../../../protocol_model/link/protocol.py) 和
+[`interface/protocol.py`](../../../protocol_model/interface/protocol.py) 和
 [`semantics/generation.py`](../../../protocol_model/semantics/generation.py)。
 
 <a id="declarations"></a>
@@ -60,8 +61,10 @@ Schema 有两个方向的用途：
 | `ResourceDecl` | 什么东西会被占用并释放 | 一个未完成 APB transfer；AXI pending read slot |
 | `ObligationDecl` | 发生 A 后仍欠着什么 B | READ 已接受，因此之后需要 READ_RESPONSE |
 
-它们都带 scope：event、link、virtual_dut 或 system。Scope 表示“至少要看到多大范围才能判断”，用于避免
-把设备功能、单 link 规则和全局网络约束混在一起。
+它们都带 scope：event、transport、interface、virtual_dut 或 system。Scope 表示“至少要看到哪类边界才能
+判断”，用于避免把设备功能、接口局部规则和全局网络约束混在一起。Transport-hop 与 Interface 是两个
+观察面：一个检查相邻 TX→RX 的 flow control，另一个检查完整逻辑接口内的事件和事务关系，二者不是简单
+的上下级替代关系。
 
 有限 trace 中：
 
@@ -76,14 +79,14 @@ Schema 有两个方向的用途：
 ## 4. SemanticFragment：可以组合和追踪的规则包
 
 SemanticFragment 把 constraints、resources、obligations、dependencies 和来源组织成具名片段。协议定义
-可以组合多个 fragment，并在实例化时加 namespace，避免不同 link 的规则和资源混名。
+可以组合多个 fragment，并在实例化时加 namespace，避免不同 interface instance 的规则和资源混名。
 
 需要注意：声明进入 fragment，不代表当前有一个通用求解器自动执行了所有文字规则。当前真正的执行
 来源主要是：
 
 - EventSchema 的字段与事件局部约束；
 - monitor 的状态迁移；
-- LinkSession 对有界资源的用量检查。
+- InterfaceSession 对有界资源的用量检查。
 
 Fragment 同时承担 requirement catalog、诊断来源和未来分析 IR 的作用。实现见
 [`semantics/fragment.py`](../../../protocol_model/semantics/fragment.py)。
@@ -101,7 +104,7 @@ Fragment 同时承担 requirement catalog、诊断来源和未来分析 IR 的�
 ```
 
 Monitor 是最常见的 SemanticComponent：它保存 pending token、beat count、FIFO descriptor 等最小历史。
-LinkSession 将多个 monitor 同步运行，只有所有检查都接受时才提交状态。
+InterfaceSession 将多个 monitor 同步运行，只有所有检查都接受时才提交状态。
 
 实现见 [`semantics/component.py`](../../../protocol_model/semantics/component.py)。
 
@@ -120,4 +123,4 @@ response 依赖 request；两个不同 AXI ID 的 response 可能没有相互因
 - 不连接多个模块；那属于 SystemProtocol；
 - 不自动证明无限时间上的 progress；当前主要处理有限行为与显式状态。
 
-下一步阅读：[通用模式与 LinkProtocol](02-patterns-and-link-protocol.md)。
+下一步阅读：[通用模式与 InterfaceProtocol](02-patterns-and-interface-protocol.md)。

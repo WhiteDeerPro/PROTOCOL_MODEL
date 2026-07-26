@@ -7,7 +7,8 @@ import json
 from itertools import groupby
 from typing import Callable, Iterable
 
-from protocol_model import AtomicFrame, CanonicalEvent, ReadyValidSignals
+from protocol_model.observation import AtomicFrame, ReadyValidSignals
+from protocol_model.semantics import CanonicalEvent
 
 from common import AXI4_CHANNELS, ExecutionMode
 from execution import ExampleRun
@@ -654,7 +655,7 @@ def scope_dot() -> str:
   node [shape=box, style="rounded,filled", fontname="sans-serif", margin="0.15,0.10"];
   inputs [label="24 named inputs\\nCanonicalEvent or AtomicFrame\\n24 个具名输入轨迹", fillcolor="#f7f0ff", color="#7652a8"];
   observation [label="Optional observation lowering\\nready/valid + reset\\n可选观察层下沉", fillcolor="#fff7dd", color="#a87d21"];
-  link [label="AXI4 LinkProtocol session\\ngeometry · join · lifecycle\\n几何 · 关联 · 生命周期", fillcolor="#eaf8ef", color="#2d8650"];
+  link [label="AXI4 InterfaceProtocol session\\ngeometry · join · lifecycle\\n几何 · 关联 · 生命周期", fillcolor="#eaf8ef", color="#2d8650"];
   evidence [label="Per-case evidence\\nresult · waveform · causality\\n结果 · 波形 · 因果关系", fillcolor="#fff0ee", color="#a84a3d"];
   inputs -> observation -> link -> evidence;
   boundary [shape=note, label="Event-level waves show model sequence; AtomicFrame waves show protocol observations.\\nNeither is an RTL pin/VCD capture.\\n事件波形展示模型顺序；AtomicFrame 波形展示协议观察，均非 RTL/VCD。", fillcolor="#ffffff", color="#777777"];
@@ -664,7 +665,7 @@ def scope_dot() -> str:
 
 
 def network_dot(system) -> str:
-    link = next(iter(system.links.values()))
+    link = next(iter(system.connections.values()))
     manager = link.endpoints["manager"]
     subordinate = link.endpoints["subordinate"]
     manager_dut = system.virtual_duts[manager.dut]
@@ -686,12 +687,13 @@ def network_dot(system) -> str:
   graph [bgcolor="white", pad=0.25, nodesep=0.55, ranksep=0.75, splines=polyline];
   node [shape=box, style="rounded,filled", fontname="sans-serif", margin="0.18,0.12", penwidth=1.5];
   requester [label={_quote(manager_label)}, fillcolor="#eef5ff", color="#3169a8"];
-  link [label="axi4-link\\nAXI4 LinkProtocol\\nAW · W · B · AR · R", fillcolor="#eaf8ef", color="#2d8650"];
   endpoint [label={_quote(subordinate_label)}, fillcolor="#fff4e7", color="#b56b21"];
-  requester -> link [dir=both, color="#3169a8", penwidth=1.6];
-  link -> endpoint [dir=both, color="#b56b21", penwidth=1.6];
+  requester -> endpoint [dir=both, color="#2d8650", penwidth=1.8,
+    label="AXI4\\naxi4-link · m_axi ↔ s_axi\\nAW · W · B · AR · R",
+    fontname="sans-serif", fontsize=10, fontcolor="#245f3d"];
   note [shape=note, label="Structural context only: examples execute protocol semantics, not endpoint backends.\\n仅表示结构上下文：示例执行协议语义，不执行端点 backend。", fillcolor="#ffffff", color="#777777", fontsize=10];
-  note -> link [style=dashed, arrowhead=none, color="#777777", constraint=false];
+  note -> endpoint [style=dashed, arrowhead=none, color="#777777", constraint=false,
+    label="one InterfaceConnection instance"];
 }}
 '''
 
@@ -737,14 +739,14 @@ def _theme_sections(runs: tuple[ExampleRun, ...], *, language: str) -> str:
                 summary = f"查看 `{run.case.name}` 的波形与因果图"
                 note = (
                     "事件级波形的一列是一笔 CanonicalEvent，不表示 pin/cycle。"
-                    if run.case.mode is ExecutionMode.LINK
+                    if run.case.mode is ExecutionMode.INTERFACE
                     else "该波形投影 AtomicFrame 中的 ready/valid 采样。"
                 )
             else:
                 summary = f"View waveform and causality for `{run.case.name}`"
                 note = (
                     "One event-level column is one CanonicalEvent, not pin/cycle timing."
-                    if run.case.mode is ExecutionMode.LINK
+                    if run.case.mode is ExecutionMode.INTERFACE
                     else "This waveform projects ready/valid samples from AtomicFrame."
                 )
             details.append(

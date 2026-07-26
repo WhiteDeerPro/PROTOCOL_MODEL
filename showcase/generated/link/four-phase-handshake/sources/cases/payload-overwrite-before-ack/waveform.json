@@ -1,0 +1,67 @@
+{
+  "signal": [
+    {
+      "name": "OBSERVATION ORDER · not clock",
+      "wave": "===",
+      "data": [
+        "S0",
+        "S1",
+        "S2"
+      ]
+    },
+    {
+      "name": "timestamp note (ns)",
+      "wave": "===",
+      "data": [
+        "0",
+        "2",
+        "7.5"
+      ]
+    },
+    {
+      "name": "pin · REQ",
+      "wave": "01."
+    },
+    {
+      "name": "pin · ACK",
+      "wave": "0.."
+    },
+    {
+      "name": "pin · bundled event",
+      "wave": "x==",
+      "data": [
+        "ref=23 · 0x31",
+        "ref=23 · 0xC7"
+      ]
+    },
+    {
+      "name": "model · observer post-state",
+      "wave": "===",
+      "data": [
+        "idle_00",
+        "requested_10",
+        "REJECT · 10 requested"
+      ]
+    },
+    {
+      "name": "model · accepted TRANSFER",
+      "wave": "0.."
+    },
+    {
+      "name": "model · verdict / diagnostic",
+      "wave": "x.=",
+      "data": [
+        "showcase.payload-overwrite-before-ack.event_stability"
+      ]
+    }
+  ],
+  "head": {
+    "text": "非法传输：等待 ACK 时 payload 被覆盖"
+  },
+  "foot": {
+    "text": "Edge-complete logical snapshots · timestamps are annotations · not a shared-clock RTL/VCD capture"
+  },
+  "config": {
+    "hscale": 3
+  }
+}

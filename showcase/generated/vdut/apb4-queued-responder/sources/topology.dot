@@ -1,0 +1,41 @@
+digraph apb4_queued_demo {
+  rankdir=TB;
+  label="APB4 integrated VirtualDut demo / APB4 集成后虚拟模块实例";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.3, nodesep=0.48, ranksep=0.55, splines=polyline, compound=true];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", margin="0.15,0.10"];
+  edge [fontname="sans-serif", fontsize=9, color="#456579"];
+
+  controller [label="Scenario-owned random controller\nseed 20260717 · protocol-valid offers\n场景拥有，不是 DUT 内部随机状态", fillcolor="#f5efff", color="#7356a8"];
+
+  subgraph cluster_source {
+    label="random_source VirtualDut";
+    color="#8ab2d1";
+    style="rounded";
+    source_backend [label="NoOp backend\nconcrete module boundary", fillcolor="#eef5ff", color="#3169a8"];
+    source_attachment [label="EmptyEndpointAttachment\nmode: idle_source\nno autonomous APB emission", fillcolor="#e0f2fe", color="#0284c7"];
+    source_port [label="apb interface port\nAPB4 · requester", fillcolor="#dbeafe", color="#2563eb"];
+    { rank=same; source_backend; source_attachment; source_port; }
+    source_backend -> source_attachment [style=dotted, label="no autonomous emission"];
+    source_attachment -> source_port [label="declared output"];
+  }
+
+  subgraph cluster_target {
+    label="queued_memory VirtualDut · integration recipe result";
+    color="#d29752";
+    style="rounded";
+    target_port [label="apb interface port\nAPB4 · completer", fillcolor="#dbeafe", color="#2563eb"];
+    attachment [label="ApbCompleterAttachment\nAPB4 event ↔ AddressAccess", fillcolor="#fff4e7", color="#b56b21"];
+    fifo [label="QueuedAddressResponderBackend\nFIFO capacity 2\nDELAYING → READY → service", fillcolor="#fff8dc", color="#a17a1c"];
+    delay [label="dynamic delay policy\nWRITE=2 · READ=1 advances", fillcolor="#fff8dc", color="#a17a1c"];
+    handler [label="AddressSpace handler\nMemoryRegion 0x1000..0x10ff", fillcolor="#f0f7ed", color="#4f8243"];
+    { rank=same; attachment; fifo; }
+    { rank=same; delay; handler; }
+    target_port -> attachment -> fifo -> delay -> handler;
+  }
+
+  scheduler [label="explicit service boundary\nDutAdvanceAction(queued_memory)", fillcolor="#f4f5f6", color="#6f7d86"];
+  controller -> source_port [style=dashed, label="drives protocol-valid offer"];
+  source_port -> target_port [dir=none, penwidth=1.7, label=<<B>AMBA APB4</B><BR/><FONT POINT-SIZE="8">apb4_bus · random_source.apb ↔ queued_memory.apb</FONT>>];
+  scheduler -> fifo [style=dashed, label="advance", lhead=cluster_target];
+}

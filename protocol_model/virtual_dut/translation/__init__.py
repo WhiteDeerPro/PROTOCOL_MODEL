@@ -1,7 +1,23 @@
 """Protocol-neutral construction and execution of typed bridge translations."""
 
+from .address import (
+    ADDRESS_ACCESS_SIGNATURE,
+    AddressRouteStage,
+    AddressShapeGuardStage,
+)
+from .address_burst import (
+    ADDRESS_BURST_SIGNATURE,
+    AddressBurstRouteStage,
+    AddressBurstShapeGuardStage,
+    BurstToAccessStage,
+)
+from .address_operation_backend import (
+    AddressOperationTranslationBridgeBackend,
+    AddressOperationTranslationState,
+)
+
 from .contract import (
-    BridgeProfile,
+    TranslationProfile,
     CapabilityGap,
     CapabilityProjection,
     CapabilityProjectionResult,
@@ -60,8 +76,17 @@ from .stage import (
 )
 
 __all__ = [
+    "ADDRESS_ACCESS_SIGNATURE",
+    "ADDRESS_BURST_SIGNATURE",
     "Applicability",
-    "BridgeProfile",
+    "AddressRouteStage",
+    "AddressBurstRouteStage",
+    "AddressBurstShapeGuardStage",
+    "AddressOperationTranslationBridgeBackend",
+    "AddressOperationTranslationState",
+    "AddressShapeGuardStage",
+    "TranslationProfile",
+    "BurstToAccessStage",
     "CapabilityClosure",
     "CapabilityGap",
     "CapabilityProjection",

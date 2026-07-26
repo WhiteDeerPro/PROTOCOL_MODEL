@@ -9,8 +9,8 @@ from typing import Mapping
 from protocol_model.semantics import ConstraintScope, SemanticFault
 
 from ..attachments.stream import StreamReceiverAttachment, StreamTransfer
-from ..binding.port import PortAttachmentBinding
-from .base import VirtualDutModel
+from ..binding.port import InterfaceAttachmentBinding
+from .base import VirtualDutBackend
 from .transition import DutTransition, PortInput
 
 
@@ -33,17 +33,17 @@ class StreamCaptureState:
         )
 
 
-class StreamCaptureBackend(VirtualDutModel):
+class StreamCaptureBackend(VirtualDutBackend):
     """Protocol-neutral sink fixture retaining decoded transfers in order."""
 
     def __init__(
-        self, bindings: Mapping[str, PortAttachmentBinding]
+        self, bindings: Mapping[str, InterfaceAttachmentBinding]
     ) -> None:
         bindings = dict(bindings)
         if not bindings:
             raise ValueError("stream capture backend requires a binding")
         if any(
-            not isinstance(item, PortAttachmentBinding)
+            not isinstance(item, InterfaceAttachmentBinding)
             for item in bindings.values()
         ):
             raise TypeError("stream capture backend requires attachment bindings")
@@ -64,7 +64,7 @@ class StreamCaptureBackend(VirtualDutModel):
 
     def local_attachment_bindings(
         self,
-    ) -> Mapping[str, PortAttachmentBinding]:
+    ) -> Mapping[str, InterfaceAttachmentBinding]:
         return self.bindings
 
     def initial_state(self) -> StreamCaptureState:

@@ -3,7 +3,7 @@
 我们发布 Protocol Model 的首轮 technical preview，并提供第一个可执行切片。它是一个面向片上通信
 的组合式语义建模与验证研究原型，尝试让协议规则、场景生成、检查与诊断共享一条构造路径。
 
-**CURRENT｜当前已有：** 项目从 typed event、relation 和 resource 构造 AXI4 等 LinkProtocol，再通过具名
+**CURRENT｜当前已有：** 项目从 typed event、relation 和 resource 构造 AXI4 等 InterfaceProtocol，再通过具名
 VirtualDut 与 typed port 组成同步微系统。当前 AXI4 范围包括 burst、narrow/unaligned、read interleave 与
 AW/W/B correlation；也已有 AXI4→APB bridge witness、因果图和产物管理。这不代表完整 compliance、任意 RTL
 验证或形式化证明。

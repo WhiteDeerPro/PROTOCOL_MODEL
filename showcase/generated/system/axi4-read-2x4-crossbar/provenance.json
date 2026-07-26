@@ -1,0 +1,30 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "axi4-read-2x4-crossbar",
+  "source": "showcase/demos/system/axi4_read_2x4_crossbar/run.py",
+  "command": "python3 showcase/demos/system/axi4_read_2x4_crossbar/run.py",
+  "protocol_model_version": "0.4.0",
+  "execution_models": [
+    "SystemSession",
+    "Axi4ReadCrossbarBackend",
+    "SteppedEmissionBackend",
+    "PassiveAddressSpaceBackend"
+  ],
+  "renderers": {
+    "topology": "Graphviz + shared system projection",
+    "interconnect_interface_map": "Graphviz + shared typed address-interconnect projection",
+    "model_steps": "WaveDrom + demo-local semantic post-state projection",
+    "causality": "Graphviz + shared SystemTrace projection"
+  },
+  "interconnect_interface_map": {
+    "view_kind": "interconnect_interface_map",
+    "scope": "system",
+    "evidence_basis": "resolved",
+    "projection_intent": "direct",
+    "time_basis": "none",
+    "source_schema": "protocol-model.address-interconnect-view/v1",
+    "detail": "standard"
+  },
+  "presentation_boundary": "accepted canonical AXI4 AR/R events and model steps; not pin-level arbitration, ACLK timing, RTL, or VCD",
+  "construction_boundary": "one AddressRouterContract constructs and checks a parameterized two-ingress/four-egress read crossbar"
+}

@@ -42,6 +42,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation.snp import (
 class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
     REQUESTER = 0x07
     PEER = 0x08
+    CLEAN_PEER = 0x09
     HOME = 0x21
     ADDRESS = 0x8000
     DATA = (1 << 400) | 0xC1EA
@@ -63,13 +64,24 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
             transition.fault.rule.rsplit(".", 1)[-1],
         )
 
-    def build_rn(self, name: str, node_id: int, state: ChiCacheState):
+    def build_rn(
+        self,
+        name: str,
+        node_id: int,
+        state: ChiCacheState,
+        *,
+        data: int | None = None,
+    ):
         return build_chi_cache_participant_fixture(
             name,
             node_id,
             self.HOME,
             initial_lines=(
-                ChiCacheLine(self.ADDRESS, state, self.DATA),
+                ChiCacheLine(
+                    self.ADDRESS,
+                    state,
+                    self.DATA if data is None else data,
+                ),
             ),
         )
 
@@ -78,6 +90,7 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         *,
         sharers: frozenset[int],
         unique_owner: int | None = None,
+        shared_dirty_owner: int | None = None,
         allow_dirty_data_transfer: bool = False,
     ) -> ChiCoherentHomeNode:
         return ChiCoherentHomeNode(
@@ -89,6 +102,7 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
                     self.DATA,
                     sharers=sharers,
                     unique_owner=unique_owner,
+                    shared_dirty_owner=shared_dirty_owner,
                 ),
             ),
             initial_snoop_transaction_id=self.SNOOP_ID,
@@ -266,10 +280,15 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         self.assertEqual(state, transition.state)
         self.assertFalse(transition.emissions)
 
-    def test_snp_clean_invalid_rejects_a_dirty_peer_without_mutation(
+    def test_snp_clean_invalid_returns_shared_dirty_data_and_invalidates_peer(
         self,
     ) -> None:
-        peer = self.build_rn("dirty_peer", self.PEER, ChiCacheState.UD)
+        peer = self.build_rn(
+            "shared_dirty_peer",
+            self.PEER,
+            ChiCacheState.SD,
+            data=self.DIRTY_DATA,
+        )
         state = peer.initial_state()
         snoop = ChiNetworkPacket.snoop(
             ChiSnpCleanInvalidMessage(self.SNOOP_ID, self.ADDRESS),
@@ -277,22 +296,34 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
             target_id=self.PEER,
         )
 
-        transition = peer.step(state, ChiRnAcceptSnoop(snoop))
+        transition = self.apply(peer, state, ChiRnAcceptSnoop(snoop))
 
-        self.assert_fault_rule(transition, "clean_unique_dirty_peer")
-        self.assertEqual(state, transition.state)
-        self.assertFalse(transition.emissions)
+        self.assertIs(
+            ChiCacheState.I,
+            transition.state.line_at(self.ADDRESS).state,
+        )
+        self.assertNotIn(self.ADDRESS, transition.state.cache.lines)
+        self.assertEqual(1, len(transition.emissions))
+        response = transition.emissions[0]
+        self.assertIsInstance(response.message, ChiSnpRespDataMessage)
+        self.assertIs(ChiRespCode.I_PD, response.message.response)
+        self.assertEqual(self.DIRTY_DATA, response.message.data)
+        self.assertEqual(self.SNOOP_ID, response.message.transaction_id)
+        self.assertEqual(self.PEER, response.source_id)
+        self.assertEqual(self.HOME, response.target_id)
 
-    def test_home_rejects_clean_unique_dirty_data_without_mutation(
+    def test_home_commits_shared_dirty_data_and_unique_authority_atomically(
         self,
     ) -> None:
         home = self.build_home(
             sharers=frozenset((self.REQUESTER, self.PEER)),
+            shared_dirty_owner=self.PEER,
             allow_dirty_data_transfer=True,
         )
+        initial = home.initial_state()
         accepted = self.apply(
             home,
-            home.initial_state(),
+            initial,
             ChiHomeAcceptCleanUnique(self.request_packet()),
         )
         snoop = accepted.emissions[0]
@@ -306,14 +337,174 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
             target_id=self.HOME,
         )
 
-        transition = home.step(
+        collected = self.apply(
+            home,
             accepted.state,
             ChiHomeAcceptSnoopResponse(dirty_response),
         )
 
-        self.assert_fault_rule(transition, "clean_unique_dirty_data")
-        self.assertEqual(accepted.state, transition.state)
-        self.assertFalse(transition.emissions)
+        before_ack = collected.state.directory[self.ADDRESS]
+        self.assertEqual(self.DATA, before_ack.data)
+        self.assertEqual(
+            frozenset((self.REQUESTER, self.PEER)),
+            before_ack.sharers,
+        )
+        self.assertEqual(self.PEER, before_ack.shared_dirty_owner)
+        self.assertIsNone(before_ack.unique_owner)
+        pending = collected.state.pending[self.DBID]
+        self.assertEqual(self.DIRTY_DATA, pending.dirty_result.data)
+        self.assertEqual(self.DIRTY_DATA, pending.memory_update_data)
+        completion = collected.emissions[0]
+        self.assertIsInstance(completion.message, ChiCompMessage)
+        self.assertIs(ChiRespCode.UC, completion.message.response)
+
+        ack = ChiNetworkPacket.response(
+            ChiCompAckMessage(transaction_id=self.DBID),
+            source_id=self.REQUESTER,
+            target_id=self.HOME,
+        )
+        retired = self.apply(
+            home,
+            collected.state,
+            ChiHomeAcceptCompAck(ack),
+        )
+
+        entry = retired.state.directory[self.ADDRESS]
+        self.assertEqual(self.DIRTY_DATA, entry.data)
+        self.assertEqual(self.REQUESTER, entry.unique_owner)
+        self.assertFalse(entry.sharers)
+        self.assertIsNone(entry.shared_dirty_owner)
+        self.assertFalse(retired.state.pending)
+
+    def test_home_collects_mixed_clean_rsp_and_shared_dirty_dat(
+        self,
+    ) -> None:
+        home = self.build_home(
+            sharers=frozenset(
+                (self.REQUESTER, self.PEER, self.CLEAN_PEER)
+            ),
+            shared_dirty_owner=self.PEER,
+            allow_dirty_data_transfer=True,
+        )
+        initial = home.initial_state()
+        accepted = self.apply(
+            home,
+            initial,
+            ChiHomeAcceptCleanUnique(self.request_packet()),
+        )
+        self.assertEqual(
+            {self.PEER, self.CLEAN_PEER},
+            {packet.target_id for packet in accepted.emissions},
+        )
+
+        clean_response = ChiNetworkPacket.response(
+            ChiSnpRespMessage(
+                transaction_id=self.SNOOP_ID,
+                response=ChiRespCode.I,
+            ),
+            source_id=self.CLEAN_PEER,
+            target_id=self.HOME,
+        )
+        clean_collected = self.apply(
+            home,
+            accepted.state,
+            ChiHomeAcceptSnoopResponse(clean_response),
+        )
+        self.assertFalse(clean_collected.emissions)
+        self.assertEqual(initial.directory, clean_collected.state.directory)
+
+        dirty_response = ChiNetworkPacket.data(
+            ChiSnpRespDataMessage(
+                transaction_id=self.SNOOP_ID,
+                data=self.DIRTY_DATA,
+                response=ChiRespCode.I_PD,
+            ),
+            source_id=self.PEER,
+            target_id=self.HOME,
+        )
+        all_collected = self.apply(
+            home,
+            clean_collected.state,
+            ChiHomeAcceptSnoopResponse(dirty_response),
+        )
+
+        self.assertEqual(1, len(all_collected.emissions))
+        self.assertIsInstance(
+            all_collected.emissions[0].message,
+            ChiCompMessage,
+        )
+        pending = all_collected.state.pending[self.DBID]
+        self.assertTrue(pending.completion_sent)
+        self.assertEqual(
+            {self.PEER, self.CLEAN_PEER},
+            set(pending.snoop_results),
+        )
+        self.assertEqual(self.DIRTY_DATA, pending.dirty_result.data)
+        self.assertEqual(self.DIRTY_DATA, pending.memory_update_data)
+        self.assertEqual(initial.directory, all_collected.state.directory)
+
+    def test_home_rejects_a_second_pass_dirty_source_without_mutation(
+        self,
+    ) -> None:
+        home = self.build_home(
+            sharers=frozenset(
+                (self.REQUESTER, self.PEER, self.CLEAN_PEER)
+            ),
+            shared_dirty_owner=self.PEER,
+            allow_dirty_data_transfer=True,
+        )
+        accepted = self.apply(
+            home,
+            home.initial_state(),
+            ChiHomeAcceptCleanUnique(self.request_packet()),
+        )
+
+        def dirty_packet(source_id: int, data: int) -> ChiNetworkPacket:
+            return ChiNetworkPacket.data(
+                ChiSnpRespDataMessage(
+                    transaction_id=self.SNOOP_ID,
+                    data=data,
+                    response=ChiRespCode.I_PD,
+                ),
+                source_id=source_id,
+                target_id=self.HOME,
+            )
+
+        first = self.apply(
+            home,
+            accepted.state,
+            ChiHomeAcceptSnoopResponse(
+                dirty_packet(self.PEER, self.DIRTY_DATA)
+            ),
+        )
+        second = home.step(
+            first.state,
+            ChiHomeAcceptSnoopResponse(
+                dirty_packet(self.CLEAN_PEER, self.DIRTY_DATA + 1)
+            ),
+        )
+
+        self.assertIsNotNone(second.fault)
+        self.assertIn("dirty", second.fault.reason.lower())
+        self.assertEqual(first.state, second.state)
+        self.assertFalse(second.emissions)
+
+    def test_shared_dirty_owner_must_be_one_non_unique_sharer(self) -> None:
+        with self.assertRaises(ValueError):
+            ChiHomeDirectoryEntry(
+                self.ADDRESS,
+                self.DATA,
+                sharers=frozenset((self.REQUESTER,)),
+                shared_dirty_owner=self.PEER,
+            )
+        with self.assertRaises(ValueError):
+            ChiHomeDirectoryEntry(
+                self.ADDRESS,
+                self.DATA,
+                sharers=frozenset((self.REQUESTER, self.PEER)),
+                unique_owner=self.CLEAN_PEER,
+                shared_dirty_owner=self.PEER,
+            )
 
     def test_home_requires_matching_shared_directory_authority(
         self,

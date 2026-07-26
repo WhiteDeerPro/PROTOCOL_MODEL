@@ -25,6 +25,9 @@ from protocol_model.protocols.amba.chi.issue_h.participants.capability import (
     CHI_CLEAN_UNIQUE_CLEAN_PEERS_HOME_CAPABILITIES,
     CHI_CLEAN_UNIQUE_CLEAN_PEERS_REQUESTER_CAPABILITIES,
     CHI_CLEAN_UNIQUE_CLEAN_PEERS_SNOOPEE_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_HOME_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_SNOOPEE_CAPABILITIES,
+    CHI_HOME_PASS_DIRTY_MEMORY_UPDATE,
 )
 from protocol_model.protocols.amba.chi.issue_h.interface import (
     ChiReadNoSnpDirectLedger,
@@ -65,8 +68,11 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
 )
 from protocol_model.protocols.amba.chi.issue_h.system.capability import (
     CHI_CLEAN_UNIQUE_CLEAN_PEERS_DEFINITION,
+    CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION,
     CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+    CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
     CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE,
 )
 from protocol_model.protocols.amba.chi.issue_h.transport import (
     CHI_ISSUE_H_TRANSPORT_FAMILY,
@@ -691,6 +697,198 @@ class ChiIssueHCleanUniqueCleanPeersCapabilityTest(unittest.TestCase):
             },
             set(evidence.flows),
         )
+
+
+class ChiIssueHCleanUniqueSharedDirtyPeerCapabilityTest(
+    unittest.TestCase
+):
+    @staticmethod
+    def contract(*snoopees: str) -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset(
+                (CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,)
+            ),
+            role_sets={"snoopee": frozenset(snoopees)},
+        )
+
+    @staticmethod
+    def participants(
+        *snoopees: str,
+        home_memory_update: bool = True,
+    ):
+        home_extension = (
+            CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_HOME_CAPABILITIES
+        )
+        if not home_memory_update:
+            home_extension = home_extension - frozenset(
+                (CHI_HOME_PASS_DIRTY_MEMORY_UPDATE,)
+            )
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_CLEAN_UNIQUE_CLEAN_PEERS_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_CLEAN_UNIQUE_CLEAN_PEERS_HOME_CAPABILITIES
+                | home_extension,
+            ),
+            *(
+                ChiParticipantCapability(
+                    snoopee,
+                    CHI_CLEAN_UNIQUE_CLEAN_PEERS_SNOOPEE_CAPABILITIES
+                    | (
+                        CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_SNOOPEE_CAPABILITIES
+                    ),
+                )
+                for snoopee in snoopees
+            ),
+        )
+
+    @staticmethod
+    def flows(*snoopees: str, include_data: bool = True):
+        flows = list(
+            ChiIssueHCleanUniqueCleanPeersCapabilityTest.flows(
+                *snoopees
+            )
+        )
+        if include_data:
+            flows.extend(
+                ChiFlowCapability(
+                    f"snoop_data_{snoopee}",
+                    snoopee,
+                    "hn0",
+                    ChiChannelKind.DAT,
+                )
+                for snoopee in snoopees
+            )
+        return tuple(flows)
+
+    @staticmethod
+    def system_capabilities():
+        return frozenset(
+            (
+                CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE,
+                CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE,
+            )
+        )
+
+    def test_extension_adds_dat_flow_to_clean_unique_base(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1", "rn2"),
+            participants=self.participants("rn1", "rn2"),
+            flows=self.flows("rn1", "rn2"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        evidence = resolved.require(
+            CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+        )
+        self.assertEqual(
+            (CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,),
+            evidence.dependencies,
+        )
+        self.assertIs(
+            CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            ],
+        )
+        self.assertEqual(
+            {
+                "home",
+                "snoopee[rn1]",
+                "snoopee[rn2]",
+            },
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {
+                "clean_unique_snoop_data[rn1->hn0]",
+                "clean_unique_snoop_data[rn2->hn0]",
+            },
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            (ChiChannelKind.DAT,),
+            tuple(
+                requirement.channel
+                for requirement in
+                CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION.flows
+            ),
+        )
+        self.assertTrue(
+            resolved.supports(CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS)
+        )
+
+    def test_missing_snoopee_dat_path_is_a_flow_gap(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1"),
+            participants=self.participants("rn1"),
+            flows=self.flows("rn1", include_data=False),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            )
+            if gap.kind is ChiCapabilityGapKind.FLOW
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual(
+            "clean_unique_snoop_data[rn1->hn0]",
+            gaps[0].subject,
+        )
+        self.assertTrue(
+            resolved.supports(CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS)
+        )
+
+    def test_home_must_claim_pass_dirty_memory_update(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1"),
+            participants=self.participants(
+                "rn1",
+                home_memory_update=False,
+            ),
+            flows=self.flows("rn1"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        gap = next(
+            gap
+            for gap in resolved.gaps(
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            )
+            if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            and gap.subject == "hn0"
+        )
+        self.assertEqual(
+            (CHI_HOME_PASS_DIRTY_MEMORY_UPDATE,),
+            gap.missing,
+        )
+
+    def test_shared_dirty_profile_requires_a_peer(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        gap = next(
+            gap
+            for gap in resolved.gaps(
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            )
+            if gap.kind is ChiCapabilityGapKind.ROLE
+        )
+        self.assertEqual("snoopee", gap.subject)
 
 
 class ChiIssueHDirtyWriteBackCapabilityTest(unittest.TestCase):

@@ -3,8 +3,10 @@
 The components operate at a delivered-Network-packet boundary.  RN behavior
 uses an injected protocol-neutral cache core and owns CHI permission and
 transaction state.  Home behavior owns directory and transaction state in the
-current slice.  Neither decides how a packet crosses a topology; output is
-another explicit ``ChiNetworkPacket`` that a transport runtime can enqueue.
+current slice.  ``SD`` is present only as the minimum shared-dirty authority
+needed by dirty-peer CleanUnique; it is not a general MOESI profile.  Neither
+participant decides how a packet crosses a topology; output is another
+explicit ``ChiNetworkPacket`` that a transport runtime can enqueue.
 """
 
 from __future__ import annotations
@@ -76,10 +78,11 @@ def _require_line_address(address: int) -> None:
 
 
 class ChiCacheState(str, Enum):
-    """Stable cache states supported by the current MESI-like profile."""
+    """Stable cache states supported by the restricted coherence profiles."""
 
     I = "I"
     SC = "SC"
+    SD = "SD"
     UC = "UC"
     UD = "UD"
 
@@ -872,14 +875,16 @@ class ChiCoherentRnNode(
         ):
             response = ChiRespCode.I
             if line is not None and line.state is not ChiCacheState.I:
-                if line.state is ChiCacheState.UD:
-                    if isinstance(snoop, ChiSnpCleanInvalidMessage):
+                if line.state in (ChiCacheState.SD, ChiCacheState.UD):
+                    if (
+                        line.state is ChiCacheState.SD
+                        and not isinstance(snoop, ChiSnpCleanInvalidMessage)
+                    ):
                         return self._fault(
                             state,
-                            "clean_unique_dirty_peer",
-                            "the clean-only CleanUnique slice rejects a "
-                            "dirty peer; SnpRespData_I_PD memory update is "
-                            "not implemented",
+                            "shared_dirty_snoop_profile",
+                            "the restricted SD profile is consumed only by "
+                            "SnpCleanInvalid",
                         )
                     assert line.data is not None
                     response_message = ChiSnpRespDataMessage(
@@ -928,6 +933,13 @@ class ChiCoherentRnNode(
                     )
             elif line.state is ChiCacheState.SC:
                 response = ChiRespCode.SC
+            elif line.state is ChiCacheState.SD:
+                return self._fault(
+                    state,
+                    "shared_dirty_snoop_profile",
+                    "the restricted SD profile is consumed only by "
+                    "SnpCleanInvalid",
+                )
             elif line.state is ChiCacheState.UD:
                 if isinstance(snoop, ChiSnpSharedMessage):
                     return self._fault(
@@ -1325,14 +1337,20 @@ class ChiCoherentRnNode(
 class ChiHomeDirectoryEntry:
     """Stable holder authority plus the Home backing copy for one line.
 
-    ``data`` is current for clean holders.  It can be stale while the unique
-    owner is in ``UD``; the latest value then travels with PassDirty.
+    ``data`` is current when no cache owns dirty responsibility.  It can be
+    stale while the unique owner is ``UD`` or ``shared_dirty_owner`` is
+    ``SD``; the latest value then travels with PassDirty.
+
+    ``shared_dirty_owner`` is a deliberately narrow authority needed by the
+    dirty-peer CleanUnique profile.  It does not claim general MOESI/Owned,
+    forwarding, or shared-dirty replacement behavior.
     """
 
     address: int
     data: int
     sharers: frozenset[int] = frozenset()
     unique_owner: int | None = None
+    shared_dirty_owner: int | None = None
 
     def __post_init__(self) -> None:
         _require_line_address(self.address)
@@ -1350,6 +1368,19 @@ class ChiHomeDirectoryEntry:
             if sharers:
                 raise ValueError(
                     "unique owner and shared holders are exclusive states"
+                )
+        if self.shared_dirty_owner is not None:
+            _require_node_id(
+                "directory shared-dirty owner",
+                self.shared_dirty_owner,
+            )
+            if self.unique_owner is not None:
+                raise ValueError(
+                    "unique and shared-dirty owners are exclusive states"
+                )
+            if self.shared_dirty_owner not in sharers:
+                raise ValueError(
+                    "shared-dirty owner must belong to directory sharers"
                 )
         object.__setattr__(self, "sharers", sharers)
 
@@ -1433,14 +1464,6 @@ class ChiCoherentTransactionPending:
             raise ValueError(
                 "one coherent transaction cannot collect two dirty owners"
             )
-        if (
-            isinstance(self.request, ChiCleanUniqueMessage)
-            and any(result.data is not None for result in results.values())
-        ):
-            raise ValueError(
-                "the clean-only CleanUnique pending profile cannot collect "
-                "Snoop data"
-            )
         if type(self.completion_sent) is not bool:
             raise TypeError("completion_sent must be bool")
         object.__setattr__(self, "snoop_targets", targets)
@@ -1462,6 +1485,26 @@ class ChiCoherentTransactionPending:
             if result.passes_dirty
         )
         return results[0] if results else None
+
+    @property
+    def memory_update_data(self) -> int | None:
+        """Latest line retained by Home for a CleanUnique memory update.
+
+        A non-``None`` value is an explicit reference-backing obligation
+        owned by this pending transaction.  It remains live after ``Comp``
+        and is closed together with directory authority when ``CompAck`` is
+        accepted.  It is not evidence of a downstream SN or physical-media
+        commit.
+        """
+
+        dirty = self.dirty_result
+        if (
+            not isinstance(self.request, ChiCleanUniqueMessage)
+            or dirty is None
+        ):
+            return None
+        assert dirty.data is not None
+        return dirty.data
 
 
 @dataclass(frozen=True)
@@ -1854,14 +1897,23 @@ class ChiCoherentHomeNode(
                 return self._fault(
                     state,
                     "clean_unique_directory_state",
-                    "the clean-peer CleanUnique profile cannot consume an "
-                    "existing Unique owner",
+                    "CleanUnique cannot consume an existing Unique owner",
                 )
             if packet.source_id not in entry.sharers:
                 return self._fault(
                     state,
                     "clean_unique_requester_state",
                     "CleanUnique requester must already be a directory sharer",
+                )
+            if (
+                entry.shared_dirty_owner is not None
+                and not self.allow_dirty_data_transfer
+            ):
+                return self._fault(
+                    state,
+                    "clean_unique_shared_dirty_disabled",
+                    "shared-dirty CleanUnique requires a Home configured "
+                    "to accept PassDirty snoop data",
                 )
         if any(
             item.request.address == request.address
@@ -2044,25 +2096,43 @@ class ChiCoherentHomeNode(
                 "Home already consumed this Snoopee RSP or DAT result",
             )
         is_data = isinstance(response, ChiSnpRespDataMessage)
-        if (
-            is_data
-            and isinstance(pending_item.request, ChiCleanUniqueMessage)
-        ):
-            return self._fault(
-                state,
-                "clean_unique_dirty_data",
-                "the clean-only CleanUnique slice rejects dirty Snoop data; "
-                "Home memory update is not implemented",
-            )
         if is_data and not self.allow_dirty_data_transfer:
             return self._fault(
                 state,
                 "snoop_data_profile",
                 "Home dirty-data transfer profile is not enabled",
             )
+        if (
+            is_data
+            and response.response is ChiRespCode.I_PD
+            and pending_item.dirty_result is not None
+        ):
+            return self._fault(
+                state,
+                "multiple_dirty_owners",
+                "two Snoopees attempted to pass dirty responsibility",
+            )
         if isinstance(pending_item.request, ChiCleanUniqueMessage):
+            entry = state.directory[pending_item.request.address]
+            expects_dirty_data = (
+                packet.source_id == entry.shared_dirty_owner
+            )
+            if expects_dirty_data != is_data:
+                return self._fault(
+                    state,
+                    "clean_unique_shared_dirty_response",
+                    (
+                        "the directory shared-dirty owner must return "
+                        "SnpRespData_I_PD"
+                        if expects_dirty_data
+                        else "a clean CleanUnique peer must not return dirty "
+                        "SnpRespData; it must return SnpResp_I"
+                    ),
+                )
             allowed_responses = (
-                () if is_data else (ChiRespCode.I,)
+                (ChiRespCode.I_PD,)
+                if is_data
+                else (ChiRespCode.I,)
             )
         elif isinstance(pending_item.request, ChiReadUniqueMessage):
             allowed_responses = (
@@ -2180,10 +2250,9 @@ class ChiCoherentHomeNode(
             pending_item.request,
             (ChiCleanUniqueMessage, ChiReadUniqueMessage),
         ):
-            directory[entry.address] = ChiHomeDirectoryEntry(
-                entry.address,
-                entry.data,
-                unique_owner=pending_item.requester_id,
+            directory[entry.address] = self._commit_unique_authority(
+                entry,
+                pending_item,
             )
         else:
             sharers = set(entry.sharers)
@@ -2480,6 +2549,32 @@ class ChiCoherentHomeNode(
             ),
             source_id=self.node_id,
             target_id=pending.requester_id,
+        )
+
+    @staticmethod
+    def _commit_unique_authority(
+        entry: ChiHomeDirectoryEntry,
+        pending: ChiCoherentTransactionPending,
+    ) -> ChiHomeDirectoryEntry:
+        """Commit one completed Unique lifecycle at the reference backing seam.
+
+        CleanUnique absorbs ``PassDirty`` into the Home reference backing
+        before the requester becomes the directory Unique owner.  ReadUnique
+        instead passes dirty responsibility to the requester and therefore
+        retains the previous (possibly stale) backing value.
+
+        This seam is deliberately local to the fused reference Home.  A later
+        protocol-neutral backing target/SN attachment can replace the write
+        without moving directory authority into the memory implementation.
+        """
+
+        backing_data = entry.data
+        if pending.memory_update_data is not None:
+            backing_data = pending.memory_update_data
+        return ChiHomeDirectoryEntry(
+            entry.address,
+            backing_data,
+            unique_owner=pending.requester_id,
         )
 
     @staticmethod

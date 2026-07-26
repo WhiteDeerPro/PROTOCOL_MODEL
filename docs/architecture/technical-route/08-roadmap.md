@@ -39,6 +39,11 @@ MESI no-SD 路径也已闭合：
 →Home backing/directory commit`；它把 dirty unique line 收束为两个 clean shared copy，不引入 `SD`。
 `SC→ReadUnique→UC→local write→UD` 的重取数据式 upgrade 也已闭合；clean-peer
 `SC→CleanUnique→SnpCleanInvalid→Comp_UC→UC` 现可保留 requester 已有数据，不再为取得权限重取整行。
+受限 shared-dirty 扩展也已闭合：预置的唯一
+`SD`/`shared_dirty_owner` 经 `SnpCleanInvalid→SnpRespData_I_PD→I` 把最新数据交给 Home pending，
+Home 保持同址 reservation 到 `CompAck`，再更新融合式 reference backing 并提交 requester 为 unique
+owner。这里没有建立一般 `SD` 生成/维持 policy，也没有把 reference update 冒充独立 Memory/SN physical
+commit。
 第一条 construction authority
 切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home，并从
 coherence-domain membership 派生 `eligible Snoopees = members - requester`；NodeID、逐成员 capability
@@ -47,18 +52,21 @@ coherence-domain membership 派生 `eligible Snoopees = members - requester`；N
 
 1. 在已闭合的显式 `UD` topology writeback 基础上，增加 Retry/error/Snoop 并发与可选的
    victim/writeback scheduling；replacement policy 保持独立 refinement；
-2. 在已闭合 clean-peer `CleanUnique` 的基础上，分别补 dirty-peer
-   `SnpRespData_I_PD`/Home memory-update 分支、`MakeUnique` 与 clean `Evict`，继续闭合 MESI 的常用生命周期；
+2. 在已闭合 clean/shared-dirty-peer `CleanUnique` 的基础上，补 `MakeUnique` 与 clean `Evict`；同时把
+   Home 融合式 reference backing 拆到协议中立 target，并建立 coherent Home/main-memory 的 canonical
+   binder；只有验证目标需要观察 physical commit 时，再增加 topology-visible HN→SN flow；
 3. 增加同 line transient/hazard、Retry/error 组合、多 waiter policy、多个 pending emission batch 与
    wait-for projection；
-4. 再以 `SD`/Owned、shared-dirty authority 与 forwarding/DCT 检验 MOESI-like 扩展；
+4. 将当前只供 CleanUnique 消费的预置 `SD` 扩展为可生成、可维持的 Owned lifecycle，再以 dirty
+   `SnpShared`、owner handoff、replacement 与 forwarding/DCT 检验 MOESI-like 扩展；
 5. 第二种 packet network 提出相同接口后，再把 family scheduler 的稳定形状投影到通用 system runtime。
 
 当前每个 resolved feature scope 显式选择一个未进入 address-router translation 的 address claim 和一个
 scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 resolver 核对；同一 runtime 按地址动态
 切换多个 Home、由 SAM route 派生 system-visible window、remap 和跨 domain 执行尚未实现。
 read/retry/coherence profile 另固定单 Requester、受限 opcode 与 full-line DAT；
-AddressTarget 路径固定对齐和成功 completion。它们是上述工作的可执行起点；准确覆盖仍只在
+AddressTarget 路径固定对齐和成功 completion，coherent Home backing 则仍融合在 reference participant
+state。它们是上述工作的可执行起点；准确覆盖仍只在
 [实现状态](../implementation-status.md)维护。
 
 scheduled AXI4-Lite N×M crossbar 与 direct-neighbor address closure 已形成 S3 的第一条纵向切片；因此下一阶段

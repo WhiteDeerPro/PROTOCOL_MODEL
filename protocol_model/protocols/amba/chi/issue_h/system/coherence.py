@@ -6,11 +6,13 @@ Request Node that owns the corresponding protocol state.  Emitted packets can
 then be passed back through any compatible ``ChiTransportNetworkSession``.
 
 The profile is intentionally narrow.  It closes clean ``ReadShared`` and
-``ReadUnique`` lifecycles, a clean-peer ``CleanUnique`` permission upgrade,
-the ``UD`` owner-transfer path for ``ReadUnique``, the MESI no-SharedDirty
-``ReadNotSharedDirty`` downgrade path, and explicit ``UD`` ``WriteBackFull``.
-Retry, dirty-peer ``CleanUnique``, automatic victim selection, forwarding
-snoops, and packed pin observations remain separate extensions.
+``ReadUnique`` lifecycles, clean- and restricted shared-dirty-peer
+``CleanUnique`` permission upgrades, the ``UD`` owner-transfer path for
+``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
+and explicit ``UD`` ``WriteBackFull``.  The ``SD`` state exists only for the
+CleanUnique memory-update slice; general shared-dirty behavior, Retry,
+automatic victim selection, forwarding snoops, and packed pin observations
+remain separate extensions.
 """
 
 from __future__ import annotations
@@ -78,6 +80,7 @@ from .capability import (
     CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+    CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
     CHI_FEATURE_DIRTY_WRITEBACK,
     CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
@@ -95,6 +98,7 @@ _COHERENCE_FEATURES = frozenset(
     (
         *_CLEAN_READ_FEATURES,
         CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+        CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
         CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
         CHI_FEATURE_DIRTY_WRITEBACK,
         CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
@@ -293,21 +297,37 @@ class ChiCoherenceInvariantMonitor:
                         f"{sorted(holders)!r}"
                     )
                 for node_id, line in holders.items():
-                    if line.state is not ChiCacheState.SC:
+                    expected_state = (
+                        ChiCacheState.SD
+                        if node_id == entry.shared_dirty_owner
+                        else ChiCacheState.SC
+                    )
+                    if line.state is not expected_state:
                         reasons.append(
                             f"line {address:#x} shared holder {node_id} "
-                            "is not in SC state"
+                            f"is not in {expected_state.value} state"
                         )
 
-            for node_id, line in holders.items():
-                if (
-                    line.state is not ChiCacheState.UD
-                    and line.data != entry.data
-                ):
-                    reasons.append(
-                        f"line {address:#x} data at RN {node_id} "
-                        "differs from the authoritative Home backing copy"
-                    )
+            if entry.shared_dirty_owner is not None:
+                dirty_line = holders.get(entry.shared_dirty_owner)
+                if dirty_line is not None:
+                    for node_id, line in holders.items():
+                        if line.data != dirty_line.data:
+                            reasons.append(
+                                f"line {address:#x} shared data at RN "
+                                f"{node_id} differs from shared-dirty owner "
+                                f"{entry.shared_dirty_owner}"
+                            )
+            else:
+                for node_id, line in holders.items():
+                    if (
+                        line.state is not ChiCacheState.UD
+                        and line.data != entry.data
+                    ):
+                        reasons.append(
+                            f"line {address:#x} data at RN {node_id} "
+                            "differs from the authoritative Home backing copy"
+                        )
 
         for node_id, state in request_nodes.items():
             for address, line in state.lines.items():
@@ -414,8 +434,25 @@ class ChiCoherenceSession(
                 "dirty copyback data"
             )
         if (
+            CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER in features
+            and CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS not in features
+        ):
+            raise ValueError(
+                "shared-dirty CleanUnique requires the clean-peer base "
+                "feature"
+            )
+        if (
+            CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER in features
+            and not home.allow_dirty_data_transfer
+        ):
+            raise ValueError(
+                "shared-dirty CleanUnique requires a Home configured to "
+                "accept PassDirty snoop data"
+            )
+        if (
             CHI_FEATURE_CLEAN_READ_SHARED in features
             and {
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
                 CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
                 CHI_FEATURE_DIRTY_WRITEBACK,
                 CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
@@ -699,21 +736,43 @@ class ChiCoherenceSession(
         self,
         state: ChiCoherenceState,
     ) -> SemanticFault | None:
-        if {
-            CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
-            CHI_FEATURE_DIRTY_WRITEBACK,
-            CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
-        } & self.enabled_features:
-            return None
+        allows_unique_dirty = bool(
+            {
+                CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
+                CHI_FEATURE_DIRTY_WRITEBACK,
+                CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
+            }
+            & self.enabled_features
+        )
+        allows_shared_dirty = (
+            CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            in self.enabled_features
+        )
         for node_id, node_state in state.request_nodes.items():
             for address, line in node_state.lines.items():
-                if line.state is ChiCacheState.UD:
+                if (
+                    line.state is ChiCacheState.UD
+                    and not allows_unique_dirty
+                ):
                     return SemanticFault(
                         f"{self.name}.dirty_state_profile",
                         (
                             f"RN {node_id} line {address:#x} is UD but the "
                             "selected coherence features cannot consume a "
                             "dirty owner"
+                        ),
+                        ConstraintScope.SYSTEM,
+                        self.name,
+                    )
+                if (
+                    line.state is ChiCacheState.SD
+                    and not allows_shared_dirty
+                ):
+                    return SemanticFault(
+                        f"{self.name}.shared_dirty_state_profile",
+                        (
+                            f"RN {node_id} line {address:#x} is SD but the "
+                            "shared-dirty CleanUnique feature is not enabled"
                         ),
                         ConstraintScope.SYSTEM,
                         self.name,
@@ -876,8 +935,19 @@ class ChiCoherenceSession(
                 return self._fault(
                     state,
                     "clean_unique_dirty_peer",
-                    "the clean-peer CleanUnique slice requires a shared "
-                    "directory state without a Unique owner",
+                    "CleanUnique requires shared directory state without a "
+                    "Unique owner",
+                )
+            if (
+                entry.shared_dirty_owner is not None
+                and CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+                not in self.enabled_features
+            ):
+                return self._fault(
+                    state,
+                    "clean_unique_shared_dirty_feature",
+                    "the selected CleanUnique feature has no Snoopee-to-Home "
+                    "DAT flow for the directory shared-dirty owner",
                 )
             for peer_id in entry.sharers - {action.requester_node_id}:
                 peer = state.request_nodes.get(peer_id)
@@ -888,8 +958,8 @@ class ChiCoherenceSession(
                     return self._fault(
                         state,
                         "clean_unique_dirty_peer",
-                        f"RN {peer_id} holds a dirty peer copy; this "
-                        "CleanUnique slice has no DAT return flow",
+                        f"RN {peer_id} is UD beside a shared requester; "
+                        "this is not a legal stable shared-dirty state",
                     )
         transition = node.step(
             state.request_nodes[action.requester_node_id],
@@ -1036,6 +1106,31 @@ class ChiCoherenceSession(
                         f"NodeID {packet.source_id} is not a Snoopee "
                         "of this construction",
                     )
+                if isinstance(message, ChiSnpRespDataMessage):
+                    matches = tuple(
+                        pending
+                        for pending in state.home.pending.values()
+                        if (
+                            pending.snoop_transaction_id
+                            == message.transaction_id
+                            and packet.source_id in pending.snoop_targets
+                        )
+                    )
+                    if (
+                        len(matches) == 1
+                        and isinstance(
+                            matches[0].request,
+                            ChiCleanUniqueMessage,
+                        )
+                        and CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+                        not in self.enabled_features
+                    ):
+                        return self._fault(
+                            state,
+                            "clean_unique_shared_dirty_feature",
+                            "CleanUnique SnpRespData requires the "
+                            "shared-dirty peer feature",
+                        )
                 action = ChiHomeAcceptSnoopResponse(packet)
             elif isinstance(message, ChiCompAckMessage):
                 if packet.source_id not in self.requester_node_ids:

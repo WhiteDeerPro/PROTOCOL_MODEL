@@ -5,14 +5,14 @@
 [通信建模的三张视图](communication-scope-and-transport.md) ·
 [当前实现状态](implementation-status.md)
 
-本文规定一条受限但完整的 CHI 一致性网络执行路径：调用方提交 coherent read，或者先在拥有 unique
-copy 的 RN 上执行本地写；participant 产生的 packet 经过已解析的 CHI transport topology，到达目标
-participant 后继续驱动协议 lifecycle，直到网络和一致性状态共同静止。
+本文规定一条受限但完整的 CHI 一致性网络执行路径：调用方提交 coherent read 或 `CleanUnique`，或者先在
+拥有 unique copy 的 RN 上执行本地写；participant 产生的 packet 经过已解析的 CHI transport topology，
+到达目标 participant 后继续驱动协议 lifecycle，直到网络和一致性状态共同静止。
 
 这项组合位于 CHI family runtime。它连接两个已经存在的执行边界：
 
-- `ChiCoherenceSession` 执行 RN/Home 的 clean read、受限 dirty unique-transfer 和 MESI no-SD
-  dirty-to-clean-shared 行为，以“packet 已送达目标”为输入边界；
+- `ChiCoherenceSession` 执行 RN/Home 的 clean read、受限 dirty unique-transfer、MESI no-SD
+  dirty-to-clean-shared，以及受限 shared-dirty peer `CleanUnique` 行为，以“packet 已送达目标”为输入边界；
 - `ChiTransportNetworkSession` 执行有向 hop、Link activation、L-Credit、有限 FIFO 和 router forwarding。
 
 组合 session 不形成新的协议层，也不改变两个子 session 的职责。当前实现进度继续由
@@ -26,7 +26,7 @@ participant 后继续驱动协议 lifecycle，直到网络和一致性状态共�
 |---|---|---|
 | 协议要求 | CHI lifecycle、消息相关性和 channel 使用所要求的事实 | Read、SNP、SnpResp、CompData 和 CompAck 必须按相应 identity 关联 |
 | 架构选择 | Protocol Model 为保存职责边界而采用的组织方式 | participant 状态与 transport 状态分别由两个子 session 持有 |
-| 阶段选择 | 为形成首个可执行纵向切片而采用的受限 profile | 一个 requester、一个 Home、显式有限 Snoopee 集合、`I/SC/UC/UD`、512-bit full-line DAT |
+| 阶段选择 | 为形成首个可执行纵向切片而采用的受限 profile | 一个 requester、一个 Home、显式有限 Snoopee 集合、基线 `I/SC/UC/UD` 加只供 dirty-peer CleanUnique 消费的 `SD`、512-bit full-line DAT |
 
 阶段选择可以在后续 profile 中扩展。扩展时仍需通过 feature、capability、identity 和 route closure
 显式声明，不由 topology 外形推断协议能力。
@@ -40,7 +40,7 @@ participant 后继续驱动协议 lifecycle，直到网络和一致性状态共�
 ResolvedChiSystem（不可变构造证据）
   ├─ requester / Home / Snoopee role bindings
   ├─ NodeID ownership
-  ├─ enabled clean-read / clean-peer CleanUnique / dirty-unique / MESI no-SD features
+  ├─ enabled clean-read / clean-peer CleanUnique / shared-dirty CleanUnique / dirty-unique / MESI no-SD features
   ├─ per-member REQ / SNP / RSP / DAT flow closure
   └─ ChiTransportNetworkSession
                     │ open
@@ -72,8 +72,9 @@ coherence network session
 
 1. `ResolvedChiSystem.require_closed()` 成功；
 2. feature intent 选择 requester，以及 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
-   dirty unique-transfer、dirty writeback，或 `CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset；
-   dirty unique-transfer 依赖 clean ReadUnique，
+   `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER`、dirty unique-transfer、dirty writeback，或
+   `CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset；shared-dirty CleanUnique 依赖 clean-peer
+   CleanUnique 并增加 Snoopee→Home DAT flow，dirty unique-transfer 依赖 clean ReadUnique，
    no-SD preset 再组合 dirty unique-transfer 与独立的 ReadNotSharedDirty feature；
 3. 本次 feature scope 显式引用一个通用 `AddressClaim`；CHI authority contract 将该 claim 绑定到
    scalar Home，并在需要 Snoop flow 时绑定一个 coherence domain；
@@ -281,8 +282,11 @@ resource；participant 才解释 Read、SNP、response 和 completion。
 
 ## 9. MESI/MOESI 与当前 profile 的边界
 
-当前 RN 稳态为 `I/SC/UC/UD`。Home 保存 backing data、directory 和 pending transaction；当唯一 holder
-处于 `UD` 时，backing data 可以陈旧，最新数据及其最终写回责任由该 holder 持有。当前切片能表达：
+基线 RN 稳态为 `I/SC/UC/UD`。`CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 额外允许调用方为一条
+CleanUnique witness 预置一个受限 `SD` holder；当前没有任何普通 read、write 或 replacement action 生成
+`SD`。Home 保存 backing data、directory 和 pending transaction；当唯一 holder 处于 `UD`，或
+`shared_dirty_owner` 指向一个 `SD` sharer 时，backing data 可以陈旧，最新数据及其最终写回责任由相应
+holder 持有。当前切片能表达：
 
 - `ReadShared` 使 requester 获得 clean shared copy；
 - clean `ReadUnique` 失效其他 holder，使 requester 获得 `UC`；
@@ -298,14 +302,21 @@ resource；participant 才解释 Read、SNP、response 和 completion。
 - `SC` holder 可改用 clean-peer `CleanUnique` 保留已有 full-line；Home 发
   `SnpCleanInvalid` 收齐 clean `SnpResp_I` 后返回无数据 `Comp_UC`，requester 进入 `UC` 并以 Home
   分配的 DBID 返回 `CompAck`；
-- stable monitor 检查 directory permission；clean copy 必须匹配 backing data，`UD` copy 则必须是唯一
-  owner。
+- 启用 `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 时，Home 可以对目录中唯一的
+  `shared_dirty_owner` 发同一个 `SnpCleanInvalid(DoNotGoToSD=1, RetToSrc=0)`；该受限 `SD` peer
+  以 `SnpRespData_I_PD` 返回最新数据并原子失效。Home 将数据和 memory-update responsibility 保存在
+  `ChiCoherentTransactionPending.dirty_result`，收齐所有 clean/dirty peer response 后返回 `Comp_UC`；
+  同地址 Home reservation 保持到 requester 的 `CompAck`，再由 `_commit_unique_authority` 原子更新
+  reference backing、清除 `shared_dirty_owner` 并提交 requester 为唯一 `UC` holder；
+- stable monitor 检查 directory permission；clean copy 必须匹配 backing data，`UD` copy 必须是唯一
+  owner；受限 `SD` copy 必须与 directory 的唯一 `shared_dirty_owner` 对应。
 
 这已经覆盖 MESI 中“unique clean 经过写入成为 modified、modified owner 被另一请求者接管，以及
 modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向路径，但还没有形成完整 MESI 状态机。
 尚缺的主要行为是：
 
-- dirty-peer `CleanUnique` 所需的 `SnpRespData_I_PD`、Home memory update，以及 `MakeUnique`；
+- `MakeUnique`，以及把 dirty-peer CleanUnique 的 reference memory-update obligation 下沉为独立
+  Memory VirtualDut 或 CHI SN-F physical commit；
 - clean eviction，以及从 victim policy 自动触发 eviction/writeback；显式选择一条 `UD` line 后的
   `WriteBackFull → CompDBIDResp → CopyBackWrData` 已经闭合；
 - 普通 `ReadShared` 命中 `UD` 时的 policy；当前 no-SD 行为由显式 `ReadNotSharedDirty` 路径承担；
@@ -314,13 +325,19 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
   取消尚未闭合；
 - runtime 按地址动态选择多个 Home、SAM remap 和跨 domain 执行。
 
-MOESI-like profile 还需要 `SD`/Owned：多个 shared copy 可以共存，但其中恰有一个节点承担 dirty
-responsibility。它进一步需要 dirty `SnpShared`、owner handoff、forwarding snoop/DCT，以及 owner
-eviction/recovery。
+当前 `SD` 只是一条受限 CleanUnique 前置状态及其失效出口，不是完整 MOESI/Owned profile。后者还需要
+产生和维持 shared-dirty 状态的 lifecycle、dirty `SnpShared`、owner handoff、forwarding snoop/DCT，
+以及 owner eviction/recovery。
 
 当前 feature closure 可以分别选择 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
-dirty-unique、dirty-writeback 和独立的 MESI ReadNotSharedDirty 六个 feature。CleanUnique 的五类
-REQ/SNP/RSP flow 不含 DAT，并与会返回 CompData 的 ReadUnique 保持独立。
+shared-dirty-peer CleanUnique、dirty-unique、dirty-writeback 和独立的 MESI ReadNotSharedDirty 七个
+feature。`CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS` 的五类 REQ/SNP/RSP flow 不含 DAT，并与会返回
+CompData 的 ReadUnique 保持独立。`CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 依赖前者，只增加
+Snoopee→Home DAT、Home PassDirty data accept/reference memory update 与 peer dirty-data produce
+要求，并产生 `CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE` 证据；runtime 复用 Home 的
+`allow_dirty_data_transfer=True`，不增加另一枚 feature-specific flag。它不会把 DAT 要求反向加到
+clean-only construction。
+
 `CHI_MESI_NO_SD_REQUIRED_FEATURES` 是 system 侧 policy preset：
 它组合 dirty-unique 与 ReadNotSharedDirty，前者的 dependency closure 再带入 clean ReadUnique；
 ReadNotSharedDirty feature 本身没有 dependency，也不要求 local-write capability。no-SD policy 使用
@@ -333,7 +350,7 @@ MESI/MOESI policy 位于 participant backend、system authority 和 stable syste
 transport-network session 继续搬运 packet，不保存 cache permission。功能通过显式 feature、participant
 capability、flow requirement 和 invariant 加入；不同 feature 可以依赖同一基础路径，不要求彼此完全独立。
 这里的三种投影各有权威：message/opcode/field 与 transaction-local correlation 由 representation 和完整
-逻辑接口合同检查；RN cache、Home directory/backing/pending 由 participant VirtualDut 持有；NodeID、
+逻辑接口合同检查；RN cache、Home directory/reference backing/pending 由 participant behavior 持有；NodeID、
 Home/domain authority、feature/flow closure 与跨节点 invariant 由 SystemProtocol 组合。`TransportLink`
 仅表示一条有向 TX→RX hop，`InterfaceProtocol` 则是完整逻辑接口的作用域名称，二者不互相替代。
 
@@ -342,28 +359,34 @@ Home/domain authority、feature/flow closure 与跨节点 invariant 由 SystemPr
 Dirty 描述的是“这份 cache-line 数据比 Home backing 更新，并由谁承担最终写回责任”，并非任意 module 都有的
 状态。当前模型将它放在三个互相校验的事实中：
 
-- RN 的 `ChiCacheLine.state=UD` 表示本地同时拥有 unique permission 和 dirty responsibility；
-- Home directory 的 `unique_owner` 表示系统应向哪个 RN 发 Snoop，但不复制一份容易失同步的 dirty bit；
+- RN 的 `ChiCacheLine.state=UD` 表示本地同时拥有 unique permission 和 dirty responsibility；受限
+  `SD` 表示该 RN 是 shared holders 中唯一暂时承担 dirty responsibility 的节点；
+- Home directory 的 `unique_owner` 表示唯一 holder；`sharers` 决定 shared holder 选靶，
+  `shared_dirty_owner` 再指出其中哪个 peer 必须返回 dirty data，且只在 restricted dirty-peer
+  CleanUnique profile 中使用；
 - transaction 内的 `SnpRespData_I_PD`/`CompData_UD_PD` 表示责任正在随数据转移；
 - `SnpRespData_SC_PD` 表示旧 owner 交出 dirty 数据并降为 clean shared；Home pending 先接管数据与责任，
   再以 `CompData_SC` 给 requester 建立另一份 clean shared copy，收到 `CompAck` 后才提交
   backing/directory。
+- dirty-peer CleanUnique 的 `SnpRespData_I_PD` 进入 `dirty_result` 后，Home 已接管最新数据与 reference
+  memory-update obligation；直到 `CompAck` 前，同址 reservation 阻止另一笔事务观察旧 backing。
 
 启用 dirty feature 后，Home 对 unique owner 使用 `RetToSrc=1`，因此即使 Home 不预知该 owner 当前是 `UC`
 还是 `UD`，也不会在 backing data 可能陈旧时盲目完成请求。Home 以统一的 `ChiSnoopResult` 收集 RSP/DAT，
 并拒绝一笔 transaction 出现两个 PassDirty source。非数据 `SnpResp` 在 representation 边界拒绝
 PassDirty；它必须随 `SnpRespData` 和实际数据同行。
 
-后续加入 `SD` 时，`unique_owner` 已不足以表示“多个 sharer 中谁是 dirty owner”，届时应给 directory
-增加明确的 shared-dirty authority，而不是预先给所有 VirtualDut、FIFO 或普通寄存器添加 `dirty` 字段。
+当前 directory 已以 `shared_dirty_owner` 表达这条受限 witness 的唯一 dirty sharer，而不是给所有
+VirtualDut、FIFO 或普通寄存器添加 `dirty` 字段。它没有定义 `SC/UD→SD`、dirty shared read、owner handoff
+或 replacement，因此不能据此宣称完整 `SD`/Owned。
 
 ### 9.2 Cache VirtualDut 与 transient 资源
 
 Cache 的构造从协议中立的 resident-line storage 开始，再附加 CHI coherence behavior。当前
 `CacheLineStore` 只保存 line presence 与 payload，薄层 `CacheCore` 在选择协议之前为这些状态提供设备本地
 core 身份；它本身还不是 topology 中的 `VirtualDut` module boundary。`ChiCoherentRnNode` 保存
-`I/SC/UC/UD` permission、
-local dirtying、TxnID 和 pending coherent transaction。`ChiCoherentRnState.lines` 是由这两份不同职责的
+基线 `I/SC/UC/UD` permission、受限 `SD` CleanUnique 前置态、local dirtying、TxnID 和 pending coherent
+transaction。`ChiCoherentRnState.lines` 是由这两份不同职责的
 事实合成的只读投影，不是第二份 line data。
 
 `attach_chi_issue_h_coherence()` 接受已经建立的 core，再装配具名 `VirtualDut` transport boundary、
@@ -383,9 +406,14 @@ CHI-attached Cache VirtualDut assembly
   ├─ chi_rx TransportPort: RSP / SNP / DAT
   └─ transaction facet
        └─ ChiCoherentRnNode
-            ├─ CHI permission: I / SC / UC / UD
+            ├─ CHI permission: I / SC / SD(restricted) / UC / UD
             └─ finite pending coherent-transaction table
 ```
+
+这里的 `attach` 是 `CacheCore → 新的第一个 VirtualDut`，不是把一个 bare VirtualDut 复制成另一个 attached
+对象。调用方已经拥有带所需 ports 的 canonical VirtualDut 时，使用
+`bind_chi_issue_h_cache_vdut(existing_vdut, ...)`；binder 返回的 assembly/facet 继续引用同一个对象，不创建
+port、connection 或第二个 topology identity。
 
 这个 family-local assembly 只展开到 CHI 可见深度；当前 CHI session 直接执行 participant/facet，尚未把
 packet 输入降为通用 `VirtualDutBackend.accept(PortInput)`。因此它已经修正 storage→coherence attachment
@@ -396,12 +424,20 @@ packet 输入降为通用 `VirtualDutBackend.accept(PortInput)`。因此它已�
 install 和 eviction 语义。LRU/随机替换属于以后可插入的 victim policy；MMU 是本地请求到达 cache 前的
 相邻地址翻译组件，不是 coherence attachment 的必选内部部件。
 
-相邻的构造风险位于 Home：当前 `ChiCoherentHomeNode` 为了闭合首批 witness，仍把 directory entry、
-backing data 和 pending table 放在一个 participant state 中。首条 `WriteBackFull` lifecycle 暂时沿用这份
-有限 reference state，验证“收到 DAT 前不提交 backing/owner”的原子边界；它没有被发布成“由 Home 角色生成
-Memory VirtualDut”的通用构造。引入 SN、可替换 memory policy 或独立 Memory VirtualDut 前，应把它改为
-“协议中立 backing target + Home directory/transaction facet”。已有
-`ChiAddressHomeNode(AddressTarget)` 提供了同方向的先例。
+相邻的构造风险位于 Home：当前 `ChiCoherentHomeNode` 为了闭合 witness，仍把 directory entry、reference
+backing data 和 pending table 放在一个 participant state 中。dirty-peer CleanUnique 收到
+`SnpRespData_I_PD` 后把最新数据保存在 `dirty_result`，所有 Snoop 收齐即可发 `Comp_UC`；Home 的同址
+reservation 一直持续到 `CompAck`，届时才由私有 `_commit_unique_authority` 原子更新这份 reference
+backing 与 directory。这里 capability 名中的 “memory update” 只表示融合式参考模型已闭合数据责任，
+不等于独立 Memory VirtualDut 已经执行一次物理写入，也不等于已经发出 CHI
+`WriteNoSnp/NCBWrData` 到 SN-F。
+
+当前没有 coherent Home/main-memory 的公开 CHI attachment、recipe 或 canonical binder；也没有把主存
+VirtualDut 连接为 topology-visible SN。`ChiAddressHomeNode(AddressTarget)` 只是 direct `ReadNoSnp` 使用
+协议中立 target 的先例，不是 `ChiCoherentHomeNode` 的 backing binding。引入可替换 memory policy 前，应先
+拆成“协议中立 backing target + Home directory/transaction facet”；若场景还要求观察 physical commit，
+再显式增加 HN→SN 的 REQ/DAT/RSP、SN participant 和相应 system witness，不能把 reference backing 更新
+冒充这条网络事务。
 
 后续 cache 功能按以下边界加入：
 
@@ -412,7 +448,7 @@ Memory VirtualDut”的通用构造。引入 SN、可替换 memory policy 或独
 | victim selection | 可选 replacement policy | eviction 是 cache 的本地决策，LRU 只是其中一种策略 |
 | same-line transient、等待者合并或 block/replay、writeback slot | Cache VirtualDut participant resource | 影响是否能接纳本地请求或 Snoop |
 | `CleanUnique`/`MakeUnique`/`WriteBackFull` 的字段与单 transaction correlation | CHI representation 与完整逻辑接口合同 | 这些是协议通信形式 |
-| Home backing payload | 协议中立 backing target（当前 coherence reference state 内仍融合） | 数据存取属于设备行为，不因被 Home 使用而成为 system property |
+| Home backing payload | 协议中立 backing target（当前 coherence reference state 内仍融合） | `dirty_result` 与本地 commit 只闭合 reference authority；独立 Memory/SN physical commit 尚未建模 |
 | Home sharer/owner、shared-dirty owner 与跨 RN invariant | Home participant + CHI SystemProtocol monitor | directory 的局部状态由 Home 持有，跨 participant 一致性由 system 判定 |
 | packet/flit、L-Credit 和 hop backpressure | CHI transport | 不解释 cache permission |
 
@@ -510,6 +546,24 @@ RN0 ReadNotSharedDirty
 覆盖 REQ、SNP、DAT、DAT 和 RSP。当前 Home 固定选择吸收 PassDirty 并返回 `CompData_SC`，这是规范
 允许结果的受限子集。它没有建立 `SD`，也不能替代下面独立 writeback lifecycle 对 DBID 与提交时点的检查。
 
+受限 shared-dirty CleanUnique 另保存一条五 packet witness：
+
+```text
+RN0 holds SC; RN1 holds restricted SD(new data)
+directory.sharers={RN0,RN1}; shared_dirty_owner=RN1
+RN0 CleanUnique
+  → HN0 SnpCleanInvalid(DoNotGoToSD=1, RetToSrc=0) to RN1
+  → RN1 SD→I and SnpRespData_I_PD(new data)
+  → HN0 pending.dirty_result owns the reference memory-update obligation
+  → HN0 Comp_UC; RN0 SC→UC and returns CompAck
+  → HN0 commits reference backing=new data, unique_owner=RN0,
+    sharers={}, shared_dirty_owner=None
+```
+
+这条 witness 只证明 Home participant 已接管 dirty 数据、同址事务在旧 backing 不可观察期间被 reservation
+挡住，并在 `CompAck` 后更新融合式 reference state。它没有产生 topology-visible HN→SN write，也不证明
+独立 Memory VirtualDut 的 physical commit。
+
 participant packet-delivery session 还闭合了第一条 dirty writeback：
 
 ```text
@@ -538,10 +592,13 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 
 下列能力仍在当前切片之外：
 
-- dirty-peer `CleanUnique`、`MakeUnique`、clean `Evict`、自动 victim selection/writeback scheduling、
-  CMO/DVM 和并发 line transient/hazard；
+- `MakeUnique`、clean `Evict`、自动 victim selection/writeback scheduling、CMO/DVM 和并发 line
+  transient/hazard；
 - dirty writeback 与 RetryAck/P-Credit、错误响应或同地址 Snoop 的并发组合；
-- MOESI `SD`/Owned、shared-dirty authority、forwarding snoop 和 DCT；
+- 从融合式 Home reference backing 到协议中立 `AddressTarget`/Memory VirtualDut 的 commit，以及可观察的
+  HN→SN physical write lifecycle；
+- 完整 MOESI `SD`/Owned：当前只实现 seedable `SD→I` dirty-peer CleanUnique 出口，尚无 `SD` 生成、
+  dirty `SnpShared`、owner handoff、forwarding snoop/DCT 或 shared-dirty replacement；
 - 多 requester、多 Home、address→Home 自动 authority 和 coherence-domain 自动 membership；
 - 一个 component/port 承载多个 NodeID 的运行时选择；
 - 动态 snoop filter、router multicast 和 topology-wide broadcast；
@@ -563,14 +620,15 @@ feature/capability/flow closure、packet-delivery coherence session 和 topology
 它们不依赖某一个测试文件或固定拓扑。
 
 调用方构造的单 XP 与 2×2 XP mesh 仍属于场景 recipe。2×2 showcase 是可执行的 clean ReadUnique 证据，
-并由一个不发布 artifact 的 smoke test 调用；MESI no-SD 路径当前保存在定向 network witness 中。前者不是
-通用 `MeshBuilder`，两者也尚未替代全部测试夹具。
+并由一个不发布 artifact 的 smoke test 调用；MESI no-SD 与受限 shared-dirty CleanUnique 路径当前保存在
+定向 network witness 中。前者不是通用 `MeshBuilder`，这些 witness 也尚未替代全部测试夹具。
 下列内容仍需要保留在定向测试中：
 
 - malformed identity、route、capability 与 feature dependency 负例；
 - fanout 在有限容量下的原子保存；
 - orphan/重复 Snoop response、双 dirty owner 和 same-line hazard；
 - clean 与 dirty participant 状态转换的局部诊断；
+- `SD`/`shared_dirty_owner` 对齐、DAT route/capability 和 reference backing 提交时点；
 - Retry/P-Credit 等尚未进入公开 showcase 的生命周期。
 
 测试只有在对应公共入口或 showcase 已被自动 smoke test 调用，并保留等价的负例与原子边界证据后才适合

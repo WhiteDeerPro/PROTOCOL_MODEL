@@ -272,17 +272,6 @@ LIMITATION_NEGATIVES = (
         ),
         turn_positive_when="the dirty-shared transition policy is explicitly modeled",
     ),
-    LimitationNegative(
-        test_id=(
-            "tests.test_chi_issue_h_clean_unique_participants."
-            "ChiIssueHCleanUniqueParticipantTest."
-            "test_snp_clean_invalid_rejects_a_dirty_peer_without_mutation"
-        ),
-        turn_positive_when=(
-            "the CleanUnique feature carries SnpRespData_I_PD and closes "
-            "the Home memory-update obligation"
-        ),
-    ),
 )
 
 

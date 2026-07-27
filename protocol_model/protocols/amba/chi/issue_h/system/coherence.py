@@ -9,11 +9,11 @@ The profile is intentionally narrow.  It closes clean ``ReadShared`` and
 ``ReadUnique`` lifecycles, clean- and restricted shared-dirty-peer
 ``CleanUnique`` permission upgrades, the ``UD`` owner-transfer path for
 ``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
-explicit ``UD`` ``WriteBackFull``, and one successful clean ``ReadUnique``
-Request-Retry cycle.  The ``SD`` state exists only for the CleanUnique
-memory-update slice; general shared-dirty behavior, Retry cancellation/error
-composition, automatic victim selection, forwarding snoops, and packed pin
-observations remain separate extensions.
+explicit ``UD`` ``WriteBackFull``, one successful clean ``ReadUnique``
+Request-Retry cycle, and a pre-snoop ``ReadUnique`` NDERR completion.  The
+``SD`` state exists only for the CleanUnique memory-update slice; general
+shared-dirty behavior, Retry/error composition, automatic victim selection,
+forwarding snoops, and packed pin observations remain separate extensions.
 """
 
 from __future__ import annotations
@@ -69,6 +69,7 @@ from ..representation.req import (
     ChiReadUniqueMessage,
     ChiWriteBackFullMessage,
 )
+from ..representation.response import ChiRespErr
 from ..representation.rsp import (
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
@@ -86,6 +87,7 @@ from ..representation.snp import (
 from .capability import (
     CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
     CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
     CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
     CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
@@ -106,6 +108,7 @@ _COHERENCE_FEATURES = frozenset(
     (
         *_CLEAN_READ_FEATURES,
         CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+        CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
         CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
         CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
         CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
@@ -465,11 +468,41 @@ class ChiCoherenceSession(
                 "dirty Unique transfer requires the ReadUnique base feature"
             )
         if (
+            CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR in features
+            and CHI_FEATURE_CLEAN_READ_UNIQUE not in features
+        ):
+            raise ValueError(
+                "ReadUnique NDERR requires the clean ReadUnique base feature"
+            )
+        if (
             CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY in features
             and CHI_FEATURE_CLEAN_READ_UNIQUE not in features
         ):
             raise ValueError(
                 "ReadUnique Retry requires the clean ReadUnique base feature"
+            )
+        if (
+            CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR in features
+            and CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY in features
+        ):
+            raise ValueError(
+                "ReadUnique NDERR and Retry composition is not implemented"
+            )
+        if (
+            home.read_unique_nderr_policy is not None
+            and CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR not in features
+        ):
+            raise ValueError(
+                "a configured coherent Home ReadUnique NDERR policy requires "
+                "the ReadUnique NDERR feature"
+            )
+        if (
+            CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR in features
+            and home.read_unique_nderr_policy is None
+        ):
+            raise ValueError(
+                "the ReadUnique NDERR feature requires a configured coherent "
+                "Home NDERR policy"
             )
         if (
             home.retry_policy is not None
@@ -1443,6 +1476,33 @@ class ChiCoherenceSession(
                     "requester_authority",
                     f"NodeID {packet.target_id} cannot receive CompData "
                     "in this construction",
+                )
+            if (
+                message.response_error is ChiRespErr.NDERR
+                and CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR
+                not in self.enabled_features
+            ):
+                return self._fault(
+                    state,
+                    "read_unique_nderr_feature",
+                    "ReadUnique NDERR completion is not enabled by the "
+                    "resolved feature contract",
+                )
+            pending = state.home.pending.get(message.data_buffer_id)
+            if (
+                packet.source_id != self.home.node_id
+                or pending is None
+                or pending.requester_id != packet.target_id
+                or pending.request.transaction_id != message.transaction_id
+                or not pending.completion_sent
+                or pending.completion_response_error
+                is not message.response_error
+            ):
+                return self._fault(
+                    state,
+                    "completion_correlation",
+                    "CompData does not match one completed Home "
+                    "Requester/TxnID/DBID/RespErr reservation",
                 )
             action = ChiRnAcceptCompData(packet)
         elif isinstance(message, ChiCompDBIDRespMessage):

@@ -56,7 +56,7 @@ from ..representation.req import (
     ChiReadUniqueMessage,
     ChiWriteBackFullMessage,
 )
-from ..representation.response import ChiRespCode
+from ..representation.response import ChiRespCode, ChiRespErr
 from ..representation.rsp import (
     ChiCompMessage,
     ChiCompAckMessage,
@@ -1333,6 +1333,45 @@ class ChiCoherentRnNode(
                 "completion_home",
                 "CompData does not identify the configured Home",
             )
+        if response.response_error is ChiRespErr.NDERR:
+            if (
+                not isinstance(request, ChiReadUniqueMessage)
+                or response.response != ChiRespCode.I
+                or response.data_id != 0
+                or response.trace_tag
+            ):
+                return self._fault(
+                    state,
+                    "read_unique_nderr_completion",
+                    "ReadUnique NDERR requires CompData_I with DataID=0 "
+                    "and TraceTag=0",
+                )
+            try:
+                request_retry = ChiRequestRetryContract.retire(
+                    state.request_retry,
+                    response.transaction_id,
+                )
+            except ChiRequestRetryContractError as error:
+                return self._fault(state, error.code, error.reason)
+            pending = dict(state.pending_transactions)
+            del pending[response.transaction_id]
+            ack = ChiNetworkPacket.response(
+                ChiCompAckMessage(
+                    transaction_id=response.data_buffer_id,
+                ),
+                source_id=self.node_id,
+                target_id=response.home_node_id,
+            )
+            return SemanticStep(
+                ChiCoherentRnState(
+                    state.cache,
+                    state.permissions,
+                    pending,
+                    state.pending_writebacks,
+                    request_retry,
+                ),
+                (ack,),
+            )
         allowed_responses = (
             (ChiRespCode.UC, ChiRespCode.UD_PD)
             if isinstance(request, ChiReadUniqueMessage)
@@ -1674,12 +1713,13 @@ class ChiCoherentTransactionPending:
 
     requester_id: int
     request: ChiCoherenceRequestMessage
-    snoop_transaction_id: int
+    snoop_transaction_id: int | None
     data_buffer_id: int
     snoop_targets: frozenset[int]
     snoop_results: Mapping[int, ChiSnoopResult] = field(default_factory=dict)
     completion_sent: bool = False
     prepared_backing_write: PreparedBackingWrite | None = None
+    completion_response_error: ChiRespErr | int = ChiRespErr.OK
 
     def __post_init__(self) -> None:
         _require_node_id("pending requester", self.requester_id)
@@ -1695,16 +1735,36 @@ class ChiCoherentTransactionPending:
             raise TypeError(
                 "Home pending transaction requires a coherent request"
             )
-        for name, value in (
-            ("snoop_transaction_id", self.snoop_transaction_id),
-            ("data_buffer_id", self.data_buffer_id),
+        snoop_transaction_id = self.snoop_transaction_id
+        if snoop_transaction_id is not None and (
+            not isinstance(snoop_transaction_id, int)
+            or isinstance(snoop_transaction_id, bool)
+            or not 0 <= snoop_transaction_id < _TRANSACTION_ID_LIMIT
         ):
-            if (
-                not isinstance(value, int)
-                or isinstance(value, bool)
-                or not 0 <= value < _TRANSACTION_ID_LIMIT
-            ):
-                raise ValueError(f"{name} must be a 12-bit identifier")
+            raise ValueError(
+                "snoop_transaction_id must be a 12-bit identifier or None"
+            )
+        if (
+            not isinstance(self.data_buffer_id, int)
+            or isinstance(self.data_buffer_id, bool)
+            or not 0 <= self.data_buffer_id < _TRANSACTION_ID_LIMIT
+        ):
+            raise ValueError("data_buffer_id must be a 12-bit identifier")
+        try:
+            completion_response_error = ChiRespErr(
+                self.completion_response_error
+            )
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "Home pending completion has an unknown RespErr"
+            ) from error
+        if completion_response_error not in (
+            ChiRespErr.OK,
+            ChiRespErr.NDERR,
+        ):
+            raise ValueError(
+                "coherent Home pending supports only OK or NDERR completion"
+            )
         targets = frozenset(self.snoop_targets)
         for node_id in targets:
             _require_node_id("snoop target", node_id)
@@ -1725,6 +1785,24 @@ class ChiCoherentTransactionPending:
         if type(self.completion_sent) is not bool:
             raise TypeError("completion_sent must be bool")
         prepared = self.prepared_backing_write
+        if completion_response_error is ChiRespErr.NDERR:
+            if (
+                not isinstance(self.request, ChiReadUniqueMessage)
+                or snoop_transaction_id is not None
+                or targets
+                or results
+                or not self.completion_sent
+                or prepared is not None
+            ):
+                raise ValueError(
+                    "pre-snoop ReadUnique NDERR must have no Snoop identity, "
+                    "targets, results, or prepared backing write and must "
+                    "already have emitted its completion"
+                )
+        elif snoop_transaction_id is None:
+            raise ValueError(
+                "successful coherent pending requires a Snoop identity"
+            )
         if prepared is not None:
             if not isinstance(prepared, PreparedBackingWrite):
                 raise TypeError(
@@ -1757,6 +1835,11 @@ class ChiCoherentTransactionPending:
             self,
             "snoop_results",
             MappingProxyType(results),
+        )
+        object.__setattr__(
+            self,
+            "completion_response_error",
+            completion_response_error,
         )
 
     @property
@@ -2032,6 +2115,10 @@ ChiCoherentRetryAdmissionPolicy = Callable[
     [ChiReadUniqueMessage, ChiCoherentHomeState],
     int | None,
 ]
+ChiReadUniqueNderrPolicy = Callable[
+    [ChiReadUniqueMessage, ChiCoherentHomeState],
+    bool,
+]
 
 
 class ChiCoherentHomeNode(
@@ -2060,6 +2147,7 @@ class ChiCoherentHomeNode(
         allow_dirty_data_transfer: bool = False,
         default_protocol_credit_type: int = 0,
         retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
+        read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
     ) -> None:
         if not isinstance(name, str) or not name:
             raise ValueError("coherent Home requires a name")
@@ -2116,6 +2204,13 @@ class ChiCoherentHomeNode(
             raise ValueError("default protocol-credit type must be in 0..15")
         if retry_policy is not None and not callable(retry_policy):
             raise TypeError("coherent Home retry_policy must be callable")
+        if (
+            read_unique_nderr_policy is not None
+            and not callable(read_unique_nderr_policy)
+        ):
+            raise TypeError(
+                "coherent Home read_unique_nderr_policy must be callable"
+            )
         self.name = name
         self.node_id = node_id
         self.backing_core = backing_core
@@ -2126,6 +2221,7 @@ class ChiCoherentHomeNode(
         self.allow_dirty_data_transfer = allow_dirty_data_transfer
         self.default_protocol_credit_type = default_protocol_credit_type
         self.retry_policy = retry_policy
+        self.read_unique_nderr_policy = read_unique_nderr_policy
 
     def initial_state(self) -> ChiCoherentHomeState:
         return ChiCoherentHomeState(
@@ -2429,6 +2525,55 @@ class ChiCoherentHomeNode(
                 ),
             )
 
+        complete_with_nderr = False
+        if (
+            isinstance(request, ChiReadUniqueMessage)
+            and self.read_unique_nderr_policy is not None
+        ):
+            complete_with_nderr = self.read_unique_nderr_policy(
+                request,
+                state,
+            )
+            if type(complete_with_nderr) is not bool:
+                return self._fault(
+                    state,
+                    "read_unique_nderr_policy",
+                    "ReadUnique NDERR policy must return bool",
+                )
+        data_buffer_id = self._allocate_identifier(
+            state.next_data_buffer_id,
+            set(state.pending) | set(state.pending_writebacks),
+        )
+        if complete_with_nderr:
+            pending_item = ChiCoherentTransactionPending(
+                packet.source_id,
+                request,
+                None,
+                data_buffer_id,
+                frozenset(),
+                completion_sent=True,
+                completion_response_error=ChiRespErr.NDERR,
+            )
+            pending = dict(state.pending)
+            pending[data_buffer_id] = pending_item
+            candidate = ChiCoherentHomeState(
+                directory=state.directory,
+                backing=state.backing,
+                pending=pending,
+                next_snoop_transaction_id=(
+                    state.next_snoop_transaction_id
+                ),
+                next_data_buffer_id=(
+                    (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT
+                ),
+                pending_writebacks=state.pending_writebacks,
+                request_retry=request_retry,
+            )
+            return SemanticStep(
+                candidate,
+                (self._completion_packet(state, pending_item),),
+            )
+
         targets = set(entry.sharers)
         if entry.unique_owner is not None:
             targets.add(entry.unique_owner)
@@ -2438,11 +2583,8 @@ class ChiCoherentHomeNode(
             {
                 item.snoop_transaction_id
                 for item in state.pending.values()
+                if item.snoop_transaction_id is not None
             },
-        )
-        data_buffer_id = self._allocate_identifier(
-            state.next_data_buffer_id,
-            set(state.pending) | set(state.pending_writebacks),
         )
         pending_item = ChiCoherentTransactionPending(
             packet.source_id,
@@ -2743,6 +2885,9 @@ class ChiCoherentHomeNode(
             pending_item.snoop_targets,
             results,
             completion_sent=all_snoops_complete,
+            completion_response_error=(
+                pending_item.completion_response_error
+            ),
             prepared_backing_write=prepared_backing_write,
         )
         pending = dict(state.pending)
@@ -2793,6 +2938,29 @@ class ChiCoherentHomeNode(
                 state,
                 "early_completion_ack",
                 "CompAck arrived before all selected snoops completed",
+            )
+        if pending_item.completion_response_error is ChiRespErr.NDERR:
+            if ack.response != 0 or ack.trace_tag:
+                return self._fault(
+                    state,
+                    "read_unique_nderr_completion_ack_state",
+                    "the ReadUnique NDERR profile requires CompAck Resp=0 "
+                    "and TraceTag=0",
+                )
+            pending = dict(state.pending)
+            del pending[pending_item.data_buffer_id]
+            return SemanticStep(
+                ChiCoherentHomeState(
+                    directory=state.directory,
+                    backing=state.backing,
+                    pending=pending,
+                    next_snoop_transaction_id=(
+                        state.next_snoop_transaction_id
+                    ),
+                    next_data_buffer_id=state.next_data_buffer_id,
+                    pending_writebacks=state.pending_writebacks,
+                    request_retry=state.request_retry,
+                )
             )
         if (
             isinstance(pending_item.request, ChiCleanUniqueMessage)
@@ -3104,6 +3272,21 @@ class ChiCoherentHomeNode(
         state: ChiCoherentHomeState,
         pending: ChiCoherentTransactionPending,
     ) -> ChiNetworkPacket:
+        if pending.completion_response_error is ChiRespErr.NDERR:
+            assert isinstance(pending.request, ChiReadUniqueMessage)
+            return ChiNetworkPacket.data(
+                ChiCompDataMessage(
+                    transaction_id=pending.request.transaction_id,
+                    data=0,
+                    data_id=0,
+                    home_node_id=self.node_id,
+                    response_error=ChiRespErr.NDERR,
+                    response=ChiRespCode.I,
+                    data_buffer_id=pending.data_buffer_id,
+                ),
+                source_id=self.node_id,
+                target_id=pending.requester_id,
+            )
         if isinstance(pending.request, ChiCleanUniqueMessage):
             return ChiNetworkPacket.response(
                 ChiCompMessage(
@@ -3214,6 +3397,7 @@ __all__ = [
     "ChiCoherentRnNode",
     "ChiCoherentRnState",
     "ChiCoherentRetryAdmissionPolicy",
+    "ChiReadUniqueNderrPolicy",
     "ChiHomeAcceptCompAck",
     "ChiHomeAcceptCleanUnique",
     "ChiHomeAcceptCopyBackData",

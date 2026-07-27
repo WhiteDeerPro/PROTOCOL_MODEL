@@ -7,6 +7,8 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_NDERR_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_NDERR_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_RETRY_HOME_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_RETRY_REQUESTER_CAPABILITIES,
@@ -46,9 +48,11 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_BUILTIN_FEATURE_CATALOG,
     CHI_CLEAN_READ_UNIQUE_DEFINITION,
+    CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION,
     CHI_CLEAN_READ_UNIQUE_RETRY_DEFINITION,
     CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
     CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
     CHI_FEATURE_DIRTY_WRITEBACK,
     CHI_FEATURE_READ_NO_SNP,
@@ -56,6 +60,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_REQUEST_RETRY,
     CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,
     CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE,
     ChiCapabilityClosureError,
@@ -557,6 +562,145 @@ class ChiIssueHCleanReadUniqueCapabilityTest(unittest.TestCase):
                 for gap in gaps
                 if gap.kind is ChiCapabilityGapKind.PARTICIPANT
             },
+        )
+
+
+class ChiIssueHCleanReadUniqueNderrCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract() -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+                "snoopee": "rn1",
+            },
+            frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,)),
+        )
+
+    @staticmethod
+    def participants(
+        *,
+        requester_nderr: bool = True,
+        home_nderr: bool = True,
+    ) -> tuple[ChiParticipantCapability, ...]:
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                (
+                    CHI_CLEAN_READ_UNIQUE_NDERR_REQUESTER_CAPABILITIES
+                    if requester_nderr
+                    else CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                (
+                    CHI_CLEAN_READ_UNIQUE_NDERR_HOME_CAPABILITIES
+                    if home_nderr
+                    else CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "rn1",
+                CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+            ),
+        )
+
+    @staticmethod
+    def system_capabilities(
+        *,
+        nderr: bool = True,
+    ) -> frozenset[ChiCapabilityKey]:
+        return frozenset(
+            (
+                CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+                *(
+                    (CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,)
+                    if nderr
+                    else ()
+                ),
+            )
+        )
+
+    def test_nderr_modifier_closes_over_base_without_a_new_flow(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=ChiIssueHCleanReadUniqueCapabilityTest.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        base = resolved.require(CHI_FEATURE_CLEAN_READ_UNIQUE)
+        self.assertEqual(
+            {
+                "request",
+                "snoop",
+                "snoop_response",
+                "completion_data",
+                "completion_ack",
+            },
+            set(base.flows),
+        )
+        evidence = resolved.require(CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR)
+        self.assertEqual(
+            (CHI_FEATURE_CLEAN_READ_UNIQUE,),
+            evidence.dependencies,
+        )
+        self.assertEqual({"requester", "home"}, set(evidence.participants))
+        self.assertFalse(evidence.flows)
+        self.assertIs(
+            CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR
+            ],
+        )
+
+    def test_each_base_participant_reports_its_own_nderr_gap(self) -> None:
+        cases = (
+            ("rn0", False, True),
+            ("hn0", True, False),
+        )
+        for missing, requester_nderr, home_nderr in cases:
+            with self.subTest(missing=missing):
+                resolved = resolve_chi_capabilities(
+                    self.contract(),
+                    participants=self.participants(
+                        requester_nderr=requester_nderr,
+                        home_nderr=home_nderr,
+                    ),
+                    flows=ChiIssueHCleanReadUniqueCapabilityTest.flows(),
+                    system_capabilities=self.system_capabilities(),
+                )
+
+                self.assertTrue(
+                    resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE)
+                )
+                participant_gaps = tuple(
+                    gap
+                    for gap in resolved.gaps(
+                        CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR
+                    )
+                    if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+                )
+                self.assertEqual(1, len(participant_gaps))
+                self.assertEqual(missing, participant_gaps[0].subject)
+                self.assertTrue(participant_gaps[0].missing)
+
+    def test_nderr_composition_requires_explicit_system_fact(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=ChiIssueHCleanReadUniqueCapabilityTest.flows(),
+            system_capabilities=self.system_capabilities(nderr=False),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.SYSTEM, gaps[0].kind)
+        self.assertEqual(
+            (CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,),
+            gaps[0].missing,
         )
 
 

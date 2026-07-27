@@ -8,6 +8,8 @@ from protocol_model.integrations.recipes.amba.chi import (
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_NDERR_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_NDERR_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_RETRY_HOME_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_RETRY_REQUESTER_CAPABILITIES,
@@ -46,6 +48,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiReadUniqueMessage,
     ChiPCrdGrantMessage,
     ChiRespCode,
+    ChiRespErr,
     ChiRetryAckMessage,
     ChiSnpRespMessage,
     ChiSnpRespDataMessage,
@@ -55,11 +58,13 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
 )
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
     CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
     CHI_FEATURE_DIRTY_WRITEBACK,
     CHI_MESI_NO_SD_REQUIRED_FEATURES,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,
     CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE,
     CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE,
@@ -187,11 +192,13 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         mesi: bool = False,
         writeback: bool = False,
         retry: bool = False,
+        nderr: bool = False,
         data_width: int = 512,
     ):
-        if sum((dirty, mesi, writeback, retry)) > 1:
+        if sum((dirty, mesi, writeback, retry, nderr)) > 1:
             raise ValueError(
-                "select one dirty-unique, MESI read, writeback, or retry mode"
+                "select one dirty-unique, MESI read, writeback, retry, "
+                "or NDERR mode"
             )
         snoop_uses_dirty_data = dirty or mesi
         home_transmit_channels = (
@@ -226,8 +233,12 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                         "chi_dirty_unique_via_xp"
                         if dirty
                         else (
-                            "chi_clean_unique_retry_via_xp"
-                            if retry
+                            (
+                                "chi_clean_unique_nderr_via_xp"
+                                if nderr
+                                else "chi_clean_unique_retry_via_xp"
+                            )
+                            if nderr or retry
                             else "chi_clean_unique_via_xp"
                         )
                     )
@@ -571,7 +582,15 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                     "default_protocol_credit_type": 4,
                 }
                 if retry
-                else {}
+                else (
+                    {
+                        "read_unique_nderr_policy": (
+                            lambda request, state: True
+                        ),
+                    }
+                    if nderr
+                    else {}
+                )
             ),
         )
         router = ChiStoreForwardRouterNode(
@@ -752,8 +771,12 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                             CHI_FEATURE_DIRTY_UNIQUE_TRANSFER
                             if dirty
                             else (
-                                CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
-                                if retry
+                                (
+                                    CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR
+                                    if nderr
+                                    else CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+                                )
+                                if nderr or retry
                                 else CHI_FEATURE_CLEAN_READ_UNIQUE
                             )
                         ),
@@ -777,8 +800,12 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                             | CHI_DIRTY_UNIQUE_REQUESTER_CAPABILITIES
                             if dirty
                             else (
-                                CHI_CLEAN_READ_UNIQUE_RETRY_REQUESTER_CAPABILITIES
-                                if retry
+                                (
+                                    CHI_CLEAN_READ_UNIQUE_NDERR_REQUESTER_CAPABILITIES
+                                    if nderr
+                                    else CHI_CLEAN_READ_UNIQUE_RETRY_REQUESTER_CAPABILITIES
+                                )
+                                if nderr or retry
                                 else CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
                             )
                         )
@@ -800,8 +827,12 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                             | CHI_DIRTY_UNIQUE_HOME_CAPABILITIES
                             if dirty
                             else (
-                                CHI_CLEAN_READ_UNIQUE_RETRY_HOME_CAPABILITIES
-                                if retry
+                                (
+                                    CHI_CLEAN_READ_UNIQUE_NDERR_HOME_CAPABILITIES
+                                    if nderr
+                                    else CHI_CLEAN_READ_UNIQUE_RETRY_HOME_CAPABILITIES
+                                )
+                                if nderr or retry
                                 else CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
                             )
                         )
@@ -907,7 +938,13 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
                                             CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,
                                         )
                                         if retry
-                                        else ()
+                                        else (
+                                            (
+                                                CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,
+                                            )
+                                            if nderr
+                                            else ()
+                                        )
                                     ),
                                 )
                             )
@@ -1122,6 +1159,79 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         self.assertEqual(1, state.home.request_retry.retry_ack_count)
         self.assertEqual(1, state.home.request_retry.grant_count)
         self.assertEqual(1, state.home.request_retry.consumed_count)
+
+    def test_read_unique_nderr_closes_through_one_xp_without_snoop(
+        self,
+    ) -> None:
+        resolved = self.build_resolved(nderr=True)
+        evidence = resolved.capabilities.require(
+            CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR
+        )
+        self.assertFalse(evidence.flows)
+        session = ChiCoherenceNetworkSession.from_resolved(resolved)
+        initial = session.initial_state()
+
+        issued = self.apply(
+            session,
+            initial,
+            ChiSubmitCoherentRead(
+                self.REQUESTER,
+                ChiReadUniqueMessage(0x17, self.ADDRESS),
+            ),
+        )
+        run = session.run_until_quiescent(
+            issued.state,
+            max_steps=1024,
+        )
+
+        self.assertTrue(run.ok)
+        self.assertIsNone(run.blocked)
+        self.assertTrue(session.is_quiescent(run.final_state))
+        packets_by_identity = {}
+        for event in (*issued.emissions, *run.emissions):
+            packet = getattr(event, "packet", None)
+            if packet is not None:
+                packets_by_identity.setdefault(id(packet), packet)
+        packets = tuple(packets_by_identity.values())
+        message_counts = Counter(
+            type(packet.message) for packet in packets
+        )
+        self.assertEqual(1, message_counts[ChiReadUniqueMessage])
+        self.assertEqual(0, message_counts[ChiSnpUniqueMessage])
+        self.assertEqual(0, message_counts[ChiSnpRespMessage])
+        self.assertEqual(1, message_counts[ChiCompDataMessage])
+        self.assertEqual(1, message_counts[ChiCompAckMessage])
+        self.assertEqual(3, len(packets))
+        completion = next(
+            packet.message
+            for packet in packets
+            if isinstance(packet.message, ChiCompDataMessage)
+        )
+        self.assertIs(ChiRespErr.NDERR, completion.response_error)
+        self.assertIs(ChiRespCode.I, completion.response)
+
+        final = run.final_state.coherence
+        self.assertEqual(
+            initial.coherence.request_nodes[self.REQUESTER].cache,
+            final.request_nodes[self.REQUESTER].cache,
+        )
+        self.assertEqual(
+            initial.coherence.request_nodes[self.REQUESTER].permissions,
+            final.request_nodes[self.REQUESTER].permissions,
+        )
+        self.assertEqual(
+            initial.coherence.home.directory,
+            final.home.directory,
+        )
+        self.assertEqual(
+            initial.coherence.home.backing,
+            final.home.backing,
+        )
+        self.assertFalse(final.home.pending)
+        self.assertEqual(
+            3,
+            run.final_state.network.routers["xp0"].forwarded_count,
+        )
 
     def test_dirty_unique_responsibility_crosses_the_same_xp(self) -> None:
         resolved = self.build_resolved(dirty=True)

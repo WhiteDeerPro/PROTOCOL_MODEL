@@ -71,11 +71,12 @@ coherence network session
 组合 session 只从已经闭合的 `ResolvedChiSystem` 打开。构造过程至少执行以下检查：
 
 1. `ResolvedChiSystem.require_closed()` 成功；
-2. feature intent 选择 requester，以及 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
-   `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER`、dirty unique-transfer、dirty writeback，或
-   `CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset；shared-dirty CleanUnique 依赖 clean-peer
-   CleanUnique 并增加 Snoopee→Home DAT flow，dirty unique-transfer 依赖 clean ReadUnique，
-   no-SD preset 再组合 dirty unique-transfer 与独立的 ReadNotSharedDirty feature；
+2. feature intent 选择 requester，以及 clean ReadShared、clean ReadUnique、其 NDERR/Retry modifier、
+   clean-peer CleanUnique、`CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER`、dirty unique-transfer、
+   dirty writeback，或 `CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset；ReadUnique NDERR 不增加 flow，
+   shared-dirty CleanUnique 依赖 clean-peer CleanUnique 并增加 Snoopee→Home DAT flow，
+   dirty unique-transfer 依赖 clean ReadUnique，no-SD preset 再组合 dirty unique-transfer 与独立的
+   ReadNotSharedDirty feature；
 3. 本次 feature scope 显式引用一个通用 `AddressClaim`；CHI authority contract 将该 claim 绑定到
    scalar Home，并在需要 Snoop flow 时绑定一个 coherence domain；
 4. resolver 从 domain 派生 `Snoopee = members - requester`，拒绝调用方另行手填 Home/Snoopee role；
@@ -290,6 +291,8 @@ copy 可以陈旧，最新数据及其最终写回责任由相应 holder 持有�
 
 - `ReadShared` 使 requester 获得 clean shared copy；
 - clean `ReadUnique` 失效其他 holder，使 requester 获得 `UC`；
+- pre-snoop `ReadUnique` NDERR 只保留 DBID/同址 reservation 到 `CompAck`，Requester 的原 `I`/`SC`
+  与 payload、其他 holder、directory 和 backing 都不变化；
 - `UC` holder 的本地 full-line write 将其推进到 `UD`；
 - 另一个 requester 的 `ReadUnique` 通过 `SnpRespData_I_PD → CompData_UD_PD` 接管最新数据和 dirty
   responsibility；
@@ -322,8 +325,8 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
   `WriteBackFull → CompDBIDResp → CopyBackWrData` 已经闭合；
 - 普通 `ReadShared` 命中 `UD` 时的 policy；当前 no-SD 行为由显式 `ReadNotSharedDirty` 路径承担；
 - 同 line 并发目前只有 RN/Home 单 owner reservation：第二笔本地 transaction 和撞上 local pending 的
-  Snoop 返回可重试的 `ResourceDemand`；等待者合并、显式 transient phase、Snoop 优先级、错误/Retry 与
-  取消尚未闭合；
+  Snoop 返回可重试的 `ResourceDemand`；等待者合并、显式 transient phase、Snoop 优先级，以及
+  Retry/error/Snoop 组合与取消尚未闭合；
 - runtime 按地址动态选择多个 Home、SAM remap 和跨 domain 执行。
 
 当前 `SD` 只是一条受限 CleanUnique 前置状态及其失效出口，不是完整 MOESI/Owned profile。后者还需要
@@ -331,9 +334,10 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
 以及 owner eviction/recovery。
 
 当前 feature closure 可以分别选择 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
-clean ReadUnique Retry modifier、shared-dirty-peer CleanUnique、dirty-unique、dirty-writeback 和
-独立的 MESI ReadNotSharedDirty 八个 feature。Retry modifier 依赖 clean ReadUnique，只增加
-Requester/Home Retry 原子能力、Home→Requester RSP flow 和显式 system lifecycle fact。
+clean ReadUnique NDERR/Retry modifier、shared-dirty-peer CleanUnique、dirty-unique、dirty-writeback 和
+独立的 MESI ReadNotSharedDirty 九个 feature。NDERR modifier 依赖 clean ReadUnique，只增加
+Requester/Home NDERR 原子能力和显式 system lifecycle fact，不增加 flow；Retry modifier 同样依赖 base，
+但增加 Requester/Home Retry 原子能力、Home→Requester RSP flow 和另一项 system lifecycle fact。
 `CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS` 的五类 REQ/SNP/RSP flow 不含 DAT，并与会返回
 CompData 的 ReadUnique 保持独立。`CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 依赖前者，只增加
 Snoopee→Home DAT、Home PassDirty data accept/reference memory update 与 peer dirty-data produce
@@ -525,6 +529,20 @@ RN0 ReadUnique
   → stable directory names RN0 as the unique clean holder
 ```
 
+同一 resolved 装配另保存预侦听 NDERR 的三 packet witness：
+
+```text
+RN0 ReadUnique
+  → HN0 reserves DBID and emits no SnpUnique
+  → CompData_I(NDERR) crosses XP0 to RN0
+  → RN0 keeps its original cache state and returns CompAck
+  → HN0 releases DBID without changing directory/backing
+```
+
+这个 modifier 复用 base feature 已证明的 REQ/DAT/CompAck 以及构造期 SNP/RSP flow；“本次没有实际
+Snoop packet”不等于删掉 base lifecycle 的 topology contract。当前 Home policy 与 modifier 必须成对启用，
+且 Retry→NDERR、post-snoop failure 和 DERR 没有被这个 witness 声称。
+
 同一装配可再运行 `ReadShared`，验证 shared directory 更新。首版验收至少包含：
 
 1. `ReadUnique` 双 Snoopee 的完整合法 witness；
@@ -611,7 +629,7 @@ clean ReadUnique 现另有一次成功 Retry 的 modifier：
 `ReadUnique→RetryAck→PCrdGrant→AllowRetry=0 重发` 之后复用本页既有 SnpUnique/CompData/CompAck
 lifecycle。Home 拒绝阶段只建立 Retry debt；Grant 预留真实 transaction slot，credited reissue 原子消费
 reservation 后才建立 coherence pending。direct packet-delivery 与单 XP topology witness 均覆盖该路径，
-但 cancel、error completion、多 waiter 与同址 Snoop 并发仍延期。
+但 cancel、Retry/error composition、多 waiter 与同址 Snoop 并发仍延期。
 
 展示产物优先包含一张 topology、一张简化 MSC 和一份最终 directory/cache-state 摘要。Link tick 等内部
 microstep 保存在诊断记录中，无需全部放入主 MSC。
@@ -631,8 +649,9 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 - 一个 component/port 承载多个 NodeID 的运行时选择；
 - 动态 snoop filter、router multicast 和 topology-wide broadcast；
 - 独立 fanout branch admission、fanout continuation 及其额外 storage；
-- message→multi-packet DAT splitter/reassembler、multi-flit response 和 narrow/error completion；
-- 多个 coherence Retry waiter、cancel/error，以及 Retry 与同址 Snoop 的并发组合；
+- message→multi-packet DAT splitter/reassembler、multi-flit response、narrow completion、DERR 与
+  post-snoop error completion；
+- 多个 coherence Retry waiter、cancel，以及 Retry/error/同址 Snoop 的并发组合；
 - virtual channel、adaptive route、QoS/fairness property 和 deadlock/livelock proof；
 - raw packed bit codec、phit/lane、FLITPEND、pin waveform 和 cycle-accurate RTL timing；
 - 自动生成 mesh/ring route table；
@@ -657,6 +676,7 @@ feature/capability/flow closure、packet-delivery coherence session 和 topology
 - orphan/重复 Snoop response、双 dirty owner 和 same-line hazard；
 - clean 与 dirty participant 状态转换的局部诊断；
 - `SD`/`shared_dirty_owner` 对齐、DAT route/capability 和 reference backing 提交时点；
+- coherent pre-snoop NDERR 的零 SNP、状态不变与 DBID/CompAck 定向生命周期；
 - coherent Retry/P-Credit 尚未进入公开 showcase 的定向生命周期。
 
 测试只有在对应公共入口或 showcase 已被自动 smoke test 调用，并保留等价的负例与原子边界证据后才适合

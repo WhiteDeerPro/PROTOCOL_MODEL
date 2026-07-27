@@ -106,12 +106,17 @@ authority、feature/flow closure 与稳定点 invariant 属于 SystemProtocol。
 transmitter→receiver hop 上的 flit，不解释 coherence opcode；`InterfaceProtocol` 则是项目中“完整逻辑
 接口合同”的作用域名称，不是 CHI 规范 Link layer 的别名。
 
+clean ReadUnique 还有一个独立的 pre-snoop NDERR modifier：
+`ReadUnique→CompData_I(NDERR)→CompAck` 只分配 DBID，不发 SNP；Requester 保持原 `I`/`SC` 和 payload，
+Home 在 Ack 后只释放 pending/同址 reservation，directory/backing 不变。它已有经单 XP 的三 packet
+witness，但当前不与 Retry 组合。
+
 当前 Home 固定选择“吸收 PassDirty、返回 `CompData_SC`、在 `CompAck` 后提交 backing/directory”这一种
 规范允许的 no-SD 结果；它没有覆盖所有可选 Home policy。`SC` holder 已可通过
 `CleanUnique→UC→local write→UD` 保留本地数据完成权限升级，也可通过
 `ReadUnique→UC→local write→UD` 走需要返回数据的路径。当前仍未实现 `MakeUnique`、clean `Evict`、
 packed bit/raw pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty
-victim/writeback scheduling、coherent NDERR/DERR 与 Retry/Snoop/error 并发、coherent Retry cancel/multi-waiter
+victim/writeback scheduling、coherent DERR/post-snoop error 与 Retry/Snoop/error 并发、coherent Retry cancel/multi-waiter
 policy、same-line transient/hazard，以及一般 MOESI `SD`/Owned。Participant
 facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，尚未并入通用
 `SystemSession` action loop；有界 scheduler budget 耗尽给出 inconclusive，不作为 network deadlock

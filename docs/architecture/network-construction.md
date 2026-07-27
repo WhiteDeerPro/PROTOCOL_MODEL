@@ -350,8 +350,10 @@ transport projection；其余 property 仍未闭合：
   REQ/SNP/RSP/DAT route 和相应提交结果。clean ReadUnique Retry modifier 复用 transaction-local
   Request-Retry/P-Credit 合同，Home grant 与 requester reissue 由同一 composition scheduler 自主推进；
   direct address-backed read 已把 authority 内 decode/access failure 映射为沿原 DAT route 返回的
-  `CompData_I(NDERR)`；当前不含 coherent cancel、多 waiter policy、coherent NDERR/DERR 或
-  Retry/Snoop/error 组合。通用 participant plan、multi-Home/SAM authority、
+  `CompData_I(NDERR)`；coherent `ReadUnique` 也已闭合 pre-snoop
+  `CompData_I(NDERR)→CompAck`、零 SNP 与 cache/directory/backing 不变式。当前不含 coherent cancel、
+  多 waiter policy、DERR/post-snoop error 或 Retry/Snoop/error 组合。通用 participant plan、
+  multi-Home/SAM authority、
   `MakeUnique`、clean `Evict`、自动 dirty victim/writeback scheduling、
   same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对

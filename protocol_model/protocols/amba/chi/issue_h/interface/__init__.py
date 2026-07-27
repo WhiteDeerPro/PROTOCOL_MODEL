@@ -20,6 +20,15 @@ from .read_retry import (
     ChiReadNoSnpRetryLedgerState,
     ChiReadNoSnpRetryPhase,
 )
+from .request_retry import (
+    ChiRequestRetryContract,
+    ChiRequestRetryContractError,
+    ChiRequestRetryEntry,
+    ChiRequestRetryHomeState,
+    ChiRequestRetryPhase,
+    ChiRequestRetryRequesterState,
+    ChiRetryDebt,
+)
 
 __all__ = [
     "ChiReadNoSnpComplete",
@@ -38,4 +47,11 @@ __all__ = [
     "ChiReadNoSnpRetryLedger",
     "ChiReadNoSnpRetryLedgerState",
     "ChiReadNoSnpRetryPhase",
+    "ChiRequestRetryContract",
+    "ChiRequestRetryContractError",
+    "ChiRequestRetryEntry",
+    "ChiRequestRetryHomeState",
+    "ChiRequestRetryPhase",
+    "ChiRequestRetryRequesterState",
+    "ChiRetryDebt",
 ]

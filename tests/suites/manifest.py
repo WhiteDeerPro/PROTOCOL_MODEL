@@ -31,6 +31,7 @@ CHI_MODULES = (
     "tests.test_chi_issue_h_coherence_authority",
     "tests.test_chi_issue_h_coherence_network",
     "tests.test_chi_issue_h_coherence_representation",
+    "tests.test_chi_issue_h_coherent_retry",
     "tests.test_chi_issue_h_dat_transport",
     "tests.test_chi_issue_h_data_path",
     "tests.test_chi_issue_h_direct_read_path",

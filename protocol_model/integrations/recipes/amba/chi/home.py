@@ -19,6 +19,7 @@ from typing import Mapping
 from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiBehaviorFacet,
     ChiCoherentHomeNode,
+    ChiCoherentRetryAdmissionPolicy,
     ChiFacetKind,
     ChiHomeDirectoryEntry,
     ChiParticipantBinding,
@@ -104,6 +105,8 @@ def bind_chi_issue_h_home_vdut(
     initial_snoop_transaction_id: int = 0x100,
     initial_data_buffer_id: int = 0x200,
     allow_dirty_data_transfer: bool = False,
+    default_protocol_credit_type: int = 0,
+    retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
 ) -> ChiIssueHHomeVdutAssembly:
     """Bind coherent Home behavior to one existing canonical VirtualDut.
 
@@ -211,6 +214,8 @@ def bind_chi_issue_h_home_vdut(
         initial_snoop_transaction_id=initial_snoop_transaction_id,
         initial_data_buffer_id=initial_data_buffer_id,
         allow_dirty_data_transfer=allow_dirty_data_transfer,
+        default_protocol_credit_type=default_protocol_credit_type,
+        retry_policy=retry_policy,
     )
     binding = ChiParticipantBinding(
         (
@@ -245,6 +250,8 @@ def attach_chi_issue_h_home(
     initial_snoop_transaction_id: int = 0x100,
     initial_data_buffer_id: int = 0x200,
     allow_dirty_data_transfer: bool = False,
+    default_protocol_credit_type: int = 0,
+    retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
     transmit_port_name: str = "chi_tx",
     receive_port_name: str = "chi_rx",
     clock_domain: str | None = None,
@@ -326,6 +333,8 @@ def attach_chi_issue_h_home(
         initial_snoop_transaction_id=initial_snoop_transaction_id,
         initial_data_buffer_id=initial_data_buffer_id,
         allow_dirty_data_transfer=allow_dirty_data_transfer,
+        default_protocol_credit_type=default_protocol_credit_type,
+        retry_policy=retry_policy,
     )
 
 

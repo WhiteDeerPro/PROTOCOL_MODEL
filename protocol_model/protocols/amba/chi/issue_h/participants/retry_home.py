@@ -12,6 +12,12 @@ from protocol_model.semantics import (
     SemanticStep,
 )
 
+from ..interface import (
+    ChiRequestRetryContract,
+    ChiRequestRetryContractError,
+    ChiRequestRetryHomeState,
+    ChiRetryDebt,
+)
 from ..representation import (
     ChiCompDataMessage,
     ChiPCrdReturnMessage,
@@ -25,37 +31,6 @@ from .direct_home import (
     ChiDirectHomeService,
     ChiDirectHomeState,
 )
-
-
-@dataclass(frozen=True)
-class ChiRetryDebt:
-    """One RetryAck for which the Home still owes a matching P-Credit."""
-
-    requester_id: int
-    transaction_id: int
-    protocol_credit_type: int
-
-    def __post_init__(self) -> None:
-        for name, value in (
-            ("requester_id", self.requester_id),
-            ("transaction_id", self.transaction_id),
-            ("protocol_credit_type", self.protocol_credit_type),
-        ):
-            if not isinstance(value, int) or isinstance(value, bool) or value < 0:
-                raise ValueError(f"{name} must be a non-negative integer")
-        if self.transaction_id >= (1 << 12):
-            raise ValueError("transaction_id must fit the Issue H field")
-        if self.protocol_credit_type >= 16:
-            raise ValueError("protocol_credit_type must be in 0..15")
-
-    @property
-    def request_key(self) -> tuple[int, int]:
-        return self.requester_id, self.transaction_id
-
-    @property
-    def credit_key(self) -> tuple[int, int]:
-        return self.requester_id, self.protocol_credit_type
-
 
 @dataclass(frozen=True)
 class ChiRetryHomeGrant:
@@ -149,6 +124,19 @@ class ChiRetryHomeState(ChiDirectHomeState):
     @property
     def reserved_count(self) -> int:
         return sum(self.reserved_by_requester_and_type.values())
+
+    @property
+    def retry_contract(self) -> ChiRequestRetryHomeState:
+        """Project the legacy direct-Home facade onto the shared contract."""
+
+        return ChiRequestRetryHomeState(
+            self.retry_debts,
+            self.reserved_by_requester_and_type,
+            self.retry_ack_count,
+            self.grant_count,
+            self.retried_accept_count,
+            self.returned_credit_count,
+        )
 
 
 ChiRetryAdmissionPolicy = Callable[
@@ -246,33 +234,29 @@ class ChiRetryHomeNode(ChiDirectHomeNode):
             )
 
         if not request.allow_retry:
-            key = (
-                self.profile.requester_node_id,
-                request.protocol_credit_type,
-            )
-            available = state.reserved_by_requester_and_type.get(key, 0)
-            if available == 0:
+            try:
+                retry = ChiRequestRetryContract.consume_reservation(
+                    state.retry_contract,
+                    requester_id=self.profile.requester_node_id,
+                    protocol_credit_type=request.protocol_credit_type,
+                )
+            except ChiRequestRetryContractError as error:
                 return self._retry_fault(
                     state,
-                    "missing_reservation",
-                    "credited retry has no matching Home reservation",
+                    error.code,
+                    error.reason,
                 )
-            reservations = dict(state.reserved_by_requester_and_type)
-            if available == 1:
-                del reservations[key]
-            else:
-                reservations[key] = available - 1
             return SemanticStep(
                 ChiRetryHomeState(
                     state.pending + (request,),
                     state.accepted_count + 1,
                     state.completed_count,
-                    state.retry_debts,
-                    reservations,
-                    state.retry_ack_count,
-                    state.grant_count,
-                    state.retried_accept_count + 1,
-                    state.returned_credit_count,
+                    retry.retry_debts,
+                    retry.reservations,
+                    retry.retry_ack_count,
+                    retry.grant_count,
+                    retry.consumed_count,
+                    retry.returned_count,
                 )
             )
 
@@ -315,32 +299,30 @@ class ChiRetryHomeNode(ChiDirectHomeNode):
                 "retry_policy",
                 "retry policy returned a P-Credit type outside 0..15",
             )
-        debt = ChiRetryDebt(
-            self.profile.requester_node_id,
-            request.transaction_id,
-            credit_type,
-        )
-        if any(item.request_key == debt.request_key for item in state.retry_debts):
+        try:
+            retry, response = ChiRequestRetryContract.record_retry(
+                state.retry_contract,
+                requester_id=self.profile.requester_node_id,
+                transaction_id=request.transaction_id,
+                protocol_credit_type=credit_type,
+            )
+        except ChiRequestRetryContractError as error:
             return self._retry_fault(
                 state,
-                "duplicate_retry_debt",
-                "the Home already owes a P-Credit for this request identity",
+                error.code,
+                error.reason,
             )
-        response = ChiRetryAckMessage(
-            transaction_id=request.transaction_id,
-            protocol_credit_type=credit_type,
-        )
         return SemanticStep(
             ChiRetryHomeState(
                 state.pending,
                 state.accepted_count,
                 state.completed_count,
-                state.retry_debts + (debt,),
-                state.reserved_by_requester_and_type,
-                state.retry_ack_count + 1,
-                state.grant_count,
-                state.retried_accept_count,
-                state.returned_credit_count,
+                retry.retry_debts,
+                retry.reservations,
+                retry.retry_ack_count,
+                retry.grant_count,
+                retry.consumed_count,
+                retry.returned_count,
             ),
             (response,),
         )
@@ -371,23 +353,20 @@ class ChiRetryHomeNode(ChiDirectHomeNode):
                     location=self.name,
                 ),
             )
-        debt = state.retry_debts[0]
-        reservations = dict(state.reserved_by_requester_and_type)
-        reservations[debt.credit_key] = reservations.get(debt.credit_key, 0) + 1
-        grant = ChiPCrdGrantMessage(
-            protocol_credit_type=debt.protocol_credit_type,
+        retry, _debt, grant = ChiRequestRetryContract.grant_oldest(
+            state.retry_contract
         )
         return SemanticStep(
             ChiRetryHomeState(
                 state.pending,
                 state.accepted_count,
                 state.completed_count,
-                state.retry_debts[1:],
-                reservations,
-                state.retry_ack_count,
-                state.grant_count + 1,
-                state.retried_accept_count,
-                state.returned_credit_count,
+                retry.retry_debts,
+                retry.reservations,
+                retry.retry_ack_count,
+                retry.grant_count,
+                retry.consumed_count,
+                retry.returned_count,
             ),
             (grant,),
         )
@@ -397,33 +376,29 @@ class ChiRetryHomeNode(ChiDirectHomeNode):
         state: ChiRetryHomeState,
         request: ChiPCrdReturnMessage,
     ) -> SemanticStep[ChiRetryHomeState, ChiRetryHomeEmission]:
-        key = (
-            self.profile.requester_node_id,
-            request.protocol_credit_type,
-        )
-        available = state.reserved_by_requester_and_type.get(key, 0)
-        if available == 0:
+        try:
+            retry = ChiRequestRetryContract.return_reservation(
+                state.retry_contract,
+                request,
+                requester_id=self.profile.requester_node_id,
+            )
+        except ChiRequestRetryContractError as error:
             return self._retry_fault(
                 state,
-                "pcredit_return_reservation",
-                "PCrdReturn has no matching Home reservation",
+                error.code,
+                error.reason,
             )
-        reservations = dict(state.reserved_by_requester_and_type)
-        if available == 1:
-            del reservations[key]
-        else:
-            reservations[key] = available - 1
         return SemanticStep(
             ChiRetryHomeState(
                 state.pending,
                 state.accepted_count,
                 state.completed_count,
-                state.retry_debts,
-                reservations,
-                state.retry_ack_count,
-                state.grant_count,
-                state.retried_accept_count,
-                state.returned_credit_count + 1,
+                retry.retry_debts,
+                retry.reservations,
+                retry.retry_ack_count,
+                retry.grant_count,
+                retry.consumed_count,
+                retry.returned_count,
             )
         )
 

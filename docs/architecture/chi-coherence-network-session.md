@@ -331,8 +331,10 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
 以及 owner eviction/recovery。
 
 当前 feature closure 可以分别选择 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
-shared-dirty-peer CleanUnique、dirty-unique、dirty-writeback 和独立的 MESI ReadNotSharedDirty 七个
-feature。`CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS` 的五类 REQ/SNP/RSP flow 不含 DAT，并与会返回
+clean ReadUnique Retry modifier、shared-dirty-peer CleanUnique、dirty-unique、dirty-writeback 和
+独立的 MESI ReadNotSharedDirty 八个 feature。Retry modifier 依赖 clean ReadUnique，只增加
+Requester/Home Retry 原子能力、Home→Requester RSP flow 和显式 system lifecycle fact。
+`CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS` 的五类 REQ/SNP/RSP flow 不含 DAT，并与会返回
 CompData 的 ReadUnique 保持独立。`CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 依赖前者，只增加
 Snoopee→Home DAT、Home PassDirty data accept/reference memory update 与 peer dirty-data produce
 要求，并产生 `CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE` 证据；runtime 复用 Home 的
@@ -605,6 +607,12 @@ RN cache behavior 通过 canonical binder 绑定调用方已有 VirtualDut；bin
 512-bit。128/256-bit DAT connection 需要先提供 splitter/reassembler 和 fragment correlation，不能只因
 NodeID/channel route 已闭合就宣称该场景可执行。
 
+clean ReadUnique 现另有一次成功 Retry 的 modifier：
+`ReadUnique→RetryAck→PCrdGrant→AllowRetry=0 重发` 之后复用本页既有 SnpUnique/CompData/CompAck
+lifecycle。Home 拒绝阶段只建立 Retry debt；Grant 预留真实 transaction slot，credited reissue 原子消费
+reservation 后才建立 coherence pending。direct packet-delivery 与单 XP topology witness 均覆盖该路径，
+但 cancel、error completion、多 waiter 与同址 Snoop 并发仍延期。
+
 展示产物优先包含一张 topology、一张简化 MSC 和一份最终 directory/cache-state 摘要。Link tick 等内部
 microstep 保存在诊断记录中，无需全部放入主 MSC。
 
@@ -624,7 +632,7 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 - 动态 snoop filter、router multicast 和 topology-wide broadcast；
 - 独立 fanout branch admission、fanout continuation 及其额外 storage；
 - message→multi-packet DAT splitter/reassembler、multi-flit response 和 narrow/error completion；
-- coherence 与 Retry/P-Credit lifecycle 的并发组合；
+- 多个 coherence Retry waiter、cancel/error，以及 Retry 与同址 Snoop 的并发组合；
 - virtual channel、adaptive route、QoS/fairness property 和 deadlock/livelock proof；
 - raw packed bit codec、phit/lane、FLITPEND、pin waveform 和 cycle-accurate RTL timing；
 - 自动生成 mesh/ring route table；
@@ -649,7 +657,7 @@ feature/capability/flow closure、packet-delivery coherence session 和 topology
 - orphan/重复 Snoop response、双 dirty owner 和 same-line hazard；
 - clean 与 dirty participant 状态转换的局部诊断；
 - `SD`/`shared_dirty_owner` 对齐、DAT route/capability 和 reference backing 提交时点；
-- Retry/P-Credit 等尚未进入公开 showcase 的生命周期。
+- coherent Retry/P-Credit 尚未进入公开 showcase 的定向生命周期。
 
 测试只有在对应公共入口或 showcase 已被自动 smoke test 调用，并保留等价的负例与原子边界证据后才适合
 缩减。`showcase/generated` 的既有 PASS 快照只代表一次发布结果，不能单独替代可执行检查。

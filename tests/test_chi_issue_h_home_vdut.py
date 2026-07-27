@@ -61,6 +61,10 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
         self,
     ) -> None:
         core = self.backing_core()
+
+        def retry_policy(request, state):
+            return 5
+
         assembly = attach_chi_issue_h_home(
             "hn0",
             core,
@@ -70,6 +74,8 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
             initial_snoop_transaction_id=0x120,
             initial_data_buffer_id=0x220,
             allow_dirty_data_transfer=True,
+            default_protocol_credit_type=5,
+            retry_policy=retry_policy,
             clock_domain="chi_clk",
             reset_domain="chi_reset",
         )
@@ -95,6 +101,11 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
             assembly.participant.initial_data_buffer_id,
         )
         self.assertTrue(assembly.participant.allow_dirty_data_transfer)
+        self.assertEqual(
+            5,
+            assembly.participant.default_protocol_credit_type,
+        )
+        self.assertIs(retry_policy, assembly.participant.retry_policy)
 
         dut = assembly.virtual_dut
         self.assertEqual(

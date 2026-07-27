@@ -9,10 +9,11 @@ The profile is intentionally narrow.  It closes clean ``ReadShared`` and
 ``ReadUnique`` lifecycles, clean- and restricted shared-dirty-peer
 ``CleanUnique`` permission upgrades, the ``UD`` owner-transfer path for
 ``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
-and explicit ``UD`` ``WriteBackFull``.  The ``SD`` state exists only for the
-CleanUnique memory-update slice; general shared-dirty behavior, Retry,
-automatic victim selection, forwarding snoops, and packed pin observations
-remain separate extensions.
+explicit ``UD`` ``WriteBackFull``, and one successful clean ``ReadUnique``
+Request-Retry cycle.  The ``SD`` state exists only for the CleanUnique
+memory-update slice; general shared-dirty behavior, Retry cancellation/error
+composition, automatic victim selection, forwarding snoops, and packed pin
+observations remain separate extensions.
 """
 
 from __future__ import annotations
@@ -42,13 +43,17 @@ from ..participants.coherence import (
     ChiHomeAcceptCoherentRead,
     ChiHomeAcceptSnoopResponse,
     ChiHomeAcceptWriteBackFull,
+    ChiHomeGrantPCredit,
     ChiRnAcceptComp,
     ChiRnAcceptCompDBIDResp,
     ChiRnAcceptCompData,
+    ChiRnAcceptPCrdGrant,
+    ChiRnAcceptRetryAck,
     ChiRnAcceptSnoop,
     ChiRnIssueCleanUnique,
     ChiRnIssueCoherentRead,
     ChiRnIssueWriteBackFull,
+    ChiRnRetryCoherentRequest,
     ChiRnWriteCacheLine,
 )
 from ..representation.dat import (
@@ -68,6 +73,8 @@ from ..representation.rsp import (
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
     ChiCompMessage,
+    ChiPCrdGrantMessage,
+    ChiRetryAckMessage,
     ChiSnpRespMessage,
 )
 from ..representation.snp import (
@@ -79,6 +86,7 @@ from ..representation.snp import (
 from .capability import (
     CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
     CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
     CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
@@ -98,6 +106,7 @@ _COHERENCE_FEATURES = frozenset(
     (
         *_CLEAN_READ_FEATURES,
         CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+        CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
         CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
         CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
         CHI_FEATURE_DIRTY_WRITEBACK,
@@ -211,12 +220,41 @@ class ChiSubmitWriteBackFull:
             )
 
 
+@dataclass(frozen=True)
+class ChiGrantCoherentHomePCredit:
+    """Give the Home one opportunity to reserve a retry slot."""
+
+
+@dataclass(frozen=True)
+class ChiRetryCoherentRequest:
+    """Ask one requester to consume credit and reissue ReadUnique."""
+
+    requester_node_id: int
+    transaction_id: int
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.requester_node_id, int)
+            or isinstance(self.requester_node_id, bool)
+            or self.requester_node_id < 0
+        ):
+            raise ValueError("CHI retry requester NodeID must be non-negative")
+        if (
+            not isinstance(self.transaction_id, int)
+            or isinstance(self.transaction_id, bool)
+            or not 0 <= self.transaction_id < (1 << 12)
+        ):
+            raise ValueError("CHI retry transaction_id must be 12-bit")
+
+
 ChiCoherenceAction = (
     ChiSubmitCoherentRead
     | ChiSubmitCleanUnique
     | ChiSubmitWriteBackFull
     | ChiDeliverCoherencePacket
     | ChiWriteUniqueCacheLine
+    | ChiGrantCoherentHomePCredit
+    | ChiRetryCoherentRequest
 )
 
 
@@ -254,10 +292,25 @@ class ChiCoherenceInvariantMonitor:
             reasons.append(
                 "stable coherence check requires an empty Home transaction table"
             )
+        if (
+            home.request_retry.retry_debts
+            or home.request_retry.reservations
+        ):
+            reasons.append(
+                "stable coherence check requires closed Home Retry/P-Credit "
+                "obligations"
+            )
         for node_id, state in request_nodes.items():
             if state.pending_transactions or state.pending_writebacks:
                 reasons.append(
                     f"RN {node_id} still owns pending coherent transactions"
+                )
+            if (
+                state.request_retry.entries
+                or state.request_retry.protocol_credits
+            ):
+                reasons.append(
+                    f"RN {node_id} still owns Retry/P-Credit state"
                 )
         if reasons:
             return tuple(reasons)
@@ -410,6 +463,29 @@ class ChiCoherenceSession(
         ):
             raise ValueError(
                 "dirty Unique transfer requires the ReadUnique base feature"
+            )
+        if (
+            CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY in features
+            and CHI_FEATURE_CLEAN_READ_UNIQUE not in features
+        ):
+            raise ValueError(
+                "ReadUnique Retry requires the clean ReadUnique base feature"
+            )
+        if (
+            home.retry_policy is not None
+            and CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY not in features
+        ):
+            raise ValueError(
+                "a configured coherent Home retry policy requires the "
+                "ReadUnique Retry feature"
+            )
+        if (
+            CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY in features
+            and home.retry_policy is None
+        ):
+            raise ValueError(
+                "the ReadUnique Retry feature requires a configured coherent "
+                "Home retry policy"
             )
         if (
             CHI_FEATURE_DIRTY_UNIQUE_TRANSFER in features
@@ -701,12 +777,10 @@ class ChiCoherenceSession(
         if not isinstance(state, ChiCoherenceState):
             return False
         return (
-            not state.home.pending
-            and not state.home.pending_writebacks
+            self.home.is_quiescent(state.home)
             and all(
-                not item.pending_transactions
-                and not item.pending_writebacks
-                for item in state.request_nodes.values()
+                self.request_nodes[node_id].is_quiescent(item)
+                for node_id, item in state.request_nodes.items()
             )
         )
 
@@ -732,6 +806,10 @@ class ChiCoherenceSession(
             return self._deliver(state, action.packet)
         if isinstance(action, ChiWriteUniqueCacheLine):
             return self._write_unique_cache_line(state, action)
+        if isinstance(action, ChiGrantCoherentHomePCredit):
+            return self._grant_pcredit(state)
+        if isinstance(action, ChiRetryCoherentRequest):
+            return self._retry_request(state, action)
         raise TypeError("unknown CHI coherence system action")
 
     def _profile_state_fault(
@@ -780,6 +858,67 @@ class ChiCoherenceSession(
                         self.name,
                     )
         return None
+
+    def _grant_pcredit(
+        self,
+        state: ChiCoherenceState,
+    ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        if (
+            CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+            not in self.enabled_features
+        ):
+            return self._fault(
+                state,
+                "retry_feature",
+                "ReadUnique Retry is not enabled by the feature contract",
+            )
+        transition = self.home.step(
+            state.home,
+            ChiHomeGrantPCredit(),
+        )
+        candidate = ChiCoherenceState(
+            transition.state,
+            state.request_nodes,
+        )
+        return self._finish(candidate, transition)
+
+    def _retry_request(
+        self,
+        state: ChiCoherenceState,
+        action: ChiRetryCoherentRequest,
+    ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        if (
+            CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+            not in self.enabled_features
+        ):
+            return self._fault(
+                state,
+                "retry_feature",
+                "ReadUnique Retry is not enabled by the feature contract",
+            )
+        node = self.request_nodes.get(action.requester_node_id)
+        if node is None:
+            return self._fault(
+                state,
+                "retry_requester",
+                f"NodeID {action.requester_node_id} is not a registered RN",
+            )
+        if action.requester_node_id not in self.requester_node_ids:
+            return self._fault(
+                state,
+                "requester_authority",
+                f"NodeID {action.requester_node_id} cannot retry requests "
+                "in this construction",
+            )
+        transition = node.step(
+            state.request_nodes[action.requester_node_id],
+            ChiRnRetryCoherentRequest(action.transaction_id),
+        )
+        return self._replace_request_node(
+            state,
+            action.requester_node_id,
+            transition,
+        )
 
     def _write_unique_cache_line(
         self,
@@ -1080,6 +1219,18 @@ class ChiCoherenceSession(
                         f"{type(message).__name__} is not enabled by the "
                         "resolved feature contract",
                     )
+                if (
+                    isinstance(message, ChiReadUniqueMessage)
+                    and not message.allow_retry
+                    and CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+                    not in self.enabled_features
+                ):
+                    return self._fault(
+                        state,
+                        "retry_feature",
+                        "credited ReadUnique is not enabled by the feature "
+                        "contract",
+                    )
                 action = ChiHomeAcceptCoherentRead(packet)
             elif isinstance(message, ChiWriteBackFullMessage):
                 if packet.source_id not in self.requester_node_ids:
@@ -1219,6 +1370,54 @@ class ChiCoherenceSession(
                     "Snoop packet does not match one Home-issued target",
                 )
             action = ChiRnAcceptSnoop(packet)
+        elif isinstance(message, ChiRetryAckMessage):
+            if packet.target_id not in self.requester_node_ids:
+                return self._fault(
+                    state,
+                    "requester_authority",
+                    f"NodeID {packet.target_id} cannot receive RetryAck "
+                    "in this construction",
+                )
+            if (
+                CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+                not in self.enabled_features
+            ):
+                return self._fault(
+                    state,
+                    "retry_feature",
+                    "RetryAck is not enabled by the feature contract",
+                )
+            if packet.source_id != self.home.node_id:
+                return self._fault(
+                    state,
+                    "retry_home",
+                    "RetryAck does not come from the selected Home",
+                )
+            action = ChiRnAcceptRetryAck(packet)
+        elif isinstance(message, ChiPCrdGrantMessage):
+            if packet.target_id not in self.requester_node_ids:
+                return self._fault(
+                    state,
+                    "requester_authority",
+                    f"NodeID {packet.target_id} cannot receive PCrdGrant "
+                    "in this construction",
+                )
+            if (
+                CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+                not in self.enabled_features
+            ):
+                return self._fault(
+                    state,
+                    "retry_feature",
+                    "PCrdGrant is not enabled by the feature contract",
+                )
+            if packet.source_id != self.home.node_id:
+                return self._fault(
+                    state,
+                    "retry_home",
+                    "PCrdGrant does not come from the selected Home",
+                )
+            action = ChiRnAcceptPCrdGrant(packet)
         elif isinstance(message, ChiCompMessage):
             if packet.target_id not in self.requester_node_ids:
                 return self._fault(
@@ -1388,6 +1587,8 @@ __all__ = [
     "ChiCoherenceSession",
     "ChiCoherenceState",
     "ChiDeliverCoherencePacket",
+    "ChiGrantCoherentHomePCredit",
+    "ChiRetryCoherentRequest",
     "ChiSubmitCleanUnique",
     "ChiSubmitCoherentRead",
     "ChiSubmitWriteBackFull",

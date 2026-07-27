@@ -45,18 +45,23 @@ Home 在 completion 前准备 line-local backing write，保持同址 reservatio
 commit 与 directory transition 提交 requester 为 unique owner。Home payload 已从 directory entry 拆入
 协议中立 `FullLineBackingCore`，公开 attach/canonical binder 也已落地。这里没有建立一般 `SD`
 生成/维持 policy，也没有把 reference update 冒充独立 Memory/SN physical commit。
+第一条 coherence Retry 组合也已闭合：
+`ReadUnique→RetryAck→PCrdGrant→AllowRetry=0 重发→SnpUnique→CompData→CompAck` 复用 family-local
+Request-Retry/P-Credit 合同和原有 ReadUnique lifecycle。Retry 阶段不建立 Home coherence pending、
+不分配 Snoop/DBID、不改 directory/backing；Grant 预留真实 transaction slot，network scheduler 自动推进
+credit 与重发。当前只覆盖一次 Retry 后成功，不含 cancel、多 waiter fairness 或 error completion。
 第一条 construction authority
 切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home，并从
 coherence-domain membership 派生 `eligible Snoopees = members - requester`；NodeID、逐成员 capability
 与 REQ/SNP/RSP/DAT flow 随后使用同一派生结果闭合。Home directory 仍只选择一笔事务的实际 holder，
 不取代静态 domain authority。
 
-1. 在已闭合的显式 `UD` topology writeback 基础上，增加 Retry/error/Snoop 并发与可选的
-   victim/writeback scheduling；replacement policy 保持独立 refinement；
+1. 在已闭合的显式 `UD` topology writeback 和 clean `ReadUnique` 单次 Retry 基础上，增加 error completion、
+   Retry/Snoop 并发与可选的 victim/writeback scheduling；replacement policy 保持独立 refinement；
 2. 在已闭合 clean/shared-dirty-peer `CleanUnique`、协议中立 Home backing 与 canonical Home binder
    基础上，按实际场景补 `MakeUnique` 与 clean `Evict`；只有验证目标需要观察 physical commit 时，再增加
    topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；
-3. 增加同 line transient/hazard、Retry/error 组合、多 waiter policy、多个 pending emission batch 与
+3. 增加同 line transient/hazard、Retry/error/Snoop 组合、多 waiter policy、多个 pending emission batch 与
    wait-for projection；
 4. 将当前只供 CleanUnique 消费的预置 `SD` 扩展为可生成、可维持的 Owned lifecycle，再以 dirty
    `SnpShared`、owner handoff、replacement 与 forwarding/DCT 检验 MOESI-like 扩展；

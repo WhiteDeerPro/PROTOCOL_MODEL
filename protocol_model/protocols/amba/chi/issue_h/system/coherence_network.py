@@ -9,7 +9,9 @@ admitted to the network one packet at a time.
 The current feature set includes clean ReadShared/ReadUnique, clean- and
 restricted shared-dirty-peer CleanUnique, the UD ReadUnique owner-transfer
 path, the MESI no-SharedDirty downgrade path, and explicit dirty
-WriteBackFull.  Retry, general shared-dirty ownership, automatic victim
+WriteBackFull.  It also schedules Home P-Credit grants and credited requester
+reissue for one successful clean ReadUnique Retry cycle.  Retry cancellation
+and error composition, general shared-dirty ownership, automatic victim
 selection, forwarding snoops, and a cycle-accurate Network Interface remain
 separate extensions.
 """
@@ -41,6 +43,8 @@ from .coherence import (
     ChiCoherenceSession,
     ChiCoherenceState,
     ChiDeliverCoherencePacket,
+    ChiGrantCoherentHomePCredit,
+    ChiRetryCoherentRequest,
     ChiSubmitCleanUnique,
     ChiSubmitCoherentRead,
     ChiSubmitWriteBackFull,
@@ -134,6 +138,8 @@ class ChiPendingCoherenceEgressBatch:
 
 class ChiCoherenceNetworkEventKind(str, Enum):
     ISSUE = "issue"
+    PROTOCOL_CREDIT = "protocol_credit"
+    RETRY = "retry"
     LOCAL_WRITE = "local_write"
     EGRESS_ENQUEUE = "egress_enqueue"
     NETWORK = "network"
@@ -344,8 +350,17 @@ class ChiCoherenceNetworkSession(
 
     def _build_candidates(self) -> tuple[tuple[str, _Candidate], ...]:
         candidates: list[tuple[str, _Candidate]] = [
-            ("egress.enqueue", self._enqueue_pending)
+            ("egress.enqueue", self._enqueue_pending),
+            ("home.pcredit_grant", self._grant_pcredit),
         ]
+        for node_id in sorted(self.coherence.requester_node_ids):
+            candidates.append(
+                (
+                    f"requester.{node_id}.retry",
+                    lambda state, requester=node_id:
+                    self._retry_request(state, requester),
+                )
+            )
         for connection, channel in sorted(
             self.endpoint_targets,
             key=lambda item: (item[0], item[1].value),
@@ -603,6 +618,98 @@ class ChiCoherenceNetworkSession(
             (
                 ChiCoherenceNetworkEvent(
                     ChiCoherenceNetworkEventKind.ISSUE,
+                    participant=binding.name,
+                    packet=child.emissions[0] if child.emissions else None,
+                    produced=child.emissions,
+                    lineage=lineage,
+                ),
+            ),
+        )
+
+    def _grant_pcredit(self, state):
+        if state.pending_egress:
+            return self._blocked(
+                state,
+                "pending_egress",
+                "Home P-Credit waits for the current egress batch",
+            )
+        if not state.coherence.home.request_retry.retry_debts:
+            return self._blocked(
+                state,
+                "retry_debt",
+                "Home has no RetryAck awaiting P-Credit",
+            )
+        return self._autonomous_participant(
+            state,
+            ChiGrantCoherentHomePCredit(),
+            self.coherence.home.node_id,
+            ChiCoherenceNetworkEventKind.PROTOCOL_CREDIT,
+            "pcredit_grant",
+        )
+
+    def _retry_request(self, state, requester_node_id):
+        if state.pending_egress:
+            return self._blocked(
+                state,
+                "pending_egress",
+                "credited retry waits for the current egress batch",
+            )
+        requester_state = state.coherence.request_nodes[requester_node_id]
+        retryable = requester_state.retryable_transaction_ids()
+        if not retryable:
+            return self._blocked(
+                state,
+                f"requester.{requester_node_id}.retry",
+                "requester has no RetryAck with matching P-Credit",
+            )
+        return self._autonomous_participant(
+            state,
+            ChiRetryCoherentRequest(
+                requester_node_id,
+                retryable[0],
+            ),
+            requester_node_id,
+            ChiCoherenceNetworkEventKind.RETRY,
+            f"retry[{retryable[0]}]",
+        )
+
+    def _autonomous_participant(
+        self,
+        state,
+        action,
+        source_node_id,
+        event_kind,
+        lineage_suffix,
+    ):
+        child = self.coherence.step(state.coherence, action)
+        failed = self._child_failure(state, child)
+        if failed is not None:
+            return failed
+        binding = self.binding_by_node_id.get(source_node_id)
+        if binding is None:
+            return self._fault(
+                state,
+                "autonomous_binding",
+                "autonomous participant has no resolved binding",
+            )
+        lineage = (f"{binding.name}.{lineage_suffix}",)
+        batch, fault = self._make_batch(
+            binding,
+            child.emissions,
+            lineage,
+        )
+        if fault is not None:
+            return SemanticStep(state, fault=fault)
+        candidate = replace(
+            state,
+            coherence=child.state,
+            pending_egress=batch,
+        )
+        return SemanticStep(
+            candidate,
+            (
+                ChiCoherenceNetworkEvent(
+                    event_kind,
                     participant=binding.name,
                     packet=child.emissions[0] if child.emissions else None,
                     produced=child.emissions,
@@ -883,6 +990,25 @@ class ChiCoherenceNetworkSession(
                 "coherence state does not cover the resolved participants",
                 ConstraintScope.SYSTEM,
                 self.name,
+            )
+        profile_fault = self.coherence._profile_state_fault(
+            state.coherence
+        )
+        if profile_fault is not None:
+            return profile_fault
+        home_state = state.coherence.home
+        if (
+            len(home_state.pending)
+            + len(home_state.pending_writebacks)
+            + home_state.request_retry.reserved_count
+            > self.coherence.home.transaction_capacity
+        ):
+            return SemanticFault(
+                f"{self.name}.home_retry_capacity",
+                "Home active transactions and P-Credit reservations exceed "
+                "its real capacity",
+                ConstraintScope.SYSTEM,
+                self.coherence.home.name,
             )
         if state.pending_egress:
             binding = self.binding_by_name.get(

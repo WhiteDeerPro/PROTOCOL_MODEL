@@ -160,13 +160,14 @@ lane 或 channel 内重排，lineage 仍需进一步绑定 packet-copy identity�
 它没有建立 RN/HN/SN/router 继承树。`ChiResolvedIdentityPlan` 检查 NodeID ownership。重复 NodeID
 默认视为歧义，只有同一 VirtualDut、相同逻辑 port boundary 和显式 share group 才可共享。
 
-feature catalog 把 `ReadNoSnp`、Request Retry、clean `ReadShared`、clean `ReadUnique`、clean/shared-dirty
-peer `CleanUnique`、dirty unique transfer 和 MESI `ReadNotSharedDirty` profile 展开为 participant
-capability、channel flow 与 system lifecycle requirement。flow projector 只处理合同所需 feature 及其依赖，
+feature catalog 把 direct `ReadNoSnp`、direct Request Retry、clean `ReadShared`、clean `ReadUnique`、
+clean `ReadUnique` Request Retry modifier、clean/shared-dirty peer `CleanUnique`、dirty unique transfer、
+dirty writeback 和 MESI `ReadNotSharedDirty` profile 展开为 participant capability、channel flow 与
+system lifecycle requirement。flow projector 只处理合同所需 feature 及其依赖，
 并只从已成功构造的 `ChiTransportNetworkSession` 产生证据：一条 topology edge 的存在本身不足以证明
 channel、NodeID width 和逐 XP route 可运行。`resolve_chi_system()` 汇总 facet、identity、flow 与
-capability，形成 `ResolvedChiSystem`；read/retry session 可以通过 `from_resolved()` 消费同一份证据和同一个
-network runtime。
+capability，形成 `ResolvedChiSystem`；read、retry 与 coherence session 可以通过 `from_resolved()` 消费
+同一份证据和同一个 network runtime。
 
 ### Direct read
 
@@ -186,6 +187,11 @@ canonical declaration；它们没有建立 topology-visible Memory/SN 或 HN→S
 
 ### Request Retry
 
+`interface/request_retry.py` 保存 family-local 的共同合同：Requester retained phase、按
+`(Home NodeID, PCrdType)` 池化的 transaction-independent P-Credit，以及 Home retry debt、真实容量
+reservation 与 credit conservation。direct-read facade 和 coherent participant 都委派这份合同，再把
+状态投影回各自的公开 participant state。
+
 `ChiReadNoSnpRetrySystemSession` 在 direct-read profile 上增加：
 
 ```text
@@ -202,6 +208,23 @@ Home 发 Grant 时预留真实请求容量；重发入网和 credit 消耗采用
 Requester 也可在 Ack 与匹配 Grant 均到达后取消该请求。此时 ledger 生成 `PCrdReturn`，它作为
 Requester→Home 的 REQ packet 经过同一正向 route；只有入网成功才同时移除 retained request 和本地
 P-Credit。Home 接收后释放 Grant 对应的真实预留槽，不产生 response。
+
+`CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY` 则把同一合同作为 clean `ReadUnique` 的 modifier：
+
+```text
+initial ReadUnique
+  → RetryAck
+  → matching PCrdGrant
+  → AllowRetry=0 credited ReadUnique
+  → SnpUnique / SnpResp
+  → CompData
+  → CompAck
+```
+
+被拒绝的初始请求不会分配 coherence pending、DBID 或 snoop，也不会修改 directory/backing。正确重发原子
+消耗 Home reservation 后才进入原有 clean `ReadUnique` lifecycle；Grant 可以先于 Ack 到达。当前 coherent
+slice 只闭合一次 Retry 后成功，不包含取消、error completion、同 Home/type 多 waiter 公平性或 Retry 与
+Snoop/writeback 的并发组合。
 
 ### Coherent reads 与受限 dirty ownership transfer
 
@@ -343,9 +366,12 @@ direct、ring 或 mesh 拓扑，具体形状仍由调用方构造并由 resolver
 在 DAT splitter 落地前，这个 full-line profile 要求沿途每条 DAT connection 都是 512-bit；network
 session 会在打开 resolved plan 时拒绝 128/256-bit DAT 路径。
 
-`CHI_FEATURE_CLEAN_READ_SHARED` 与 `CHI_FEATURE_CLEAN_READ_UNIQUE` 是两个独立构造合同。dirty unique
-transfer 依赖 clean ReadUnique，因为它直接扩展该 read lifecycle。dirty writeback 把“当前 line 为 `UD`”
-作为 participant-state 前置条件，不强制同一 construction 证明该权限由哪条获取路径产生；它声明
+`CHI_FEATURE_CLEAN_READ_SHARED` 与 `CHI_FEATURE_CLEAN_READ_UNIQUE` 是两个独立构造合同。
+`CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY` 依赖 clean ReadUnique，只增加 Requester/Home retry capability、
+Home→Requester `retry_response` RSP flow 和
+`CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE`；原有 snoop、completion 与 CompAck flow 由依赖闭合保留。
+dirty unique transfer 也依赖 clean ReadUnique，因为它直接扩展该 read lifecycle。dirty writeback
+把“当前 line 为 `UD`”作为 participant-state 前置条件，不强制同一 construction 证明该权限由哪条获取路径产生；它声明
 Requester→Home REQ、Home→Requester RSP 和 Requester→Home DAT 三条 flow，但不引入 Snoopee role。
 `CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY` 本身没有 feature
 dependency，也不要求 local-write capability，只声明这笔 read/snoop/completion 所需的角色和 flow。
@@ -375,7 +401,7 @@ domain 是构造期声明的 eligible peer 集合，并非一笔事务已经选�
 directory 从中选择实际 holder 并生成 per-target packet copy；session opening 会拒绝 directory holder
 越出 domain。`ChiCoherenceSession.from_resolved()` 从同一份 closed authority/feature construction 建立
 恰好由 `requester ∪ snoopees` 构成的 RN registry；它同时保留 requester-only issue、Snoopee-only SNP/RSP 和
-Shared/Unique/clean/shared-dirty CleanUnique、dirty-unique/dirty-writeback/MESI no-SD feature
+Shared/Unique/clean-ReadUnique-Retry/clean/shared-dirty CleanUnique、dirty-unique/dirty-writeback/MESI no-SD feature
 enablement。直接调用 packet-delivery API 也会重复检查这些 role authority，不能绕过构造期边界。当前窄
 profile 要求每个绑定只提供其 component 的单一 NodeID；
 等 flow evidence 保存所选 identity 后才适合放宽 compound binding。
@@ -384,7 +410,9 @@ packet-delivery session 继续作为较小的 participant runtime；topology-dri
 clean-peer `CleanUnique` 经 direct 与单 XP topology 的五 packet witness，并为 restricted `SD` peer
 增加 `SnpRespData_I_PD` 的五 packet witness；后者检查 `dirty_result`、prepared backing intent、
 `CompAck` 后 backing/directory commit 和 `SD→I`，但不声称独立 Memory/SN physical commit。clean `ReadUnique`
-经 XP 的七 packet witness；它也已闭合 dirty owner 经 XP 返回
+经 XP 的七 packet witness；其一次 Retry 后成功的 modifier 另有十 packet witness，覆盖两个
+`ReadUnique`、`RetryAck`、`PCrdGrant`、两个 `SnpUnique`、两个 `SnpResp`、`CompData` 与 `CompAck`，
+并检查最终 authority、backing version、retry ledger 和 transport quiescence。它也已闭合 dirty owner 经 XP 返回
 `SnpRespData_I_PD`、再以 `CompData_UD_PD` 转移责任的五 packet witness。第三条五 packet witness
 执行 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`，
 并检查 Home
@@ -396,11 +424,11 @@ Home backing/DBID 与 RN `UD→I` 的提交结果。详细原子边界与阶段�
 ## 场景与功能边界
 
 direct topology、调用方组装的一个或多个 router topology 和具体 FIFO 深度属于测试/showcase 的参考装配，
-不属于 CHI 核心 API。因此“尚未保存一份经 router 的完整 retry 演示”是实验覆盖缺口；RSP 已经进入
-network/router 执行分支。
+不属于 CHI 核心 API。coherent `ReadUnique` Retry 已保存单 XP router witness；direct `ReadNoSnp`
+Retry/Cancel 仍保留为独立、较窄的 profile。
 
 仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、`MakeUnique`、clean `Evict`、自动
-victim/writeback scheduling、writeback 与 Retry/error/Snoop 的并发组合、same-line transient/hazard、
+victim/writeback scheduling、coherent Retry 与 error/Snoop/writeback 的并发组合、same-line transient/hazard、
 完整 `SD`/Owned lifecycle、forwarding snoop、真实 snoop filter、可共同执行的 Home→Memory/SN
 participant 与 topology-visible `WriteNoSnp` physical commit、multi-packet DAT、同一 runtime 的
 multi-Home/SAM 选择、

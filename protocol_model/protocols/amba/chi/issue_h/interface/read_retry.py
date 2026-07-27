@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from enum import Enum
 from types import MappingProxyType
 from typing import Mapping
 
@@ -33,14 +32,16 @@ from .read_no_snp import (
     ChiReadNoSnpLedgerState,
     ChiReadNoSnpResult,
 )
+from .request_retry import (
+    ChiRequestRetryContract,
+    ChiRequestRetryContractError,
+    ChiRequestRetryEntry,
+    ChiRequestRetryPhase,
+    ChiRequestRetryRequesterState,
+)
 
 
-class ChiReadNoSnpRetryPhase(str, Enum):
-    """Requester knowledge about one retained operation."""
-
-    INITIAL_IN_FLIGHT = "initial_in_flight"
-    WAIT_RETRY_CREDIT = "wait_retry_credit"
-    RETRIED_IN_FLIGHT = "retried_in_flight"
+ChiReadNoSnpRetryPhase = ChiRequestRetryPhase
 
 
 @dataclass(frozen=True)
@@ -255,15 +256,8 @@ class ChiReadNoSnpRetryLedger(ChiReadNoSnpDirectLedger):
         self, state: ChiReadNoSnpRetryLedgerState
     ) -> tuple[int, ...]:
         self._require_retry_state(state)
-        return tuple(
-            key
-            for key, entry in state.entries.items()
-            if entry.phase is ChiReadNoSnpRetryPhase.WAIT_RETRY_CREDIT
-            and entry.protocol_credit_type is not None
-            and state.protocol_credits.get(
-                entry.protocol_credit_type, 0
-            )
-            > 0
+        return self._contract_state(state).retryable_transaction_ids(
+            home_node_id=self.profile.home_node_id
         )
 
     def step(
@@ -296,16 +290,16 @@ class ChiReadNoSnpRetryLedger(ChiReadNoSnpDirectLedger):
         failed = self._base_failure(state, transition)
         if failed is not None:
             return failed
-        entries = dict(state.entries)
-        entries[request.transaction_id] = ChiReadNoSnpRetryEntry(
-            request,
-            request,
-            ChiReadNoSnpRetryPhase.INITIAL_IN_FLIGHT,
-        )
-        return SemanticStep(
-            ChiReadNoSnpRetryLedgerState(
-                entries, state.protocol_credits, state.completed
+        try:
+            contract = ChiRequestRetryContract.retain_initial(
+                self._contract_state(state),
+                request,
+                home_node_id=self.profile.home_node_id,
             )
+        except ChiRequestRetryContractError as error:
+            return self._contract_fault(state, error)
+        return SemanticStep(
+            self._project_contract(contract, state.completed)
         )
 
     def _observe_retry_ack(
@@ -313,29 +307,16 @@ class ChiReadNoSnpRetryLedger(ChiReadNoSnpDirectLedger):
         state: ChiReadNoSnpRetryLedgerState,
         response: ChiRetryAckMessage,
     ) -> SemanticStep[ChiReadNoSnpRetryLedgerState, ChiReadNoSnpRetryEmission]:
-        entry = state.entries.get(response.transaction_id)
-        if entry is None:
-            return self._retry_fault(
-                state,
-                "unknown_retry_ack",
-                "RetryAck has no retained request identity",
+        try:
+            contract = ChiRequestRetryContract.observe_retry_ack(
+                self._contract_state(state),
+                response,
+                home_node_id=self.profile.home_node_id,
             )
-        if entry.phase is not ChiReadNoSnpRetryPhase.INITIAL_IN_FLIGHT:
-            return self._retry_fault(
-                state,
-                "duplicate_retry_ack",
-                "RetryAck is only valid for the initial in-flight request",
-            )
-        entries = dict(state.entries)
-        entries[response.transaction_id] = replace(
-            entry,
-            phase=ChiReadNoSnpRetryPhase.WAIT_RETRY_CREDIT,
-            protocol_credit_type=response.protocol_credit_type,
-        )
+        except ChiRequestRetryContractError as error:
+            return self._contract_fault(state, error)
         return SemanticStep(
-            ChiReadNoSnpRetryLedgerState(
-                entries, state.protocol_credits, state.completed
-            )
+            self._project_contract(contract, state.completed)
         )
 
     def _observe_pcredit(
@@ -343,11 +324,13 @@ class ChiReadNoSnpRetryLedger(ChiReadNoSnpDirectLedger):
         state: ChiReadNoSnpRetryLedgerState,
         response: ChiPCrdGrantMessage,
     ) -> SemanticStep[ChiReadNoSnpRetryLedgerState, ChiReadNoSnpRetryEmission]:
-        key = response.protocol_credit_type
-        credits = dict(state.protocol_credits)
-        credits[key] = credits.get(key, 0) + 1
+        contract = ChiRequestRetryContract.observe_pcredit(
+            self._contract_state(state),
+            response,
+            home_node_id=self.profile.home_node_id,
+        )
         return SemanticStep(
-            ChiReadNoSnpRetryLedgerState(state.entries, credits, state.completed)
+            self._project_contract(contract, state.completed)
         )
 
     def _retry_request(
@@ -355,44 +338,15 @@ class ChiReadNoSnpRetryLedger(ChiReadNoSnpDirectLedger):
         state: ChiReadNoSnpRetryLedgerState,
         request_key: int,
     ) -> SemanticStep[ChiReadNoSnpRetryLedgerState, ChiReadNoSnpRetryEmission]:
-        entry = state.entries.get(request_key)
-        if entry is None:
-            return self._retry_fault(
-                state, "unknown_retry", "retry action has no retained request"
+        try:
+            contract, retried = ChiRequestRetryContract.credited_reissue(
+                self._contract_state(state),
+                request_key,
             )
-        if (
-            entry.phase is not ChiReadNoSnpRetryPhase.WAIT_RETRY_CREDIT
-            or entry.protocol_credit_type is None
-        ):
-            return self._retry_fault(
-                state, "retry_phase", "request has not received RetryAck"
-            )
-        credit_key = entry.protocol_credit_type
-        available = state.protocol_credits.get(credit_key, 0)
-        if available == 0:
-            return self._retry_fault(
-                state,
-                "missing_pcredit",
-                "request has no matching P-Credit for retry",
-            )
-        retried = replace(
-            entry.original_request,
-            allow_retry=False,
-            protocol_credit_type=entry.protocol_credit_type,
-        )
-        entries = dict(state.entries)
-        entries[request_key] = replace(
-            entry,
-            current_request=retried,
-            phase=ChiReadNoSnpRetryPhase.RETRIED_IN_FLIGHT,
-        )
-        credits = dict(state.protocol_credits)
-        if available == 1:
-            del credits[credit_key]
-        else:
-            credits[credit_key] = available - 1
+        except ChiRequestRetryContractError as error:
+            return self._contract_fault(state, error)
         return SemanticStep(
-            ChiReadNoSnpRetryLedgerState(entries, credits, state.completed),
+            self._project_contract(contract, state.completed),
             (retried,),
         )
 
@@ -401,40 +355,15 @@ class ChiReadNoSnpRetryLedger(ChiReadNoSnpDirectLedger):
         state: ChiReadNoSnpRetryLedgerState,
         request_key: int,
     ) -> SemanticStep[ChiReadNoSnpRetryLedgerState, ChiReadNoSnpRetryEmission]:
-        entry = state.entries.get(request_key)
-        if entry is None:
-            return self._retry_fault(
-                state, "unknown_cancel", "cancel action has no retained request"
+        try:
+            contract, returned = ChiRequestRetryContract.cancel(
+                self._contract_state(state),
+                request_key,
             )
-        if (
-            entry.phase is not ChiReadNoSnpRetryPhase.WAIT_RETRY_CREDIT
-            or entry.protocol_credit_type is None
-        ):
-            return self._retry_fault(
-                state,
-                "cancel_phase",
-                "a request can return P-Credit only after RetryAck",
-            )
-        credit_key = entry.protocol_credit_type
-        available = state.protocol_credits.get(credit_key, 0)
-        if available == 0:
-            return self._retry_fault(
-                state,
-                "cancel_missing_pcredit",
-                "canceled request has no matching P-Credit to return",
-            )
-        returned = ChiPCrdReturnMessage(
-            protocol_credit_type=entry.protocol_credit_type,
-        )
-        entries = dict(state.entries)
-        del entries[request_key]
-        credits = dict(state.protocol_credits)
-        if available == 1:
-            del credits[credit_key]
-        else:
-            credits[credit_key] = available - 1
+        except ChiRequestRetryContractError as error:
+            return self._contract_fault(state, error)
         return SemanticStep(
-            ChiReadNoSnpRetryLedgerState(entries, credits, state.completed),
+            self._project_contract(contract, state.completed),
             (returned,),
         )
 
@@ -443,29 +372,90 @@ class ChiReadNoSnpRetryLedger(ChiReadNoSnpDirectLedger):
         state: ChiReadNoSnpRetryLedgerState,
         response: ChiCompDataMessage,
     ) -> SemanticStep[ChiReadNoSnpRetryLedgerState, ChiReadNoSnpRetryEmission]:
-        entry = state.entries.get(response.transaction_id)
-        if entry is not None and (
-            entry.phase is ChiReadNoSnpRetryPhase.WAIT_RETRY_CREDIT
-        ):
-            return self._retry_fault(
-                state,
-                "completion_before_retry",
-                "CompData cannot complete a request after RetryAck but before retry",
+        try:
+            contract = ChiRequestRetryContract.retire(
+                self._contract_state(state),
+                response.transaction_id,
             )
+        except ChiRequestRetryContractError as error:
+            return self._contract_fault(state, error)
         base = ChiReadNoSnpLedgerState(state.outstanding, state.completed)
         transition = super()._complete(base, response)
         failed = self._base_failure(state, transition)
         if failed is not None:
             return failed
-        entries = dict(state.entries)
-        del entries[response.transaction_id]
         result = transition.emissions[0]
         return SemanticStep(
-            ChiReadNoSnpRetryLedgerState(
-                entries, state.protocol_credits, transition.state.completed
+            self._project_contract(
+                contract,
+                transition.state.completed,
             ),
             (result,),
         )
+
+    def _contract_state(
+        self,
+        state: ChiReadNoSnpRetryLedgerState,
+    ) -> ChiRequestRetryRequesterState[ChiReadNoSnpMessage]:
+        return ChiRequestRetryRequesterState(
+            {
+                transaction_id: ChiRequestRetryEntry(
+                    entry.original_request,
+                    entry.current_request,
+                    self.profile.home_node_id,
+                    entry.phase,
+                    entry.protocol_credit_type,
+                )
+                for transaction_id, entry in state.entries.items()
+            },
+            {
+                (self.profile.home_node_id, credit_type): count
+                for credit_type, count in state.protocol_credits.items()
+            },
+        )
+
+    def _project_contract(
+        self,
+        contract: ChiRequestRetryRequesterState[ChiReadNoSnpMessage],
+        completed: tuple[ChiReadNoSnpResult, ...],
+    ) -> ChiReadNoSnpRetryLedgerState:
+        if any(
+            home_node_id != self.profile.home_node_id
+            for home_node_id, _credit_type in contract.protocol_credits
+        ) or any(
+            entry.home_node_id != self.profile.home_node_id
+            for entry in contract.entries.values()
+        ):
+            raise ValueError(
+                "direct ReadNoSnp facade received another Home identity"
+            )
+        return ChiReadNoSnpRetryLedgerState(
+            {
+                transaction_id: ChiReadNoSnpRetryEntry(
+                    entry.original_request,
+                    entry.current_request,
+                    entry.phase,
+                    entry.protocol_credit_type,
+                )
+                for transaction_id, entry in contract.entries.items()
+            },
+            {
+                credit_type: count
+                for (_home_node_id, credit_type), count
+                in contract.protocol_credits.items()
+            },
+            completed,
+        )
+
+    def _contract_fault(
+        self,
+        state: ChiReadNoSnpRetryLedgerState,
+        error: ChiRequestRetryContractError,
+    ) -> SemanticStep[
+        ChiReadNoSnpRetryLedgerState,
+        ChiReadNoSnpRetryEmission,
+    ]:
+        return self._retry_fault(state, error.code, error.reason)
 
     @staticmethod
     def _require_retry_state(state: ChiReadNoSnpRetryLedgerState) -> None:

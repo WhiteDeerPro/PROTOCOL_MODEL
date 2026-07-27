@@ -306,10 +306,12 @@ network 自动运输。`ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_
 dirty data/responsibility→CompData_SC→CompAck→Home backing/directory commit` 是当前 no-SD MESI
 路径。当前 Home 固定选择吸收 PassDirty 并返回 `CompData_SC`，这是规范允许结果的受限子集。普通
 clean `ReadShared` 与任一允许 `UD` 的 feature 组合仍在本 profile 之外。
-`SC→ReadUnique→UC→local write→UD` 已实现；
-显式 `UD` writeback 已经经 resolved XP topology 闭合；真实 snoop filter、router multicast、
-`CleanUnique`/`MakeUnique`、自动 dirty victim/eviction scheduling、same-line transient/hazard 和
-MOESI `SD`/Owned 仍属于后续
+`SC→ReadUnique→UC→local write→UD` 与保留本地数据的 `SC→CleanUnique→UC→local write→UD` 已实现；
+clean `ReadUnique` 的单次 Retry 也已经经 resolved XP topology 自动闭合 RetryAck、PCrdGrant、
+credited reissue 与原有 SnpUnique lifecycle；显式 `UD` writeback 已经经同类 topology 闭合。真实 snoop
+filter、router multicast、
+`MakeUnique`、clean `Evict`、自动 dirty victim/writeback scheduling、same-line transient/hazard 和
+一般 MOESI `SD`/Owned 仍属于后续
 participant/system 能力。
 
 这里仍按三种投影保存权威：message/opcode/field 与 transaction-local correlation 属于 typed
@@ -344,8 +346,11 @@ transport projection；其余 property 仍未闭合：
   closure 和受限 family scheduler。clean `ReadShared/ReadUnique` 已进入 participant lifecycle，并由
   topology-driven composition scheduler 自动推进 REQ/SNP/RSP/DAT/CompAck；dirty unique transfer 与
   no-SD `ReadNotSharedDirty` 也已闭合，其中后者以 CompAck 后的 Home backing/directory commit 结束
-  dirty responsibility；显式 `UD` writeback 也已闭合经 XP 的 REQ/RSP/DAT route 与提交结果。
-  通用 participant plan、multi-Home/SAM authority、`CleanUnique`/`MakeUnique`、自动 dirty victim/eviction scheduling、
+  dirty responsibility；clean/shared-dirty-peer `CleanUnique` 与显式 `UD` writeback 也已闭合经 XP 的
+  REQ/SNP/RSP/DAT route 和相应提交结果。clean ReadUnique Retry modifier 复用 transaction-local
+  Request-Retry/P-Credit 合同，Home grant 与 requester reissue 由同一 composition scheduler 自主推进；
+  当前不含 coherent cancel、多 waiter policy 或 error completion。通用 participant plan、multi-Home/SAM authority、
+  `MakeUnique`、clean `Evict`、自动 dirty victim/writeback scheduling、
   same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；

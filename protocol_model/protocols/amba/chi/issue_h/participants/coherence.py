@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import Mapping
+from typing import Callable, Mapping
 
 from protocol_model.semantics import (
     ConstraintScope,
@@ -36,6 +36,13 @@ from protocol_model.virtual_dut.backend.cache import (
     CacheLineStoreState,
 )
 
+from ..interface import (
+    ChiRequestRetryContract,
+    ChiRequestRetryContractError,
+    ChiRequestRetryHomeState,
+    ChiRequestRetryPhase,
+    ChiRequestRetryRequesterState,
+)
 from ..representation.dat import (
     ChiCompDataMessage,
     ChiCopyBackWrDataMessage,
@@ -54,6 +61,8 @@ from ..representation.rsp import (
     ChiCompMessage,
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
+    ChiPCrdGrantMessage,
+    ChiRetryAckMessage,
     ChiSnpRespMessage,
 )
 from ..representation.snp import (
@@ -206,6 +215,47 @@ class ChiRnAcceptCompData:
 
 
 @dataclass(frozen=True)
+class ChiRnAcceptRetryAck:
+    """Correlate a Home RetryAck with one retained ReadUnique."""
+
+    packet: ChiNetworkPacket
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
+            self.packet.message, ChiRetryAckMessage
+        ):
+            raise TypeError("RN retry action requires a RetryAck packet")
+
+
+@dataclass(frozen=True)
+class ChiRnAcceptPCrdGrant:
+    """Pool one transaction-independent Home protocol credit."""
+
+    packet: ChiNetworkPacket
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
+            self.packet.message, ChiPCrdGrantMessage
+        ):
+            raise TypeError("RN P-Credit action requires a PCrdGrant packet")
+
+
+@dataclass(frozen=True)
+class ChiRnRetryCoherentRequest:
+    """Consume a matching P-Credit and reissue a retained ReadUnique."""
+
+    transaction_id: int
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.transaction_id, int)
+            or isinstance(self.transaction_id, bool)
+            or not 0 <= self.transaction_id < _TRANSACTION_ID_LIMIT
+        ):
+            raise ValueError("RN retry transaction_id must be 12-bit")
+
+
+@dataclass(frozen=True)
 class ChiRnWriteCacheLine:
     """Apply one local write after the RN already owns Unique permission.
 
@@ -260,6 +310,9 @@ ChiCoherentRnAction = (
     | ChiRnAcceptSnoop
     | ChiRnAcceptComp
     | ChiRnAcceptCompData
+    | ChiRnAcceptRetryAck
+    | ChiRnAcceptPCrdGrant
+    | ChiRnRetryCoherentRequest
     | ChiRnWriteCacheLine
     | ChiRnIssueWriteBackFull
     | ChiRnAcceptCompDBIDResp
@@ -286,6 +339,9 @@ class ChiCoherentRnState:
     pending_writebacks: Mapping[int, ChiWriteBackFullMessage] = field(
         default_factory=dict
     )
+    request_retry: ChiRequestRetryRequesterState[
+        ChiReadUniqueMessage
+    ] = field(default_factory=ChiRequestRetryRequesterState)
 
     def __post_init__(self) -> None:
         if not isinstance(self.cache, CacheLineStoreState):
@@ -381,6 +437,28 @@ class ChiCoherentRnState:
             raise ValueError(
                 "RN pending CleanUnique requires a resident SC line"
             )
+        if not isinstance(
+            self.request_retry,
+            ChiRequestRetryRequesterState,
+        ):
+            raise TypeError(
+                "RN Request-Retry facet requires requester retry state"
+            )
+        retry_entries = self.request_retry.entries
+        read_unique_ids = {
+            transaction_id
+            for transaction_id, request in pending.items()
+            if isinstance(request, ChiReadUniqueMessage)
+        }
+        if set(retry_entries) != read_unique_ids or any(
+            not isinstance(entry.current_request, ChiReadUniqueMessage)
+            or pending.get(transaction_id) != entry.current_request
+            for transaction_id, entry in retry_entries.items()
+        ):
+            raise ValueError(
+                "RN Request-Retry entries must project retained ReadUnique "
+                "transactions"
+            )
         object.__setattr__(
             self,
             "pending_writebacks",
@@ -429,6 +507,11 @@ class ChiCoherentRnState:
             for request in self.pending_writebacks.values()
             if request.address == address
         )
+
+    def retryable_transaction_ids(self) -> tuple[int, ...]:
+        """Return retained requests that can consume a matching P-Credit."""
+
+        return self.request_retry.retryable_transaction_ids()
 
 
 class ChiCoherentRnNode(
@@ -510,6 +593,8 @@ class ChiCoherentRnNode(
             isinstance(state, ChiCoherentRnState)
             and not state.pending_transactions
             and not state.pending_writebacks
+            and not state.request_retry.entries
+            and not state.request_retry.protocol_credits
         )
 
     def step(
@@ -529,6 +614,15 @@ class ChiCoherentRnNode(
             return self._accept_comp(state, action.packet)
         if isinstance(action, ChiRnAcceptCompData):
             return self._accept_comp_data(state, action.packet)
+        if isinstance(action, ChiRnAcceptRetryAck):
+            return self._accept_retry_ack(state, action.packet)
+        if isinstance(action, ChiRnAcceptPCrdGrant):
+            return self._accept_pcredit_grant(state, action.packet)
+        if isinstance(action, ChiRnRetryCoherentRequest):
+            return self._retry_coherent_request(
+                state,
+                action.transaction_id,
+            )
         if isinstance(action, ChiRnWriteCacheLine):
             return self._write_cache_line(
                 state,
@@ -578,6 +672,7 @@ class ChiCoherentRnNode(
                 permissions,
                 state.pending_transactions,
                 state.pending_writebacks,
+                state.request_retry,
             )
         )
 
@@ -615,6 +710,16 @@ class ChiCoherentRnNode(
                 state,
                 "completion_ack",
                 "coherent reads in this RN-F profile require ExpCompAck",
+            )
+        if (
+            not request.allow_retry
+            or request.protocol_credit_type != 0
+        ):
+            return self._fault(
+                state,
+                "coherent_read_retry_shape",
+                "an initial coherent read requires AllowRetry=1 and "
+                "PCrdType=0",
             )
         if (
             request.transaction_id in state.pending_transactions
@@ -674,11 +779,22 @@ class ChiCoherentRnNode(
             )
         pending = dict(state.pending_transactions)
         pending[request.transaction_id] = request
+        request_retry = state.request_retry
+        if isinstance(request, ChiReadUniqueMessage):
+            try:
+                request_retry = ChiRequestRetryContract.retain_initial(
+                    request_retry,
+                    request,
+                    home_node_id=self.home_node_id,
+                )
+            except ChiRequestRetryContractError as error:
+                return self._fault(state, error.code, error.reason)
         candidate = ChiCoherentRnState(
             state.cache,
             state.permissions,
             pending,
             state.pending_writebacks,
+            request_retry,
         )
         packet = ChiNetworkPacket.request(
             request,
@@ -790,6 +906,134 @@ class ChiCoherentRnNode(
             state.permissions,
             pending,
             state.pending_writebacks,
+            state.request_retry,
+        )
+        return SemanticStep(
+            candidate,
+            (
+                ChiNetworkPacket.request(
+                    request,
+                    source_id=self.node_id,
+                    target_id=self.home_node_id,
+                ),
+            ),
+        )
+
+    def _accept_retry_ack(
+        self,
+        state: ChiCoherentRnState,
+        packet: ChiNetworkPacket,
+    ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
+        if packet.target_id != self.node_id:
+            return self._fault(
+                state,
+                "retry_ack_target",
+                "RetryAck packet targets another Request Node",
+            )
+        if packet.source_id != self.home_node_id:
+            return self._fault(
+                state,
+                "retry_ack_home",
+                "RetryAck does not come from the configured Home",
+            )
+        response = packet.message
+        assert isinstance(response, ChiRetryAckMessage)
+        request = state.pending_transactions.get(response.transaction_id)
+        if not isinstance(request, ChiReadUniqueMessage):
+            return self._fault(
+                state,
+                "retry_ack_identity",
+                "RetryAck does not match a retained ReadUnique",
+            )
+        try:
+            request_retry = ChiRequestRetryContract.observe_retry_ack(
+                state.request_retry,
+                response,
+                home_node_id=self.home_node_id,
+            )
+        except ChiRequestRetryContractError as error:
+            return self._fault(state, error.code, error.reason)
+        return SemanticStep(
+            ChiCoherentRnState(
+                state.cache,
+                state.permissions,
+                state.pending_transactions,
+                state.pending_writebacks,
+                request_retry,
+            )
+        )
+
+    def _accept_pcredit_grant(
+        self,
+        state: ChiCoherentRnState,
+        packet: ChiNetworkPacket,
+    ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
+        if packet.target_id != self.node_id:
+            return self._fault(
+                state,
+                "pcredit_target",
+                "PCrdGrant packet targets another Request Node",
+            )
+        if packet.source_id != self.home_node_id:
+            return self._fault(
+                state,
+                "pcredit_home",
+                "PCrdGrant does not come from the configured Home",
+            )
+        response = packet.message
+        assert isinstance(response, ChiPCrdGrantMessage)
+        request_retry = ChiRequestRetryContract.observe_pcredit(
+            state.request_retry,
+            response,
+            home_node_id=self.home_node_id,
+        )
+        return SemanticStep(
+            ChiCoherentRnState(
+                state.cache,
+                state.permissions,
+                state.pending_transactions,
+                state.pending_writebacks,
+                request_retry,
+            )
+        )
+
+    def _retry_coherent_request(
+        self,
+        state: ChiCoherentRnState,
+        transaction_id: int,
+    ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
+        try:
+            request_retry, request = (
+                ChiRequestRetryContract.credited_reissue(
+                    state.request_retry,
+                    transaction_id,
+                )
+            )
+        except ChiRequestRetryContractError as error:
+            return self._fault(state, error.code, error.reason)
+        if not isinstance(request, ChiReadUniqueMessage):
+            return self._fault(
+                state,
+                "retry_opcode",
+                "the coherent retry slice supports only ReadUnique",
+            )
+        pending = dict(state.pending_transactions)
+        if not isinstance(
+            pending.get(transaction_id),
+            ChiReadUniqueMessage,
+        ):
+            return self._fault(
+                state,
+                "retry_identity",
+                "retry no longer matches an RN pending ReadUnique",
+            )
+        pending[transaction_id] = request
+        candidate = ChiCoherentRnState(
+            state.cache,
+            state.permissions,
+            pending,
+            state.pending_writebacks,
+            request_retry,
         )
         return SemanticStep(
             candidate,
@@ -989,6 +1233,7 @@ class ChiCoherentRnNode(
                 permissions,
                 state.pending_transactions,
                 state.pending_writebacks,
+                state.request_retry,
             ),
             (response_packet,),
         )
@@ -1054,6 +1299,7 @@ class ChiCoherentRnNode(
                 permissions,
                 pending,
                 state.pending_writebacks,
+                state.request_retry,
             ),
             (ack,),
         )
@@ -1121,6 +1367,15 @@ class ChiCoherentRnNode(
         permissions[request.address] = installed_state
         pending = dict(state.pending_transactions)
         del pending[response.transaction_id]
+        request_retry = state.request_retry
+        if isinstance(request, ChiReadUniqueMessage):
+            try:
+                request_retry = ChiRequestRetryContract.retire(
+                    request_retry,
+                    response.transaction_id,
+                )
+            except ChiRequestRetryContractError as error:
+                return self._fault(state, error.code, error.reason)
         ack = ChiNetworkPacket.response(
             ChiCompAckMessage(
                 transaction_id=response.data_buffer_id,
@@ -1134,6 +1389,7 @@ class ChiCoherentRnNode(
                 permissions,
                 pending,
                 state.pending_writebacks,
+                request_retry,
             ),
             (ack,),
         )
@@ -1235,6 +1491,7 @@ class ChiCoherentRnNode(
             state.permissions,
             state.pending_transactions,
             pending,
+            state.request_retry,
         )
         return SemanticStep(
             candidate,
@@ -1313,6 +1570,7 @@ class ChiCoherentRnNode(
                 permissions,
                 state.pending_transactions,
                 pending,
+                state.request_retry,
             ),
             (
                 ChiNetworkPacket.data(
@@ -1634,6 +1892,11 @@ class ChiHomeAcceptCopyBackData:
             )
 
 
+@dataclass(frozen=True)
+class ChiHomeGrantPCredit:
+    """Reserve one real Home transaction slot for the oldest retry debt."""
+
+
 ChiCoherentHomeAction = (
     ChiHomeAcceptCoherentRead
     | ChiHomeAcceptCleanUnique
@@ -1641,6 +1904,7 @@ ChiCoherentHomeAction = (
     | ChiHomeAcceptCompAck
     | ChiHomeAcceptWriteBackFull
     | ChiHomeAcceptCopyBackData
+    | ChiHomeGrantPCredit
 )
 
 
@@ -1655,6 +1919,9 @@ class ChiCoherentHomeState:
     next_data_buffer_id: int = 0x200
     pending_writebacks: Mapping[int, ChiHomeWriteBackPending] = field(
         default_factory=dict
+    )
+    request_retry: ChiRequestRetryHomeState = field(
+        default_factory=ChiRequestRetryHomeState
     )
 
     def __post_init__(self) -> None:
@@ -1755,6 +2022,16 @@ class ChiCoherentHomeState:
             "pending_writebacks",
             MappingProxyType(writebacks),
         )
+        if not isinstance(self.request_retry, ChiRequestRetryHomeState):
+            raise TypeError(
+                "Home Request-Retry facet requires Home retry state"
+            )
+
+
+ChiCoherentRetryAdmissionPolicy = Callable[
+    [ChiReadUniqueMessage, ChiCoherentHomeState],
+    int | None,
+]
 
 
 class ChiCoherentHomeNode(
@@ -1781,6 +2058,8 @@ class ChiCoherentHomeNode(
         initial_snoop_transaction_id: int = 0x100,
         initial_data_buffer_id: int = 0x200,
         allow_dirty_data_transfer: bool = False,
+        default_protocol_credit_type: int = 0,
+        retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
     ) -> None:
         if not isinstance(name, str) or not name:
             raise ValueError("coherent Home requires a name")
@@ -1829,6 +2108,14 @@ class ChiCoherentHomeNode(
                 raise ValueError(f"{name_} must be a 12-bit identifier")
         if type(allow_dirty_data_transfer) is not bool:
             raise TypeError("allow_dirty_data_transfer must be bool")
+        if (
+            not isinstance(default_protocol_credit_type, int)
+            or isinstance(default_protocol_credit_type, bool)
+            or not 0 <= default_protocol_credit_type < 16
+        ):
+            raise ValueError("default protocol-credit type must be in 0..15")
+        if retry_policy is not None and not callable(retry_policy):
+            raise TypeError("coherent Home retry_policy must be callable")
         self.name = name
         self.node_id = node_id
         self.backing_core = backing_core
@@ -1837,6 +2124,8 @@ class ChiCoherentHomeNode(
         self.initial_snoop_transaction_id = initial_snoop_transaction_id
         self.initial_data_buffer_id = initial_data_buffer_id
         self.allow_dirty_data_transfer = allow_dirty_data_transfer
+        self.default_protocol_credit_type = default_protocol_credit_type
+        self.retry_policy = retry_policy
 
     def initial_state(self) -> ChiCoherentHomeState:
         return ChiCoherentHomeState(
@@ -1854,6 +2143,8 @@ class ChiCoherentHomeNode(
             isinstance(state, ChiCoherentHomeState)
             and not state.pending
             and not state.pending_writebacks
+            and not state.request_retry.retry_debts
+            and not state.request_retry.reservations
         )
 
     def step(
@@ -1863,6 +2154,17 @@ class ChiCoherentHomeNode(
     ) -> SemanticStep[ChiCoherentHomeState, ChiNetworkPacket]:
         if not isinstance(state, ChiCoherentHomeState):
             raise TypeError("coherent Home requires ChiCoherentHomeState")
+        active_count = len(state.pending) + len(state.pending_writebacks)
+        if (
+            active_count + state.request_retry.reserved_count
+            > self.transaction_capacity
+        ):
+            return self._fault(
+                state,
+                "retry_capacity_invariant",
+                "active transactions plus P-Credit reservations exceed "
+                "Home capacity",
+            )
         if isinstance(action, ChiHomeAcceptCoherentRead):
             return self._accept_coherence_request(state, action.packet)
         if isinstance(action, ChiHomeAcceptCleanUnique):
@@ -1875,6 +2177,8 @@ class ChiCoherentHomeNode(
             return self._accept_writeback_full(state, action.packet)
         if isinstance(action, ChiHomeAcceptCopyBackData):
             return self._accept_copyback_data(state, action.packet)
+        if isinstance(action, ChiHomeGrantPCredit):
+            return self._grant_pcredit(state)
         raise TypeError("unknown coherent Home action")
 
     def _accept_coherence_request(
@@ -1892,6 +2196,7 @@ class ChiCoherentHomeNode(
                 ChiReadUniqueMessage,
             ),
         )
+        active_count = len(state.pending) + len(state.pending_writebacks)
         if packet.target_id != self.node_id:
             return self._fault(
                 state,
@@ -1920,6 +2225,32 @@ class ChiCoherentHomeNode(
                 "clean_unique_profile",
                 "initial CleanUnique requires Normal-memory attributes, "
                 "AllowRetry=1, PCrdType=0, and LikelyShared=0",
+            )
+        if isinstance(request, ChiReadUniqueMessage):
+            if request.allow_retry and request.protocol_credit_type != 0:
+                return self._fault(
+                    state,
+                    "read_unique_initial_credit_type",
+                    "initial ReadUnique requires PCrdType=0",
+                )
+            if (
+                not request.allow_retry
+                and request.protocol_credit_type not in range(16)
+            ):
+                return self._fault(
+                    state,
+                    "read_unique_retry_credit_type",
+                    "credited ReadUnique requires a 4-bit PCrdType",
+                )
+        elif not isinstance(request, ChiCleanUniqueMessage) and (
+            not request.allow_retry
+            or request.protocol_credit_type != 0
+        ):
+            return self._fault(
+                state,
+                "coherent_read_initial_retry_shape",
+                "the current non-ReadUnique coherent reads accept only "
+                "initial AllowRetry=1, PCrdType=0 requests",
             )
         unsupported = tuple(
             name
@@ -2001,9 +2332,90 @@ class ChiCoherentHomeNode(
                 "duplicate_request",
                 "Home already owns this Requester/TxnID",
             )
+        request_retry = state.request_retry
+        if isinstance(request, ChiReadUniqueMessage):
+            if request.allow_retry:
+                credit_type = (
+                    None
+                    if self.retry_policy is None
+                    else self.retry_policy(request, state)
+                )
+                if credit_type is not None and (
+                    not isinstance(credit_type, int)
+                    or isinstance(credit_type, bool)
+                    or not 0 <= credit_type < 16
+                ):
+                    return self._fault(
+                        state,
+                        "retry_policy",
+                        "retry policy returned a P-Credit type outside 0..15",
+                    )
+                no_unreserved_slot = (
+                    active_count + request_retry.reserved_count
+                    >= self.transaction_capacity
+                )
+                if credit_type is not None or (
+                    self.retry_policy is not None and no_unreserved_slot
+                ):
+                    if credit_type is None:
+                        credit_type = self.default_protocol_credit_type
+                    try:
+                        request_retry, response = (
+                            ChiRequestRetryContract.record_retry(
+                                request_retry,
+                                requester_id=packet.source_id,
+                                transaction_id=request.transaction_id,
+                                protocol_credit_type=credit_type,
+                            )
+                        )
+                    except ChiRequestRetryContractError as error:
+                        return self._fault(
+                            state,
+                            error.code,
+                            error.reason,
+                        )
+                    candidate = ChiCoherentHomeState(
+                        directory=state.directory,
+                        backing=state.backing,
+                        pending=state.pending,
+                        next_snoop_transaction_id=(
+                            state.next_snoop_transaction_id
+                        ),
+                        next_data_buffer_id=state.next_data_buffer_id,
+                        pending_writebacks=state.pending_writebacks,
+                        request_retry=request_retry,
+                    )
+                    return SemanticStep(
+                        candidate,
+                        (
+                            ChiNetworkPacket.response(
+                                response,
+                                source_id=self.node_id,
+                                target_id=packet.source_id,
+                            ),
+                        ),
+                    )
+            else:
+                try:
+                    request_retry = (
+                        ChiRequestRetryContract.consume_reservation(
+                            request_retry,
+                            requester_id=packet.source_id,
+                            protocol_credit_type=(
+                                request.protocol_credit_type
+                            ),
+                        )
+                    )
+                except ChiRequestRetryContractError as error:
+                    return self._fault(state, error.code, error.reason)
+
         if (
-            len(state.pending) + len(state.pending_writebacks)
+            request.allow_retry
+            and active_count + request_retry.reserved_count
             >= self.transaction_capacity
+        ) or (
+            not request.allow_retry
+            and active_count >= self.transaction_capacity
         ):
             return SemanticStep(
                 state,
@@ -2110,8 +2522,63 @@ class ChiCoherentHomeNode(
                 (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT
             ),
             pending_writebacks=state.pending_writebacks,
+            request_retry=request_retry,
         )
         return SemanticStep(candidate, emissions)
+
+    def _grant_pcredit(
+        self,
+        state: ChiCoherentHomeState,
+    ) -> SemanticStep[ChiCoherentHomeState, ChiNetworkPacket]:
+        if not state.request_retry.retry_debts:
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    f"{self.name}.retry_debt",
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    reason="Home has no RetryAck awaiting P-Credit",
+                    location=self.name,
+                ),
+            )
+        active_count = len(state.pending) + len(state.pending_writebacks)
+        if (
+            active_count + state.request_retry.reserved_count
+            >= self.transaction_capacity
+        ):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    f"{self.name}.retry_reservation_slot",
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    capacity=self.transaction_capacity,
+                    reason="Home has no real transaction slot for P-Credit",
+                    location=self.name,
+                ),
+            )
+        request_retry, debt, grant = (
+            ChiRequestRetryContract.grant_oldest(state.request_retry)
+        )
+        candidate = ChiCoherentHomeState(
+            directory=state.directory,
+            backing=state.backing,
+            pending=state.pending,
+            next_snoop_transaction_id=state.next_snoop_transaction_id,
+            next_data_buffer_id=state.next_data_buffer_id,
+            pending_writebacks=state.pending_writebacks,
+            request_retry=request_retry,
+        )
+        return SemanticStep(
+            candidate,
+            (
+                ChiNetworkPacket.response(
+                    grant,
+                    source_id=self.node_id,
+                    target_id=debt.requester_id,
+                ),
+            ),
+        )
 
     def _accept_snoop_response(
         self,
@@ -2293,6 +2760,7 @@ class ChiCoherentHomeNode(
                 ),
                 next_data_buffer_id=state.next_data_buffer_id,
                 pending_writebacks=state.pending_writebacks,
+                request_retry=state.request_retry,
             ),
             emissions,
         )
@@ -2390,6 +2858,7 @@ class ChiCoherentHomeNode(
                 ),
                 next_data_buffer_id=state.next_data_buffer_id,
                 pending_writebacks=state.pending_writebacks,
+                request_retry=state.request_retry,
             )
         )
 
@@ -2493,7 +2962,9 @@ class ChiCoherentHomeNode(
                 "Home already owns this Requester/TxnID",
             )
         if (
-            len(state.pending) + len(state.pending_writebacks)
+            len(state.pending)
+            + len(state.pending_writebacks)
+            + state.request_retry.reserved_count
             >= self.transaction_capacity
         ):
             return SemanticStep(
@@ -2537,6 +3008,7 @@ class ChiCoherentHomeNode(
                     (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT
                 ),
                 pending_writebacks=writebacks,
+                request_retry=state.request_retry,
             ),
             (response,),
         )
@@ -2623,6 +3095,7 @@ class ChiCoherentHomeNode(
                 ),
                 next_data_buffer_id=state.next_data_buffer_id,
                 pending_writebacks=writebacks,
+                request_retry=state.request_retry,
             )
         )
 
@@ -2740,20 +3213,25 @@ __all__ = [
     "ChiCoherentRnAction",
     "ChiCoherentRnNode",
     "ChiCoherentRnState",
+    "ChiCoherentRetryAdmissionPolicy",
     "ChiHomeAcceptCompAck",
     "ChiHomeAcceptCleanUnique",
     "ChiHomeAcceptCopyBackData",
     "ChiHomeAcceptCoherentRead",
     "ChiHomeAcceptSnoopResponse",
     "ChiHomeAcceptWriteBackFull",
+    "ChiHomeGrantPCredit",
     "ChiHomeDirectoryEntry",
     "ChiRnAcceptComp",
     "ChiRnAcceptCompData",
     "ChiRnAcceptCompDBIDResp",
+    "ChiRnAcceptPCrdGrant",
+    "ChiRnAcceptRetryAck",
     "ChiRnAcceptSnoop",
     "ChiRnIssueCleanUnique",
     "ChiRnIssueCoherentRead",
     "ChiRnIssueWriteBackFull",
+    "ChiRnRetryCoherentRequest",
     "ChiRnWriteCacheLine",
     "ChiSnoopResult",
 ]

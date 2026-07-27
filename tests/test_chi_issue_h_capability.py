@@ -8,6 +8,8 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_RETRY_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_RETRY_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
@@ -42,13 +44,16 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_BUILTIN_FEATURE_CATALOG,
     CHI_CLEAN_READ_UNIQUE_DEFINITION,
+    CHI_CLEAN_READ_UNIQUE_RETRY_DEFINITION,
     CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
     CHI_FEATURE_DIRTY_WRITEBACK,
     CHI_FEATURE_READ_NO_SNP,
     CHI_FEATURE_REQUEST_RETRY,
     CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,
     CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE,
     ChiCapabilityClosureError,
     ChiCapabilityGapKind,
@@ -446,6 +451,160 @@ class ChiIssueHCleanReadUniqueCapabilityTest(unittest.TestCase):
                 for gap in gaps
                 if gap.kind is ChiCapabilityGapKind.PARTICIPANT
             },
+        )
+
+
+class ChiIssueHCleanReadUniqueRetryCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract():
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+                "snoopee": "rn1",
+            },
+            frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,)),
+        )
+
+    @staticmethod
+    def participants(*, retry: bool = True):
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                (
+                    CHI_CLEAN_READ_UNIQUE_RETRY_REQUESTER_CAPABILITIES
+                    if retry
+                    else CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                (
+                    CHI_CLEAN_READ_UNIQUE_RETRY_HOME_CAPABILITIES
+                    if retry
+                    else CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "rn1",
+                CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+            ),
+        )
+
+    @staticmethod
+    def flows(*, retry_response: bool = True):
+        definitions = [
+            ("request", "rn0", "hn0", ChiChannelKind.REQ),
+            ("snoop", "hn0", "rn1", ChiChannelKind.SNP),
+            ("snoop_response", "rn1", "hn0", ChiChannelKind.RSP),
+            ("completion_data", "hn0", "rn0", ChiChannelKind.DAT),
+            ("completion_ack", "rn0", "hn0", ChiChannelKind.RSP),
+        ]
+        if retry_response:
+            definitions.append(
+                ("retry_response", "hn0", "rn0", ChiChannelKind.RSP)
+            )
+        return tuple(
+            ChiFlowCapability(name, source, target, channel)
+            for name, source, target, channel in definitions
+        )
+
+    @staticmethod
+    def system_capabilities(*, retry: bool = True):
+        return frozenset(
+            (
+                CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+                *(
+                    (CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,)
+                    if retry
+                    else ()
+                ),
+            )
+        )
+
+    def test_retry_modifier_closes_over_clean_read_unique(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        evidence = resolved.require(
+            CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+        )
+        self.assertEqual(
+            (CHI_FEATURE_CLEAN_READ_UNIQUE,),
+            evidence.dependencies,
+        )
+        self.assertEqual(
+            {"requester", "home"},
+            set(evidence.participants),
+        )
+        self.assertEqual({"retry_response"}, set(evidence.flows))
+        self.assertIs(
+            CHI_CLEAN_READ_UNIQUE_RETRY_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+            ],
+        )
+
+    def test_missing_reverse_rsp_only_removes_retry_modifier(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(retry_response=False),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.FLOW, gaps[0].kind)
+        self.assertEqual("retry_response", gaps[0].subject)
+
+    def test_base_participants_do_not_claim_retry_behavior(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(retry=False),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY)
+        self.assertEqual(
+            {"rn0", "hn0"},
+            {
+                gap.subject
+                for gap in gaps
+                if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            },
+        )
+        self.assertTrue(
+            all(
+                gap.missing
+                for gap in gaps
+                if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            )
+        )
+
+    def test_retry_composition_requires_explicit_system_fact(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(retry=False),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.SYSTEM, gaps[0].kind)
+        self.assertEqual(
+            (CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,),
+            gaps[0].missing,
         )
 
 

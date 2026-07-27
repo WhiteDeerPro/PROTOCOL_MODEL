@@ -1,4 +1,4 @@
-"""Shared response-state encodings used by the current CHI forms."""
+"""Shared response and error encodings used by the current CHI forms."""
 
 from __future__ import annotations
 
@@ -24,4 +24,13 @@ class ChiRespCode(IntEnum):
     SD_PD = 0b111
 
 
-__all__ = ["ChiRespCode"]
+class ChiRespErr(IntEnum):
+    """Meaning of the two-bit ``RespErr`` field."""
+
+    OK = 0b00
+    EXOK = 0b01
+    DERR = 0b10
+    NDERR = 0b11
+
+
+__all__ = ["ChiRespCode", "ChiRespErr"]

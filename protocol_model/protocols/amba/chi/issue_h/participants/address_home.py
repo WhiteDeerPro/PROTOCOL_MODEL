@@ -17,7 +17,11 @@ from protocol_model.virtual_dut.address import (
 )
 
 from ..interface import ChiReadNoSnpDirectProfile
-from ..representation import ChiCompDataMessage, ChiReadNoSnpMessage
+from ..representation import (
+    ChiCompDataMessage,
+    ChiReadNoSnpMessage,
+    ChiRespErr,
+)
 from .direct_home import (
     ChiDirectHomeAccept,
     ChiDirectHomeAction,
@@ -38,9 +42,10 @@ class ChiAddressHomeNode(ChiDirectHomeNode):
 
     CHI fields and the REQ/DAT lifecycle remain owned by this participant.
     The target owns only protocol-neutral address state.  This first profile
-    accepts an aligned, full-DAT-width successful read with default sideband
-    semantics; error responses, narrow data placement, and target effects are
-    explicit later extensions rather than silently guessed conversions.
+    accepts an aligned, full-DAT-width read with default sideband semantics.
+    Protocol-neutral decode/access failures become ``CompData_I(NDERR)``;
+    narrow data placement, corrupt-data DERR, and target effects remain
+    explicit later extensions.
     """
 
     def __init__(
@@ -158,21 +163,28 @@ class ChiAddressHomeNode(ChiDirectHomeNode):
                 "address target did not return AddressStep",
             )
         result = accessed.result
-        if result.status is not AccessStatus.OK:
-            return self._profile_fault(
-                state,
-                "completion_status",
-                "current direct-read profile has no AccessStatus to CHI "
-                f"RespErr/Resp mapping for {result.status.value!r}",
-            )
         if result.effects:
             return self._target_fault(
                 state,
                 "effects",
                 "current CHI address Home cannot commit target-local effects",
             )
-        data = result.data
-        if (
+        if result.status is AccessStatus.OK:
+            data = result.data
+            response_error = ChiRespErr.OK
+        elif result.status in (
+            AccessStatus.DECODE_ERROR,
+            AccessStatus.ACCESS_ERROR,
+        ):
+            data = 0
+            response_error = ChiRespErr.NDERR
+        else:
+            return self._target_fault(
+                state,
+                "status",
+                "address target returned an unknown access status",
+            )
+        if response_error is ChiRespErr.OK and (
             not isinstance(data, int)
             or isinstance(data, bool)
             or not 0 <= data < (1 << self.profile.data_width)
@@ -182,13 +194,14 @@ class ChiAddressHomeNode(ChiDirectHomeNode):
                 "read_data",
                 "address target did not return one full-width data value",
             )
+        assert isinstance(data, int)
 
         response = ChiCompDataMessage(
             transaction_id=request.transaction_id,
             home_node_id=self.profile.home_node_id,
             data=data,
             data_id=self.profile.expected_data_id(request.address),
-            response_error=0,
+            response_error=response_error,
             response=0,
             data_buffer_id=0,
         )

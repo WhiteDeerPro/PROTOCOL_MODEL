@@ -13,7 +13,7 @@ from enum import IntEnum
 from typing import ClassVar, TypeAlias
 
 from .domain import ChiChannelKind, ChiChannelItemKind
-from .response import ChiRespCode
+from .response import ChiRespCode, ChiRespErr
 
 
 class ChiRspOpcode(IntEnum):
@@ -92,7 +92,7 @@ class ChiSnpRespMessage:
     transaction_id: int
     response: ChiRespCode | int
     qos: int = 0
-    response_error: int = 0
+    response_error: ChiRespErr | int = ChiRespErr.OK
     trace_tag: bool = False
 
     def __post_init__(self) -> None:
@@ -101,6 +101,11 @@ class ChiSnpRespMessage:
         _require_uint("qos", self.qos, 4)
         _require_uint("response_error", self.response_error, 2)
         _require_bool("trace_tag", self.trace_tag)
+        object.__setattr__(
+            self,
+            "response_error",
+            ChiRespErr(self.response_error),
+        )
         try:
             response = ChiRespCode(self.response)
         except ValueError as error:
@@ -167,7 +172,7 @@ class ChiCompMessage:
     transaction_id: int
     data_buffer_id: int
     qos: int = 0
-    response_error: int = 0
+    response_error: ChiRespErr | int = ChiRespErr.OK
     response: ChiRespCode | int = ChiRespCode.UC
     completer_busy: int = 0
     tag_operation: int = 0
@@ -185,6 +190,11 @@ class ChiCompMessage:
         ):
             _require_uint(name, value, width)
         _require_bool("trace_tag", self.trace_tag)
+        object.__setattr__(
+            self,
+            "response_error",
+            ChiRespErr(self.response_error),
+        )
         try:
             response = ChiRespCode(self.response)
         except ValueError as error:
@@ -226,7 +236,7 @@ class ChiCompDBIDRespMessage:
     transaction_id: int
     data_buffer_id: int
     qos: int = 0
-    response_error: int = 0
+    response_error: ChiRespErr | int = ChiRespErr.OK
     response: int = 0
     completer_busy: int = 0
     trace_tag: bool = False
@@ -242,6 +252,11 @@ class ChiCompDBIDRespMessage:
         ):
             _require_uint(name, value, width)
         _require_bool("trace_tag", self.trace_tag)
+        object.__setattr__(
+            self,
+            "response_error",
+            ChiRespErr(self.response_error),
+        )
 
     @property
     def opcode(self) -> ChiRspOpcode:

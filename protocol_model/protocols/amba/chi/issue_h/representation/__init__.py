@@ -45,7 +45,7 @@ from .req import (
     ChiReqOpcode,
     ChiReqProtocolMessage,
 )
-from .response import ChiRespCode
+from .response import ChiRespCode, ChiRespErr
 from .rsp import (
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
@@ -111,6 +111,7 @@ __all__ = [
     "ChiReadUniqueMessage",
     "ChiWriteBackFullMessage",
     "ChiRespCode",
+    "ChiRespErr",
     "ChiReqChannelItem",
     "ChiReqLCrdReturn",
     "ChiReqOpcode",

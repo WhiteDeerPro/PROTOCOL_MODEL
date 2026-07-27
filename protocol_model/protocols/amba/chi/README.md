@@ -34,7 +34,7 @@ P-Credit/Retry 表示 completer 对 protocol transaction resource 的接纳保�
 
 当前首个闭合实例是受限的 direct-Home `ReadNoSnp` 路径。它将几个可分别检查的对象组合起来：
 
-1. `representation` 提供 `ReadNoSnp`、`CompData` 与当前 REQ/RSP/DAT `LCrdReturn` 的 typed form；
+1. `representation` 提供 `ReadNoSnp`、`CompData`、typed `RespErr` 与当前 REQ/RSP/DAT `LCrdReturn` form；
 2. `transport` 提供整条有向 link 共享的 activation state、REQ/DAT 各自的 L-Credit，以及有限 TX/RX
    参考端点；
 3. `interface` 的 direct ledger 以 `(Requester NodeID, TxnID)` 关联请求和完成；
@@ -71,7 +71,9 @@ DAT drain+Requester completion 都作为跨组件原子候选；被背压的候�
 request lineage 按 transaction identity 保留到 CompData 成功入网，因此不再依赖场景局部变量保存因果关系。
 
 这个 profile 固定 `Order=00`、`ExpCompAck=0`，接受初始 `AllowRetry=1/PCrdType=0` 请求，并要求读取落在一个
-DAT payload chunk 内。RSP transport 现已覆盖 `RetryAck`、`PCrdGrant` 和 hop-local `RspLCrdReturn`；一个 sibling
+DAT payload chunk 内。address-backed Home 会把 authority 内的 decode/access failure 映射为
+`CompData_I(NDERR)`；transaction 正常结束，但结果不把线上零占位当作有效 read data。该 modifier 复用
+原 REQ/DAT flow。RSP transport 现已覆盖 `RetryAck`、`PCrdGrant` 和 hop-local `RspLCrdReturn`；一个 sibling
 retry lifecycle 可执行 `RetryAck → P-Credit → AllowRetry=0 重发 → CompData`，并允许 Requester 先收到
 `PCrdGrant`。P-Credit 按 Home 与 `PCrdType` 进入可分配池，不绑定 `PCrdGrant.TxnID`；Home 发送 Grant 时预留
 一个真实接纳槽。当前 retry profile 复用原 TxnID、使用 RP0；收到 RetryAck 和匹配 P-Credit 后，也可取消请求，
@@ -109,7 +111,7 @@ transmitter→receiver hop 上的 flit，不解释 coherence opcode；`Interface
 `CleanUnique→UC→local write→UD` 保留本地数据完成权限升级，也可通过
 `ReadUnique→UC→local write→UD` 走需要返回数据的路径。当前仍未实现 `MakeUnique`、clean `Evict`、
 packed bit/raw pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty
-victim/writeback scheduling、error completion 与 Retry/Snoop 并发、coherent Retry cancel/multi-waiter
+victim/writeback scheduling、coherent NDERR/DERR 与 Retry/Snoop/error 并发、coherent Retry cancel/multi-waiter
 policy、same-line transient/hazard，以及一般 MOESI `SD`/Owned。Participant
 facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，尚未并入通用
 `SystemSession` action loop；有界 scheduler budget 耗尽给出 inconclusive，不作为 network deadlock

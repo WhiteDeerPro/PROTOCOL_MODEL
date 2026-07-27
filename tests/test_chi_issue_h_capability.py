@@ -14,6 +14,8 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
     CHI_READ_NO_SNP_HOME_CAPABILITIES,
+    CHI_READ_NO_SNP_NDERR_HOME_CAPABILITIES,
+    CHI_READ_NO_SNP_NDERR_REQUESTER_CAPABILITIES,
     CHI_READ_NO_SNP_REQUESTER_CAPABILITIES,
     CHI_REQUEST_RETRY_HOME_CAPABILITIES,
     CHI_REQUEST_RETRY_REQUESTER_CAPABILITIES,
@@ -50,6 +52,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
     CHI_FEATURE_DIRTY_WRITEBACK,
     CHI_FEATURE_READ_NO_SNP,
+    CHI_FEATURE_READ_NO_SNP_NDERR,
     CHI_FEATURE_REQUEST_RETRY,
     CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
@@ -225,6 +228,109 @@ class ChiIssueHCapabilityClosureTest(unittest.TestCase):
         self.assertIn(custom_key, extended.definitions)
         with self.assertRaises(TypeError):
             extended.definitions[custom_key] = custom
+
+
+class ChiIssueHReadNoSnpNderrCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract() -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {"requester": "rn0", "home": "hn0"},
+            frozenset((CHI_FEATURE_READ_NO_SNP_NDERR,)),
+        )
+
+    @staticmethod
+    def flows() -> tuple[ChiFlowCapability, ...]:
+        return (
+            ChiFlowCapability(
+                "request_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+            ),
+            ChiFlowCapability(
+                "completion_path",
+                "hn0",
+                "rn0",
+                ChiChannelKind.DAT,
+            ),
+        )
+
+    @staticmethod
+    def participants(
+        *,
+        requester_nderr: bool,
+        home_nderr: bool,
+    ) -> tuple[ChiParticipantCapability, ...]:
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                (
+                    CHI_READ_NO_SNP_NDERR_REQUESTER_CAPABILITIES
+                    if requester_nderr
+                    else CHI_READ_NO_SNP_REQUESTER_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                (
+                    CHI_READ_NO_SNP_NDERR_HOME_CAPABILITIES
+                    if home_nderr
+                    else CHI_READ_NO_SNP_HOME_CAPABILITIES
+                ),
+            ),
+        )
+
+    def test_nderr_modifier_closes_over_base_read_without_new_flow(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(
+                requester_nderr=True,
+                home_nderr=True,
+            ),
+            flows=self.flows(),
+        )
+
+        base = resolved.require(CHI_FEATURE_READ_NO_SNP)
+        self.assertEqual(
+            {"request", "completion_data"},
+            set(base.flows),
+        )
+        evidence = resolved.require(CHI_FEATURE_READ_NO_SNP_NDERR)
+        self.assertEqual(
+            (CHI_FEATURE_READ_NO_SNP,),
+            evidence.dependencies,
+        )
+        self.assertEqual({"requester", "home"}, set(evidence.participants))
+        self.assertFalse(evidence.flows)
+
+    def test_each_base_participant_reports_its_own_nderr_gap(self) -> None:
+        cases = (
+            ("rn0", False, True),
+            ("hn0", True, False),
+        )
+        for missing, requester_nderr, home_nderr in cases:
+            with self.subTest(missing=missing):
+                resolved = resolve_chi_capabilities(
+                    self.contract(),
+                    participants=self.participants(
+                        requester_nderr=requester_nderr,
+                        home_nderr=home_nderr,
+                    ),
+                    flows=self.flows(),
+                )
+
+                self.assertTrue(
+                    resolved.supports(CHI_FEATURE_READ_NO_SNP)
+                )
+                gaps = resolved.gaps(CHI_FEATURE_READ_NO_SNP_NDERR)
+                participant_gaps = tuple(
+                    gap
+                    for gap in gaps
+                    if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+                )
+                self.assertEqual(1, len(participant_gaps))
+                self.assertEqual(missing, participant_gaps[0].subject)
+                self.assertTrue(participant_gaps[0].missing)
 
 
 class ChiIssueHCleanReadSharedCapabilityTest(unittest.TestCase):

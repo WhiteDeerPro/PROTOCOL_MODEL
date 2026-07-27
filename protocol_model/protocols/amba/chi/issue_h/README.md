@@ -160,7 +160,7 @@ lane 或 channel 内重排，lineage 仍需进一步绑定 packet-copy identity�
 它没有建立 RN/HN/SN/router 继承树。`ChiResolvedIdentityPlan` 检查 NodeID ownership。重复 NodeID
 默认视为歧义，只有同一 VirtualDut、相同逻辑 port boundary 和显式 share group 才可共享。
 
-feature catalog 把 direct `ReadNoSnp`、direct Request Retry、clean `ReadShared`、clean `ReadUnique`、
+feature catalog 把 direct `ReadNoSnp`、direct NDERR/Request Retry modifier、clean `ReadShared`、clean `ReadUnique`、
 clean `ReadUnique` Request Retry modifier、clean/shared-dirty peer `CleanUnique`、dirty unique transfer、
 dirty writeback 和 MESI `ReadNotSharedDirty` profile 展开为 participant capability、channel flow 与
 system lifecycle requirement。flow projector 只处理合同所需 feature 及其依赖，
@@ -176,8 +176,13 @@ capability，形成 `ResolvedChiSystem`；read、retry 与 coherence session 可
 一部分。
 
 `ChiAddressHomeNode` 是这一 profile 的 stateful Home 变体：它把 aligned full-DAT-width 请求转换为
-`AddressRead`，再委派给协议无关 `AddressTarget`。当前公开场景使用 `AddressSpace/MemoryRegion`；narrow DAT
-placement、错误响应映射和带 blocked/effect 的 target transition 仍是明确扩展点。
+`AddressRead`，再委派给协议无关 `AddressTarget`。`DECODE_ERROR/ACCESS_ERROR` 映射为
+`CompData_I(NDERR)`，保留 TxnID/HomeNID/DataID、以零作为线上无效数据占位，并在 Requester 端得到
+`succeeded=False/data=None`；resolved XP witness 证明它复用原 REQ/DAT route 并最终 quiescent。
+`from_resolved()` 只在 feature closure 选中 NDERR modifier 时开放该响应，base-only construction 会在
+Home state commit 前拒绝它；authority 外请求仍是 system fault。当前公开场景使用
+`AddressSpace/MemoryRegion/RegisterRegion`；narrow DAT
+placement、DERR 数据损坏来源、sideband lowering 和带 blocked/effect 的 target transition 仍是明确扩展点。
 
 这条 direct-read adapter 不代表 coherent `ChiCoherentHomeNode` 绑定同一个 `AddressTarget`。
 coherent Home 需要在 `Comp` 与 `CompAck` 之间保存可丢弃、可检测 stale 的 full-line write intent，
@@ -223,7 +228,7 @@ initial ReadUnique
 
 被拒绝的初始请求不会分配 coherence pending、DBID 或 snoop，也不会修改 directory/backing。正确重发原子
 消耗 Home reservation 后才进入原有 clean `ReadUnique` lifecycle；Grant 可以先于 Ack 到达。当前 coherent
-slice 只闭合一次 Retry 后成功，不包含取消、error completion、同 Home/type 多 waiter 公平性或 Retry 与
+slice 只闭合一次 Retry 后成功，不包含取消、coherent error completion、同 Home/type 多 waiter 公平性或 Retry 与
 Snoop/writeback 的并发组合。
 
 ### Coherent reads 与受限 dirty ownership transfer
@@ -428,7 +433,8 @@ direct topology、调用方组装的一个或多个 router topology 和具体 FI
 Retry/Cancel 仍保留为独立、较窄的 profile。
 
 仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、`MakeUnique`、clean `Evict`、自动
-victim/writeback scheduling、coherent Retry 与 error/Snoop/writeback 的并发组合、same-line transient/hazard、
+victim/writeback scheduling、coherent allocating-read NDERR/DERR、Retry 与 error/Snoop/writeback 的并发组合、
+same-line transient/hazard、
 完整 `SD`/Owned lifecycle、forwarding snoop、真实 snoop filter、可共同执行的 Home→Memory/SN
 participant 与 topology-visible `WriteNoSnp` physical commit、multi-packet DAT、同一 runtime 的
 multi-Home/SAM 选择、

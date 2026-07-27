@@ -255,13 +255,6 @@ LIMITATION_NEGATIVES = (
     ),
     LimitationNegative(
         test_id=(
-            "tests.test_chi_issue_h_address_home.ChiIssueHAddressHomeTest."
-            "test_decode_error_waits_for_a_future_chi_error_mapping"
-        ),
-        turn_positive_when="AddressTarget failures map to typed CHI error completions",
-    ),
-    LimitationNegative(
-        test_id=(
             "tests.test_chi_issue_h_read_no_snp."
             "ChiIssueHReadNoSnpLifecycleTest."
             "test_request_crossing_one_dat_chunk_is_outside_subset"

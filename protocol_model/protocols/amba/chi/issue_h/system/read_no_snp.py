@@ -35,7 +35,11 @@ from ..participants import (
     ChiParticipantBinding,
     ChiStoreForwardRouterNode,
 )
-from ..representation import ChiChannelKind, ChiNetworkPacket
+from ..representation import (
+    ChiChannelKind,
+    ChiNetworkPacket,
+    ChiRespErr,
+)
 from .network import (
     ChiNetworkCaptureToRouter,
     ChiNetworkEnqueue,
@@ -89,6 +93,9 @@ class ChiReadNoSnpSystemSession(
         transmitter_capacity_by_connection: Mapping[str, int] | None = None,
         network: ChiTransportNetworkSession | None = None,
         authority_window: AddressWindow | None = None,
+        enabled_response_errors: frozenset[ChiRespErr] = frozenset(
+            (ChiRespErr.OK,)
+        ),
     ) -> None:
         if not isinstance(system, ElaboratedSystemProtocol):
             raise TypeError("CHI read system session requires elaborated system")
@@ -108,6 +115,24 @@ class ChiReadNoSnpSystemSession(
             authority_window, AddressWindow
         ):
             raise TypeError("CHI Home authority requires AddressWindow")
+        response_errors = frozenset(enabled_response_errors)
+        if any(
+            not isinstance(item, ChiRespErr) for item in response_errors
+        ):
+            raise TypeError(
+                "CHI enabled response errors require ChiRespErr values"
+            )
+        supported_response_errors = frozenset(
+            (ChiRespErr.OK, ChiRespErr.NDERR)
+        )
+        if (
+            ChiRespErr.OK not in response_errors
+            or not response_errors <= supported_response_errors
+        ):
+            raise ValueError(
+                "current direct-read runtime requires OK and optionally "
+                "NDERR response completion"
+            )
 
         router_bindings = tuple(routers)
         if any(
@@ -187,6 +212,7 @@ class ChiReadNoSnpSystemSession(
         self.home = home_component
         self.profile = profile
         self.authority_window = authority_window
+        self.enabled_response_errors = response_errors
         if network is None:
             self.network = ChiTransportNetworkSession(
                 system,
@@ -303,7 +329,11 @@ class ChiReadNoSnpSystemSession(
     ) -> "ChiReadNoSnpSystemSession":
         """Open the read runtime only after CHI system closure succeeds."""
 
-        from .capability import CHI_FEATURE_READ_NO_SNP
+        from .capability import (
+            CHI_FEATURE_READ_NO_SNP,
+            CHI_FEATURE_READ_NO_SNP_NDERR,
+            ChiFeatureKey,
+        )
         from .resolved import ResolvedChiSystem
 
         if not isinstance(resolved, ResolvedChiSystem):
@@ -312,6 +342,22 @@ class ChiReadNoSnpSystemSession(
             )
         resolved.require_closed()
         resolved.capabilities.require(CHI_FEATURE_READ_NO_SNP)
+        selected: set[ChiFeatureKey] = set()
+
+        def add_feature(feature: ChiFeatureKey) -> None:
+            if feature in selected:
+                return
+            selected.add(feature)
+            definition = resolved.capabilities.catalog.definitions[feature]
+            for dependency in definition.dependencies:
+                add_feature(dependency)
+
+        for required in resolved.feature_contract.required:
+            add_feature(required)
+        response_errors = {ChiRespErr.OK}
+        if CHI_FEATURE_READ_NO_SNP_NDERR in selected:
+            resolved.capabilities.require(CHI_FEATURE_READ_NO_SNP_NDERR)
+            response_errors.add(ChiRespErr.NDERR)
         routers = tuple(
             binding
             for binding in resolved.forwarding_bindings
@@ -326,6 +372,7 @@ class ChiReadNoSnpSystemSession(
             authority_window=(
                 resolved.feature_authority.address_claim.window
             ),
+            enabled_response_errors=frozenset(response_errors),
         )
 
     def _build_scheduler_candidates(

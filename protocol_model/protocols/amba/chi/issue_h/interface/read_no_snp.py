@@ -18,7 +18,11 @@ from protocol_model.semantics import (
     SemanticStep,
 )
 
-from ..representation import ChiCompDataMessage, ChiReadNoSnpMessage
+from ..representation import (
+    ChiCompDataMessage,
+    ChiReadNoSnpMessage,
+    ChiRespErr,
+)
 
 
 @dataclass(frozen=True)
@@ -84,8 +88,22 @@ class ChiReadNoSnpResult:
     response: ChiCompDataMessage
 
     @property
-    def data(self) -> int:
-        return self.response.data
+    def response_error(self) -> ChiRespErr:
+        return self.response.response_error
+
+    @property
+    def succeeded(self) -> bool:
+        return self.response_error is ChiRespErr.OK
+
+    @property
+    def data(self) -> int | None:
+        """Return valid read data, or ``None`` for an error completion.
+
+        The wire-level placeholder remains available as ``response.data`` for
+        protocol and trace auditing.
+        """
+
+        return self.response.data if self.succeeded else None
 
 
 @dataclass(frozen=True)
@@ -106,7 +124,7 @@ class ChiReadNoSnpDirectLedger(
         ChiReadNoSnpResult,
     ]
 ):
-    """Correlate one-request/one-CompData direct-Home happy paths.
+    """Correlate one-request/one-CompData direct-Home completions.
 
     The subset fixes ``Order=00`` and ``ExpCompAck=0`` so no ReadReceipt,
     protocol RSP, or CompAck is expected.  The Home accepts the initial
@@ -142,7 +160,9 @@ class ChiReadNoSnpDirectLedger(
                     released_by=("CompData",),
                 ),
             ),
-            sources=("Arm IHI 0050 Issue H B2.3.1.2 and B2.5.1.4",),
+            sources=(
+                "Arm IHI 0050 Issue H B2.3.1.2, B2.5.1.4, and B9",
+            ),
         )
 
     def initial_state(self) -> ChiReadNoSnpLedgerState:
@@ -227,8 +247,15 @@ class ChiReadNoSnpDirectLedger(
         reasons: list[str] = []
         if response.home_node_id != self.profile.home_node_id:
             reasons.append("CompData HomeNID is not the configured Home")
-        if response.response_error != 0 or response.response != 0:
-            reasons.append("direct happy path requires successful CompData_I")
+        if response.response_error not in (
+            ChiRespErr.OK,
+            ChiRespErr.NDERR,
+        ):
+            reasons.append(
+                "direct profile supports only OK or NDERR CompData"
+            )
+        if response.response != 0:
+            reasons.append("direct profile requires CompData_I")
         expected_data_id = self.profile.expected_data_id(request.address)
         if response.data_id != expected_data_id:
             reasons.append(

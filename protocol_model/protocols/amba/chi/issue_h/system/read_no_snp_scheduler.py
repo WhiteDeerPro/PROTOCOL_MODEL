@@ -26,6 +26,7 @@ from ..representation import (
     ChiCompDataMessage,
     ChiNetworkPacket,
     ChiReadNoSnpMessage,
+    ChiRespErr,
 )
 from .network import (
     ChiNetworkCaptureToRouter,
@@ -64,6 +65,7 @@ class ChiReadNoSnpSchedulerMixin:
     requester_data_ref: VirtualDutPortRef
     route_connections: tuple[str, ...]
     route_router_duts: frozenset[str]
+    enabled_response_errors: frozenset[ChiRespErr]
     _candidates: tuple[
         tuple[
             str,
@@ -279,6 +281,13 @@ class ChiReadNoSnpSchedulerMixin:
                 "direct Home did not emit exactly one CompData",
             )
         response = home_step.emissions[0]
+        if response.response_error not in self.enabled_response_errors:
+            return self._candidate_fault(
+                state,
+                "home_response_error",
+                f"Home emitted {response.response_error.name} without the "
+                "matching resolved response-error feature",
+            )
         response_lineage = (*lineage, f"{self.home_binding.name}.service")
         packet = ChiNetworkPacket.data(
             response,
@@ -345,9 +354,17 @@ class ChiReadNoSnpSchedulerMixin:
                 "requester_delivery",
                 "captured packet does not match the bound Requester DAT port",
             )
+        response = delivery.packet.message
+        if response.response_error not in self.enabled_response_errors:
+            return self._candidate_fault(
+                state,
+                "requester_response_error",
+                f"Requester received {response.response_error.name} without "
+                "the matching resolved response-error feature",
+            )
         requester_step = self.requester.step(
             state.requester,
-            ChiReadNoSnpComplete(delivery.packet.message),
+            ChiReadNoSnpComplete(response),
         )
         failed = self._participant_failure(state, requester_step)
         if failed is not None:

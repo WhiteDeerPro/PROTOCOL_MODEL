@@ -15,7 +15,7 @@ from enum import IntEnum
 from typing import ClassVar, TypeAlias
 
 from .domain import ChiChannelKind, ChiChannelItemKind
-from .response import ChiRespCode
+from .response import ChiRespCode, ChiRespErr
 
 
 class ChiDatOpcode(IntEnum):
@@ -67,7 +67,7 @@ class ChiCopyBackWrDataMessage:
     response: ChiRespCode | int = ChiRespCode.UD_PD
     data_id: int = 0
     qos: int = 0
-    response_error: int = 0
+    response_error: ChiRespErr | int = ChiRespErr.OK
     data_source: int = 0
     completer_busy: int = 0
     byte_enable: int = (1 << 64) - 1
@@ -89,6 +89,11 @@ class ChiCopyBackWrDataMessage:
             _require_uint(name, value, width)
         _require_non_negative("data", self.data)
         _require_bool("trace_tag", self.trace_tag)
+        object.__setattr__(
+            self,
+            "response_error",
+            ChiRespErr(self.response_error),
+        )
 
         try:
             response = ChiRespCode(self.response)
@@ -149,7 +154,7 @@ class ChiCompDataMessage:
     data_id: int = 0
     home_node_id: int = 0
     qos: int = 0
-    response_error: int = 0
+    response_error: ChiRespErr | int = ChiRespErr.OK
     response: int = 0
     data_source: int = 0
     completer_busy: int = 0
@@ -176,6 +181,11 @@ class ChiCompDataMessage:
         ):
             _require_non_negative(name, value)
         _require_bool("trace_tag", self.trace_tag)
+        object.__setattr__(
+            self,
+            "response_error",
+            ChiRespErr(self.response_error),
+        )
 
     @property
     def opcode(self) -> ChiDatOpcode:
@@ -219,7 +229,7 @@ class ChiSnpRespDataMessage:
     response: int
     data_id: int = 0
     qos: int = 0
-    response_error: int = 0
+    response_error: ChiRespErr | int = ChiRespErr.OK
     data_source: int = 0
     completer_busy: int = 0
     data_buffer_id: int = 0
@@ -241,6 +251,11 @@ class ChiSnpRespDataMessage:
             _require_uint(name, value, width)
         _require_non_negative("data", self.data)
         _require_bool("trace_tag", self.trace_tag)
+        object.__setattr__(
+            self,
+            "response_error",
+            ChiRespErr(self.response_error),
+        )
 
         try:
             response = ChiRespCode(self.response)

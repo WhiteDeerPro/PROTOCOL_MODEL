@@ -29,8 +29,11 @@ SystemProtocol、CHI REQ/RSP/DAT transport 和 direct read/retry lifecycle 已�
 ### C1 · 当前主线：从 participant/network 闭环到一致性 authority
 
 第一条 participant→本地行为路径已经闭合：`ChiAddressHomeNode` 将 aligned full-DAT-width `ReadNoSnp`
-转换成 `AddressRead`，并让 `AddressTarget` 独占本地 memory state。`PCrdReturn`、NodeID ownership、
-feature-flow closure 和 clean `ReadShared/ReadUnique` participant 也已落地。当前
+转换成 `AddressRead`，并让 `AddressTarget` 独占本地 memory state。`DECODE_ERROR/ACCESS_ERROR` 现会沿
+原 DAT return route 完成 `CompData_I(NDERR)`；Requester 正常退休 transaction，但不把线上零占位暴露为
+有效 read data。该能力以 direct-read modifier 闭合 participant capability，并由 resolved runtime gate
+启用，未增加 error 专用 flow。
+`PCrdReturn`、NodeID ownership、feature-flow closure 和 clean `ReadShared/ReadUnique` participant 也已落地。当前
 `ChiCoherenceNetworkSession` 可把这些 participant 与调用方构造的 XP/Link topology 组合起来，
 逐小步闭合 REQ、SNP、RSP、DAT 和 CompAck。第一条 dirty-unique 纵向路径也已闭合：
 `UC→本地写→UD→SnpRespData_I_PD→CompData_UD_PD`，最新数据和写回责任可经同一网络转移。
@@ -49,15 +52,17 @@ commit 与 directory transition 提交 requester 为 unique owner。Home payload
 `ReadUnique→RetryAck→PCrdGrant→AllowRetry=0 重发→SnpUnique→CompData→CompAck` 复用 family-local
 Request-Retry/P-Credit 合同和原有 ReadUnique lifecycle。Retry 阶段不建立 Home coherence pending、
 不分配 Snoop/DBID、不改 directory/backing；Grant 预留真实 transaction slot，network scheduler 自动推进
-credit 与重发。当前只覆盖一次 Retry 后成功，不含 cancel、多 waiter fairness 或 error completion。
+credit 与重发。当前只覆盖一次 Retry 后成功，不含 cancel、多 waiter fairness 或 coherent error completion。
 第一条 construction authority
 切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home，并从
 coherence-domain membership 派生 `eligible Snoopees = members - requester`；NodeID、逐成员 capability
 与 REQ/SNP/RSP/DAT flow 随后使用同一派生结果闭合。Home directory 仍只选择一笔事务的实际 holder，
 不取代静态 domain authority。
 
-1. 在已闭合的显式 `UD` topology writeback 和 clean `ReadUnique` 单次 Retry 基础上，增加 error completion、
-   Retry/Snoop 并发与可选的 victim/writeback scheduling；replacement policy 保持独立 refinement；
+1. 以已闭合的 direct `ReadNoSnp` NDERR 为错误语义基线，在显式 `UD` topology writeback 和 clean
+   `ReadUnique` 单次 Retry 基础上增加 allocating coherent read 的 NDERR、CompAck/DBID retire 与 cache/
+   directory 不变式，再处理 Retry/Snoop/error 并发；DERR 等待 ECC/Poison/DataCheck 来源，不用普通
+   decode/access failure 冒充；可选 victim/writeback scheduling 与 replacement policy 保持独立 refinement；
 2. 在已闭合 clean/shared-dirty-peer `CleanUnique`、协议中立 Home backing 与 canonical Home binder
    基础上，按实际场景补 `MakeUnique` 与 clean `Evict`；只有验证目标需要观察 physical commit 时，再增加
    topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；
@@ -71,7 +76,8 @@ coherence-domain membership 派生 `eligible Snoopees = members - requester`；N
 scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 resolver 核对；同一 runtime 按地址动态
 切换多个 Home、由 SAM route 派生 system-visible window、remap 和跨 domain 执行尚未实现。
 read/retry/coherence profile 另固定单 Requester、受限 opcode 与 full-line DAT；
-AddressTarget 路径固定对齐和成功 completion；coherent Home backing 是 fixed-resident、同步、无 blocked
+AddressTarget 路径固定对齐；只闭合成功与 decode/access→NDERR completion，未覆盖 DERR、sideband lowering、
+narrow/multi-packet data。coherent Home backing 是 fixed-resident、同步、无 blocked
 的 line-local commit profile，尚未等价于独立 SN physical memory。它们是上述工作的可执行起点；准确覆盖仍只在
 [实现状态](../implementation-status.md)维护。
 

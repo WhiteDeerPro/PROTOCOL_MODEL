@@ -16,6 +16,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
 from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiCompDataMessage,
     ChiReadNoSnpMessage,
+    ChiRespErr,
 )
 
 
@@ -107,6 +108,65 @@ class ChiIssueHReadNoSnpLifecycleTest(unittest.TestCase):
         self.assertIsNotNone(failed.fault)
         self.assertIs(state, failed.state)
         self.assertIn(3, failed.state.outstanding)
+
+    def test_nderr_comp_data_retires_request_without_success(self) -> None:
+        request = self.read(3)
+        issued = self.ledger.step(
+            self.ledger.initial_state(),
+            ChiReadNoSnpIssue(request),
+        )
+        response = ChiCompDataMessage(
+            transaction_id=request.transaction_id,
+            home_node_id=self.profile.home_node_id,
+            data=0,
+            data_id=self.profile.expected_data_id(request.address),
+            response_error=ChiRespErr.NDERR,
+            response=0,
+        )
+
+        completed = self.ledger.step(
+            issued.state,
+            ChiReadNoSnpComplete(response),
+        )
+
+        self.assertIsNone(completed.fault)
+        self.assertTrue(self.ledger.is_quiescent(completed.state))
+        result = completed.emissions[0]
+        self.assertFalse(result.succeeded)
+        self.assertIs(ChiRespErr.NDERR, result.response_error)
+        self.assertIsNone(result.data)
+        self.assertEqual(0, result.response.data)
+
+    def test_other_response_errors_are_not_claimed_by_nderr_profile(
+        self,
+    ) -> None:
+        for response_error in (ChiRespErr.EXOK, ChiRespErr.DERR):
+            with self.subTest(response_error=response_error):
+                request = self.read(3)
+                issued = self.ledger.step(
+                    self.ledger.initial_state(),
+                    ChiReadNoSnpIssue(request),
+                )
+                response = ChiCompDataMessage(
+                    transaction_id=request.transaction_id,
+                    home_node_id=self.profile.home_node_id,
+                    data=0,
+                    data_id=self.profile.expected_data_id(request.address),
+                    response_error=response_error,
+                    response=0,
+                )
+
+                failed = self.ledger.step(
+                    issued.state,
+                    ChiReadNoSnpComplete(response),
+                )
+
+                self.assertIsNotNone(failed.fault)
+                self.assertIs(issued.state, failed.state)
+                self.assertIn(
+                    request.transaction_id,
+                    failed.state.outstanding,
+                )
 
     def test_request_crossing_one_dat_chunk_is_outside_subset(self) -> None:
         request = self.read(3, address=0x400C)

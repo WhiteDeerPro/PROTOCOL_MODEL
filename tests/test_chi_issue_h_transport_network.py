@@ -9,11 +9,19 @@ from protocol_model.protocols.amba.chi.issue_h.interface import (
     ChiReadNoSnpIssue,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
+    CHI_READ_NO_SNP_HOME_CAPABILITIES,
+    CHI_READ_NO_SNP_NDERR_HOME_CAPABILITIES,
+    CHI_READ_NO_SNP_NDERR_REQUESTER_CAPABILITIES,
+    CHI_READ_NO_SNP_REQUESTER_CAPABILITIES,
+    ChiAddressHomeNode,
+    ChiBehaviorFacet,
     ChiDirectHomeAccept,
     ChiDirectHomeNode,
     ChiDirectHomeService,
     ChiExactNodeRoute,
+    ChiFacetKind,
     ChiParticipantBinding,
+    ChiParticipantCapability,
     ChiParticipantPortBinding,
     ChiStoreForwardRouterNode,
 )
@@ -24,18 +32,25 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiNetworkPacket,
     ChiPCrdReturnMessage,
     ChiReadNoSnpMessage,
+    ChiRespErr,
 )
 from protocol_model.protocols.amba.chi.issue_h.system import (
+    CHI_FEATURE_READ_NO_SNP,
+    CHI_FEATURE_READ_NO_SNP_NDERR,
     ChiNetworkCaptureToRouter,
     ChiNetworkDrain,
     ChiNetworkEnqueue,
     ChiNetworkEventKind,
     ChiNetworkRouterToConnection,
     ChiNetworkTick,
+    ChiCoherenceAuthorityContract,
+    ChiFeatureContract,
+    ChiHomeAuthority,
     ChiReadNoSnpSystemEventKind,
     ChiReadNoSnpSystemSession,
     ChiSubmitRead,
     ChiTransportNetworkSession,
+    resolve_chi_system,
 )
 from protocol_model.protocols.amba.chi.issue_h.transport import (
     CHI_ISSUE_H_TRANSPORT_FAMILY,
@@ -43,16 +58,24 @@ from protocol_model.protocols.amba.chi.issue_h.transport import (
     ChiReqChannelProfile,
     ChiTransportLinkProfile,
 )
-from protocol_model.system import SystemProtocolBuilder, VirtualDutPortRef
+from protocol_model.system import (
+    AddressClaim,
+    AddressWindow,
+    SystemProtocolBuilder,
+    VirtualDutPortRef,
+)
 from protocol_model.virtual_dut.boundary import (
     DutBehaviorTag,
     TransportDirection,
     TransportPort,
     VirtualDut,
 )
+from protocol_model.virtual_dut.address import AddressSpace, MemoryRegion
 
 
 class ChiIssueHFreeTopologyNetworkTest(unittest.TestCase):
+    HOME_ADDRESS_CLAIM = "home.direct_window"
+
     def setUp(self) -> None:
         self.profile = ChiReadNoSnpDirectProfile(
             requester_node_id=0x07,
@@ -208,6 +231,13 @@ class ChiIssueHFreeTopologyNetworkTest(unittest.TestCase):
                 receiver,
                 profile=profile,
             )
+        builder.add_address_claim(
+            AddressClaim(
+                self.HOME_ADDRESS_CLAIM,
+                VirtualDutPortRef("home", "rx_req"),
+                AddressWindow(0, 0x1_0000),
+            )
+        )
         return builder.build()
 
     def build_direct_request_system(self):
@@ -535,6 +565,193 @@ class ChiIssueHFreeTopologyNetworkTest(unittest.TestCase):
         )
         self.assertEqual(2, network_kinds.count(ChiNetworkEventKind.ROUTER_ACCEPT))
         self.assertEqual(2, network_kinds.count(ChiNetworkEventKind.ROUTER_FORWARD))
+
+    def test_address_decode_nderr_closes_over_router_topology(self) -> None:
+        requester, home, router = self.participant_bindings()
+        address_home = ChiAddressHomeNode(
+            "home",
+            self.profile,
+            AddressSpace(
+                (
+                    MemoryRegion(
+                        "mapped",
+                        self.profile.data_bytes,
+                        base_address=0x8000,
+                    ),
+                )
+            ),
+            request_capacity=1,
+        )
+        error_home = ChiParticipantBinding(
+            home.name,
+            home.dut,
+            address_home,
+            home.ports,
+            home.node_ids,
+        )
+
+        def resolve(
+            feature,
+            requester_capabilities,
+            home_capabilities,
+        ):
+            return resolve_chi_system(
+                self.system,
+                facets=(
+                    ChiBehaviorFacet.from_binding(
+                        requester,
+                        ChiFacetKind.TRANSACTION,
+                    ),
+                    ChiBehaviorFacet.from_binding(
+                        error_home,
+                        ChiFacetKind.TRANSACTION,
+                    ),
+                    ChiBehaviorFacet.from_binding(
+                        router,
+                        ChiFacetKind.FORWARDING,
+                    ),
+                ),
+                feature_contract=ChiFeatureContract(
+                    {"requester": requester.name},
+                    frozenset((feature,)),
+                ),
+                authority_contract=ChiCoherenceAuthorityContract(
+                    authorities=(
+                        ChiHomeAuthority(
+                            self.HOME_ADDRESS_CLAIM,
+                            error_home.name,
+                        ),
+                    ),
+                ),
+                feature_address_claim=self.HOME_ADDRESS_CLAIM,
+                participant_capabilities=(
+                    ChiParticipantCapability(
+                        requester.name,
+                        requester_capabilities,
+                    ),
+                    ChiParticipantCapability(
+                        error_home.name,
+                        home_capabilities,
+                    ),
+                ),
+            )
+
+        resolved = resolve(
+            CHI_FEATURE_READ_NO_SNP_NDERR,
+            CHI_READ_NO_SNP_NDERR_REQUESTER_CAPABILITIES,
+            CHI_READ_NO_SNP_NDERR_HOME_CAPABILITIES,
+        )
+        self.assertTrue(resolved.is_closed)
+        self.assertTrue(
+            resolved.capabilities.supports(
+                CHI_FEATURE_READ_NO_SNP_NDERR
+            )
+        )
+        session = ChiReadNoSnpSystemSession.from_resolved(resolved)
+        self.assertEqual(
+            frozenset((ChiRespErr.OK, ChiRespErr.NDERR)),
+            session.enabled_response_errors,
+        )
+        request = ChiReadNoSnpMessage(
+            transaction_id=9,
+            address=0x9000,
+            size=4,
+            order=0,
+            allow_retry=True,
+            protocol_credit_type=0,
+            expect_completion_ack=False,
+            memory_attributes=0,
+        )
+
+        issued = session.step(
+            session.initial_state(),
+            ChiSubmitRead(requester.name, request),
+        )
+        self.assertIsNone(issued.fault)
+        self.assertIsNone(issued.blocked)
+        run = session.run_until_quiescent(issued.state, max_steps=256)
+
+        self.assertTrue(run.ok)
+        self.assertTrue(session.is_quiescent(run.final_state))
+        self.assertEqual(1, len(run.final_state.requester.completed))
+        result = run.final_state.requester.completed[0]
+        self.assertFalse(result.succeeded)
+        self.assertIs(ChiRespErr.NDERR, result.response_error)
+        self.assertIsNone(result.data)
+        self.assertEqual(0, result.response.data)
+        self.assertEqual(
+            self.profile.expected_data_id(request.address),
+            result.response.data_id,
+        )
+        self.assertFalse(run.final_state.home.pending)
+        self.assertEqual(1, run.final_state.home.completed_count)
+        completed = tuple(
+            event
+            for event in run.emissions
+            if event.kind is ChiReadNoSnpSystemEventKind.COMPLETE
+        )
+        self.assertEqual(1, len(completed))
+        self.assertIs(
+            ChiRespErr.NDERR,
+            completed[0].packet.message.response_error,
+        )
+        self.assertEqual(
+            self.profile.home_node_id,
+            completed[0].packet.source_id,
+        )
+        self.assertEqual(
+            self.profile.requester_node_id,
+            completed[0].packet.target_id,
+        )
+        self.assertGreaterEqual(len(completed[0].lineage), 4)
+
+        outside = ChiReadNoSnpMessage(
+            transaction_id=10,
+            address=0x1_0000,
+            size=4,
+            order=0,
+            allow_retry=True,
+            protocol_credit_type=0,
+            expect_completion_ack=False,
+            memory_attributes=0,
+        )
+        rejected = session.step(
+            session.initial_state(),
+            ChiSubmitRead(requester.name, outside),
+        )
+        self.assertIsNotNone(rejected.fault)
+        self.assertIn("authority", rejected.fault.reason)
+        self.assertFalse(rejected.emissions)
+
+        base_resolved = resolve(
+            CHI_FEATURE_READ_NO_SNP,
+            CHI_READ_NO_SNP_REQUESTER_CAPABILITIES,
+            CHI_READ_NO_SNP_HOME_CAPABILITIES,
+        )
+        self.assertTrue(base_resolved.is_closed)
+        base_session = ChiReadNoSnpSystemSession.from_resolved(base_resolved)
+        self.assertEqual(
+            frozenset((ChiRespErr.OK,)),
+            base_session.enabled_response_errors,
+        )
+        base_issued = base_session.step(
+            base_session.initial_state(),
+            ChiSubmitRead(requester.name, request),
+        )
+        base_run = base_session.run_until_quiescent(
+            base_issued.state,
+            max_steps=256,
+        )
+
+        self.assertFalse(base_run.ok)
+        self.assertEqual(1, len(base_run.violations))
+        self.assertIn(
+            "NDERR",
+            base_run.violations[0].fault.reason,
+        )
+        self.assertTrue(base_run.final_state.requester.outstanding)
+        self.assertTrue(base_run.final_state.home.pending)
+        self.assertFalse(base_run.final_state.requester.completed)
 
     def test_read_session_rejects_incomplete_participant_binding(self) -> None:
         requester, home, router = self.participant_bindings()

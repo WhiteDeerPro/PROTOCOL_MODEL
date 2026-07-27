@@ -21,6 +21,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiReadUniqueMessage,
     ChiReqLCrdReturn,
     ChiRespCode,
+    ChiRespErr,
     ChiRetryAckMessage,
     ChiSnpRespMessage,
     ChiSnpRespDataMessage,
@@ -144,6 +145,27 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                     message.chi_channel.value,
                     record.to_data()["channel"],
                 )
+
+    def test_comp_data_nderr_round_trips_as_typed_response_error(self) -> None:
+        message = ChiCompDataMessage(
+            transaction_id=9,
+            data=0,
+            data_id=2,
+            home_node_id=0x21,
+            response_error=ChiRespErr.NDERR,
+        )
+        profile = ChiIssueHDatProfile(data_width=128)
+
+        record = self.codec.encode(message, profile)
+        restored = self.codec.decode(record, profile)
+
+        self.assertEqual(0b11, record.fields["RespErr"])
+        self.assertEqual(message, restored)
+        self.assertIs(ChiRespErr.NDERR, restored.response_error)
+        self.assertEqual(
+            (0b00, 0b01, 0b10, 0b11),
+            tuple(int(item) for item in ChiRespErr),
+        )
 
     def test_clean_unique_forms_have_spec_opcodes_and_exact_fields(
         self,

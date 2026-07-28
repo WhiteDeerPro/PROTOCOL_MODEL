@@ -38,7 +38,7 @@ showcase/demos/
 - [`link/four_phase_handshake/`](link/four_phase_handshake/README.md) 展示合法 RTZ、ACK 抢跑、
   payload 覆盖，以及有限 FIFO 面对频率差的边界。
 - [`chi/issue_h_flow_gallery/`](chi/issue_h_flow_gallery/README.md) 让每个场景从自身的一次实际执行投影
-  topology/participant boundary、transaction 时空图、显式因果图和语义事件时间线，覆盖 clean
+  resolved XP topology、transaction 时空图、显式因果图和语义事件时间线，覆盖 clean
   `ReadUnique`、dirty-peer
   `CleanUnique`、`MakeUnique`、clean `Evict` Retry，以及 `WriteBackFull` 遇同址 invalidating Snoop。
 

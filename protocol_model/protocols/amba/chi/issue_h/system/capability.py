@@ -709,6 +709,7 @@ CHI_CLEAN_UNIQUE_CLEAN_PEERS_DEFINITION = ChiFeatureDefinition(
         ChiRoleRequirement(
             "requester",
             CHI_CLEAN_UNIQUE_CLEAN_PEERS_REQUESTER_CAPABILITIES,
+            ChiRoleCardinality.FINITE_SET,
         ),
         ChiRoleRequirement(
             "home",
@@ -884,6 +885,7 @@ CHI_DIRTY_WRITEBACK_DEFINITION = ChiFeatureDefinition(
         ChiRoleRequirement(
             "requester",
             CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+            ChiRoleCardinality.FINITE_SET,
         ),
         ChiRoleRequirement(
             "home",

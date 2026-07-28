@@ -76,7 +76,22 @@ from .resolved import ResolvedChiSystem
 
 @dataclass(frozen=True)
 class ChiAdvanceCoherenceNetwork:
-    """Commit at most one enabled internal move."""
+    """Commit at most one enabled internal move.
+
+    ``candidate=None`` uses the reference round-robin policy.  A named
+    candidate selects exactly one public scheduler move, which lets a
+    scenario hold an unrelated hop without editing scheduler state.
+    """
+
+    candidate: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.candidate is not None and not isinstance(
+            self.candidate, str
+        ):
+            raise TypeError("CHI scheduler candidate name must be a string")
+        if self.candidate == "":
+            raise ValueError("CHI scheduler candidate name must be non-empty")
 
 
 ChiCoherenceNetworkAction = (
@@ -230,15 +245,13 @@ class ChiCoherenceNetworkSession(
         except KeyError:
             snoopee_bindings = ()
         bindings = (
-            resolved.role_binding("requester"),
+            *resolved.role_bindings("requester"),
             resolved.role_binding("home"),
             *snoopee_bindings,
         )
         by_name = {binding.name: binding for binding in bindings}
-        if len(by_name) != len(bindings):
-            raise ValueError("CHI coherence participant names must be unique")
         by_node: dict[int, ChiParticipantBinding] = {}
-        for binding in bindings:
+        for binding in by_name.values():
             if len(binding.node_ids) != 1:
                 raise ValueError(
                     f"coherence participant {binding.name!r} needs one NodeID"
@@ -284,6 +297,18 @@ class ChiCoherenceNetworkSession(
         )
         self.router_duts = frozenset(self.network.routers)
         self._candidates = self._build_candidates()
+        self._scheduler_candidates = tuple(
+            name for name, _candidate in self._candidates
+        )
+        if len(set(self._scheduler_candidates)) != len(
+            self._scheduler_candidates
+        ):
+            raise ValueError(
+                "CHI coherence scheduler candidate names must be unique"
+            )
+        self._candidate_by_name = MappingProxyType(
+            dict(self._candidates)
+        )
 
     @classmethod
     def from_resolved(
@@ -425,6 +450,12 @@ class ChiCoherenceNetworkSession(
             self.network.initial_state(),
         )
 
+    @property
+    def scheduler_candidates(self) -> tuple[str, ...]:
+        """Return stable public names accepted by selective advance."""
+
+        return self._scheduler_candidates
+
     def is_quiescent(self, state: ChiCoherenceNetworkState) -> bool:
         return (
             isinstance(state, ChiCoherenceNetworkState)
@@ -490,7 +521,7 @@ class ChiCoherenceNetworkSession(
         if isinstance(action, ChiWriteUniqueCacheLine):
             return self._write_local(state, action)
         if isinstance(action, ChiAdvanceCoherenceNetwork):
-            return self.advance(state)
+            return self.advance(state, candidate=action.candidate)
         raise TypeError("unknown coherence-network action")
 
     def _write_local(self, state, action):
@@ -523,16 +554,56 @@ class ChiCoherenceNetworkSession(
         )
 
     def advance(
-        self, state: ChiCoherenceNetworkState
+        self,
+        state: ChiCoherenceNetworkState,
+        *,
+        candidate: str | None = None,
     ) -> SemanticStep[
         ChiCoherenceNetworkState,
         ChiCoherenceNetworkEvent,
     ]:
-        """Commit one enabled move, rotating after each successful commit."""
+        """Commit one enabled move, optionally selecting an exact candidate."""
 
         fault = self._state_fault(state)
         if fault is not None:
             return SemanticStep(state, fault=fault)
+        if candidate is not None and not isinstance(candidate, str):
+            raise TypeError("CHI scheduler candidate name must be a string")
+        if candidate == "":
+            raise ValueError("CHI scheduler candidate name must be non-empty")
+        if candidate is not None:
+            try:
+                selected = self._candidate_by_name[candidate]
+            except KeyError as error:
+                raise ValueError(
+                    f"unknown CHI scheduler candidate {candidate!r}"
+                ) from error
+            if self.is_quiescent(state):
+                return SemanticStep(
+                    state,
+                    blocked=ResourceDemand(
+                        f"{self.name}.{candidate}",
+                        ConstraintScope.SYSTEM,
+                        available=0,
+                        reason=(
+                            "selected CHI scheduler candidate is not enabled "
+                            "in a quiescent state"
+                        ),
+                        location=self.name,
+                    ),
+                )
+            transition = selected(state)
+            if transition.fault is not None:
+                return SemanticStep(state, fault=transition.fault)
+            if transition.blocked is not None:
+                return SemanticStep(state, blocked=transition.blocked)
+            index = self.scheduler_candidates.index(candidate)
+            committed = replace(
+                transition.state,
+                scheduler_cursor=(index + 1) % len(self._candidates),
+                committed_microsteps=state.committed_microsteps + 1,
+            )
+            return SemanticStep(committed, transition.emissions)
         if self.is_quiescent(state):
             return SemanticStep(state)
         blocked: list[ResourceDemand] = []

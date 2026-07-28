@@ -734,9 +734,11 @@ clean coherent read 合同则检查三种参与角色和五种有向 flow schema
 Requester→Home REQ、Home→Snoopee SNP、Snoopee→Home RSP、Home→Requester DAT，以及
 Requester→Home CompAck RSP。dirty-data 路径再增加 Snoopee→Home DAT；RSP 与 DAT 回程不会因目标相同
 而合并成一条虚构 channel。两个 RSP 方向分别闭合。独立 capability API 仍允许用 `role_sets` 检查任意
-有限集合；进入 `resolve_chi_system()` 后，feature intent 只手工选择 Requester。CHI authority contract
-引用通用 `AddressClaim`，为本次 feature scope 派生 scalar Home，并从 coherence domain 派生
-`Snoopee = members - requester`。resolver 拒绝另一份手填 Home/Snoopee role，随后 topology flow projector
+有限集合；进入 `resolve_chi_system()` 后，feature intent 手工选择 scalar Requester，或对
+CleanUnique 系列、dirty WriteBack 分别选择同构有限 requester set；当前组合 witness 同时启用二者。CHI authority contract 引用通用
+`AddressClaim`，为本次 feature scope 派生 scalar Home；scalar requester 从 coherence domain 派生
+`Snoopee = members - requester`，有限 requester set 则取各 requester eligible-peer 的并集。resolver
+拒绝另一份手填 Home/Snoopee role，随后 topology flow projector
 对每个派生成员分别检查 participant capability、Home→peer SNP 和 peer→Home RSP；shared-dirty extension
 还逐成员检查 peer→Home DAT，诊断保留具体端点。
 只含 Requester 的 domain 会派生显式空 peer set；这与 authority 未绑定 domain 不同。
@@ -744,7 +746,8 @@ Requester→Home CompAck RSP。dirty-data 路径再增加 Snoopee→Home DAT；R
 domain 是构造期声明的 eligible peer 集合，并非一笔事务已经选出的目标列表。运行时 Home 仍根据
 directory 从中选择实际 holder 并生成 per-target packet copy；session opening 会拒绝 directory holder
 越出 domain。`ChiCoherenceSession.from_resolved()` 从同一份 closed authority/feature construction 建立
-恰好由 `requester ∪ snoopees` 构成的 RN registry；它同时保留 requester-only issue、Snoopee-only SNP/RSP 和
+恰好由 `requesters ∪ snoopees` 构成并按 participant 去重的 RN registry；同一 RN 可对不同事务同时具备
+requester 与 Snoopee authority。它同时保留 requester-only issue、Snoopee-only SNP/RSP 和
 Shared/Unique/clean-ReadUnique-NDERR/Retry/clean Evict/clean-Evict-Retry、
 clean/shared-dirty CleanUnique、MakeUnique、
 dirty-unique/dirty-writeback/WriteEvictFull/WriteEvictFull-CopyAtHome/WriteEvictOrEvict/MESI no-SD
@@ -806,11 +809,13 @@ reservation 串行处理；第一笔的 invalidating Snoop 可以命中第二个
 `UCE→UD`。该见证不经过 resolved construction，不把 fixture 中的两个 requester 冒充一般多 Requester
 system authority。
 
-另一条 direct 双 Requester witness 组合 `CleanUnique + delayed WriteBack`：旧 `UD` owner 先发出的
+另一条双 Requester witness 组合 `CleanUnique + delayed WriteBack`：旧 `UD` owner 先发出的
 WriteBack REQ 被延迟，新 requester 的 `SnpCleanInvalid` 使旧 owner 返回 `SnpRespData_I_PD` 并进入
 `CANCELED_I`；CleanUnique 先提交最新 backing 与新的 `UCE` owner。迟到 REQ 随后只在 system-derived
 `SNOOP_CANCELED` evidence 下取得 DBID，返回 `CopyBackWrData_I`；Home 以 admission 时的 directory
-snapshot/backing version 拒绝 stale mutation，只退休 DBID。该见证同样不经过 resolved construction。
+snapshot/backing version 拒绝 stale mutation，只退休 DBID。除 direct participant fixture 外，resolved
+XP witness 已用有限 requester set 闭合双方 capability/route，并通过公开具名 scheduler candidate 暂停
+WBF REQ 的 router capture，待 CleanUnique 退休后再释放。该 ordering control 不表示周期或 XP 延迟。
 
 ## 场景与功能边界
 
@@ -831,9 +836,10 @@ Snoop 只返回无数据 `SnpResp_I` 并进入 `I`。pending MakeUnique 收到�
 `SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid` 时也先进入 `I` 并保留 RN-local store intent；其自己的
 `Comp_UC` 随后仍原子安装该 intent 为 `UD`。pending WriteBack 接收同址 invalidating Snoop 时则把
 `LIVE_UD` 转成 `CANCELED_I`，并在 DBID 返回后发送零数据 `CopyBackWrData_I`。Home 仍只允许一个已接纳
-的同址 lifecycle；direct packet-delivery fixture 已表达两个 requester 的 CleanUnique 串行化以及
-CleanUnique 与延迟 WriteBack cancel，但 resolved system 仍只有一个构造期 Requester authority，不能据此
-声称一般多 Requester topology 已闭合。pending `WriteEvictOrEvict` 也已在 direct 双 Requester
+的同址 lifecycle；direct packet-delivery fixture 已表达两个 requester 的 CleanUnique 串行化；
+CleanUnique 与延迟 WriteBack cancel 另有 resolved XP witness。当前有限 requester set 只对
+CleanUnique/dirty WriteBack 的同构 feature scope 开放，不能据此声称异构 per-feature 或一般多 Requester
+topology 已闭合。pending `WriteEvictOrEvict` 也已在 direct 双 Requester
 `UC/SC × data/no-data` witness 中闭合 response 前的 invalidating-Snoop cancel；它复用现有 Snoop
 与 WEOE response/DAT/Ack evidence，不把该 direct witness 扩大成一般多 Requester resolved topology。
 pending `WriteEvictFull(CAH=1)` 另闭合 response 前三种 invalidating Snoop→`I` 与 data/no-data
@@ -849,7 +855,8 @@ post-`Comp`/post-`CompDBIDResp`、pre-terminal 同址 Snoop 按 Home ordering �
   forwarding/DCT；
 - participant/VirtualDut policy：自动 victim/writeback scheduling 与 stateful snoop filter；
 - coherence state/policy：可生成、维持和替换的完整 `SD`/Owned lifecycle；
-- system construction：一般 multi-Requester resolved topology、dynamic multi-Home/SAM、跨 domain，
+- system construction：异构 per-feature requester scope 与一般 multi-Requester resolved topology、
+  dynamic multi-Home/SAM、跨 domain，
   以及需要独立观察边界时的 Home→Memory/SN participant 与 topology-visible downstream transaction；
 - representation + transaction/session：multi-packet DAT 的分片、聚合与退休；
 - verification：多 waiter selection/fairness 与跨 hop wait-for/deadlock analyzer/verdict。

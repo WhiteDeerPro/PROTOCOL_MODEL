@@ -15,7 +15,10 @@
         "one_comp_data_and_ack_completed": true,
         "requester_became_unique_clean": true,
         "clean_peers_were_invalidated": true,
-        "directory_committed_unique_owner": true
+        "directory_committed_unique_owner": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "xp_forwarded_every_endpoint_packet": true
       },
       "message_count": 7,
       "state_change_count": 6,
@@ -25,7 +28,7 @@
       ],
       "time_basis": "model_step",
       "learning_goal": "Fan one ReadUnique out to two clean peers, join both Snoop responses, then commit Unique authority.",
-      "model_boundary": "Clean MESI authority transfer over a resolved direct topology; no dirty-owner forwarding or performance claim."
+      "model_boundary": "Clean MESI authority transfer over one resolved XP star; no dirty-owner forwarding or performance claim."
     },
     "dirty-peer-clean-unique": {
       "title": "CleanUnique: absorb a shared-dirty peer through DAT",
@@ -38,7 +41,10 @@
         "home_absorbed_dirty_data": true,
         "requester_became_unique_clean": true,
         "dirty_peer_was_invalidated": true,
-        "directory_committed_unique_owner": true
+        "directory_committed_unique_owner": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "xp_forwarded_every_endpoint_packet": true
       },
       "message_count": 5,
       "state_change_count": 5,
@@ -48,7 +54,7 @@
       ],
       "time_basis": "model_step",
       "learning_goal": "Return shared-dirty peer data on DAT, update Home backing once, and complete CleanUnique with Comp/CompAck.",
-      "model_boundary": "Restricted shared-dirty CleanUnique path; not general Owned/SD or DCT behavior."
+      "model_boundary": "Restricted shared-dirty CleanUnique path through one resolved XP; not general Owned/SD or DCT behavior."
     },
     "make-unique-local-intent": {
       "title": "MakeUnique: dataless permission and local full-line intent",
@@ -61,7 +67,10 @@
         "local_full_line_intent_installed_dirty_unique": true,
         "dirty_peer_was_invalidated_without_dat": true,
         "backing_copy_was_not_rewritten": true,
-        "directory_committed_unique_owner": true
+        "directory_committed_unique_owner": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "xp_forwarded_every_endpoint_packet": true
       },
       "message_count": 5,
       "state_change_count": 5,
@@ -71,13 +80,16 @@
       ],
       "time_basis": "model_step",
       "learning_goal": "Obtain Unique permission with a dataless network lifecycle and install the requester's local full-line write intent.",
-      "model_boundary": "MakeUnique plus one modeled local store intent; not partial write or arbitrary cache-pipeline behavior."
+      "model_boundary": "MakeUnique through one resolved XP plus a modeled local store intent; not partial write or arbitrary cache-pipeline behavior."
     },
     "clean-evict-retry": {
       "title": "Clean Evict retry, P-Credit and credited reissue",
       "verdict": "PASS",
       "assertions": {
         "resolved_topology_closed": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "xp_forwarded_all_five_packets": true,
         "scheduler_passed": true,
         "scheduler_not_blocked": true,
         "session_quiescent": true,
@@ -98,12 +110,21 @@
       ],
       "time_basis": "model_step",
       "learning_goal": "Observe RetryAck, Home P-Credit debt/grant, credited reissue, and the terminal clean Evict completion.",
-      "model_boundary": "One deterministic successful retry cycle; not general Retry/error composition, fairness, or liveness proof."
+      "model_boundary": "One deterministic successful retry cycle through a resolved XP; not general Retry/error composition, fairness, or liveness proof."
     },
     "writeback-snoop-cancel": {
       "title": "Dirty WriteBackFull canceled by pre-response same-line Snoop",
       "verdict": "PASS",
       "assertions": {
+        "resolved_topology_closed": true,
+        "multi_requester_authority_closed": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "selected_scheduler_completed": true,
+        "exact_eight_packet_endpoint_flow": true,
+        "writeback_req_held_until_clean_unique_retired": true,
+        "every_endpoint_packet_crossed_xp": true,
+        "xp_forwarded_all_eight_packets": true,
         "old_owner_invalidated": true,
         "pending_writeback_marked_canceled": true,
         "snoop_carries_dirty_payload": true,
@@ -127,7 +148,7 @@
       ],
       "time_basis": "model_step",
       "learning_goal": "Delay an emitted dirty WriteBackFull while a same-line invalidating Snoop transfers ownership, then close the late request with zero-byte cancellation data.",
-      "model_boundary": "Scenario-controlled participant interleaving. Every packet and state transition is model-produced, but transport hop timing is not simulated for this case."
+      "model_boundary": "Scenario-selected moves over one resolved XP hold the WBF REQ before router capture. This controls ordering, not transport latency or cycles."
     }
   }
 }

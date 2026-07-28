@@ -2791,10 +2791,11 @@ class ChiCoherenceSession(
     ) -> "ChiCoherenceSession":
         """Bind coherence execution to closed roles and identities.
 
-        The scalar ``requester`` is the only RN allowed to initiate through
-        this construction.  ``snoopee`` contributes the finite peer registry;
-        those peers can receive SNP and return RSP but do not inherit
-        requester authority from being present in the session.
+        ``requester`` contributes the finite set of RNs allowed to initiate
+        through this construction.  ``snoopee`` is the union of RNs that can
+        be selected as a peer for at least one Requester.  A multi-Requester
+        member can therefore have both authorities; the Home directory still
+        chooses the actual targets for each operation.
         """
 
         from .resolved import ResolvedChiSystem
@@ -2829,15 +2830,19 @@ class ChiCoherenceSession(
         for feature in features:
             resolved.capabilities.require(feature)
 
-        requester_binding = resolved.role_binding("requester")
+        requester_bindings = resolved.role_bindings("requester")
         authority = resolved.feature_authority
         home_binding = resolved.binding_by_name[authority.home]
         if authority.coherence_domain is None:
             snoopee_names: tuple[str, ...] = ()
         else:
-            snoopee_names = resolved.authority_plan.eligible_snoopees(
-                resolved.feature_address_claim,
-                requester_binding.name,
+            snoopee_names = (
+                resolved.authority_plan.eligible_snoopees_for_requesters(
+                    resolved.feature_address_claim,
+                    tuple(
+                        binding.name for binding in requester_bindings
+                    ),
+                )
             )
         snoopee_bindings = tuple(
             resolved.binding_by_name[item] for item in snoopee_names
@@ -2853,38 +2858,29 @@ class ChiCoherenceSession(
                 "resolved Snoopee feature role disagrees with its "
                 "coherence domain"
             )
-        if any(
-            item.name == requester_binding.name
-            for item in snoopee_bindings
-        ):
-            raise ValueError(
-                "resolved Snoopee peer set must exclude its requester"
-            )
-        if not isinstance(requester_binding.component, ChiCoherentRnNode):
-            raise TypeError(
-                "resolved coherence requester requires ChiCoherentRnNode"
-            )
+        for binding in requester_bindings:
+            if not isinstance(binding.component, ChiCoherentRnNode):
+                raise TypeError(
+                    "resolved coherence requester requires ChiCoherentRnNode"
+                )
         if not isinstance(home_binding.component, ChiCoherentHomeNode):
             raise TypeError(
                 "resolved coherence Home requires ChiCoherentHomeNode"
             )
-        peer_nodes: list[ChiCoherentRnNode] = []
         for binding in snoopee_bindings:
             if not isinstance(binding.component, ChiCoherentRnNode):
                 raise TypeError(
                     "resolved coherence Snoopee requires ChiCoherentRnNode"
                 )
-            peer_nodes.append(binding.component)
 
-        requester = requester_binding.component
         home = home_binding.component
-        nodes = (requester, *peer_nodes)
-        node_bindings = (
-            (requester, requester_binding),
-            *tuple(
-                (binding.component, binding)
-                for binding in snoopee_bindings
-            ),
+        binding_by_name = {
+            binding.name: binding
+            for binding in (*requester_bindings, *snoopee_bindings)
+        }
+        node_bindings = tuple(
+            (binding.component, binding)
+            for binding in binding_by_name.values()
         )
         for node, binding in node_bindings:
             assert isinstance(node, ChiCoherentRnNode)
@@ -2905,8 +2901,11 @@ class ChiCoherenceSession(
             raise ValueError(
                 "resolved coherence Home must offer exactly its component NodeID"
             )
-        registry = {node.node_id: node for node in nodes}
-        if len(registry) != len(nodes):
+        registry = {
+            node.node_id: node
+            for node, _binding in node_bindings
+        }
+        if len(registry) != len(node_bindings):
             raise ValueError(
                 "resolved coherence RN roles contain duplicate component "
                 "NodeIDs"
@@ -2937,9 +2936,13 @@ class ChiCoherenceSession(
             registry,
             monitor=monitor,
             enabled_features=features,
-            requester_node_ids=frozenset((requester.node_id,)),
+            requester_node_ids=frozenset(
+                binding.component.node_id
+                for binding in requester_bindings
+            ),
             snoopee_node_ids=frozenset(
-                node.node_id for node in peer_nodes
+                binding.component.node_id
+                for binding in snoopee_bindings
             ),
             authority_window=authority.address_claim.window,
         )

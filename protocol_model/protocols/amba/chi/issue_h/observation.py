@@ -215,20 +215,29 @@ def chi_network_flow_participants(
     if not isinstance(session, ChiCoherenceNetworkSession):
         raise TypeError("CHI participant projection requires a network session")
     resolved = session.resolved
-    requester = resolved.role_binding("requester")
+    requesters = resolved.role_bindings("requester")
     home = resolved.role_binding("home")
     try:
         snoopees = resolved.role_bindings("snoopee")
     except KeyError:
         snoopees = ()
-    ordered = (
-        (requester, "requester"),
-        (home, "home"),
-        *((binding, "snoopee") for binding in snoopees),
+    role_order = ("requester", "home", "snoopee")
+    role_by_name: dict[str, set[str]] = {}
+    ordered_bindings = (
+        *requesters,
+        home,
+        *snoopees,
     )
+    for role, bindings in (
+        ("requester", requesters),
+        ("home", (home,)),
+        ("snoopee", snoopees),
+    ):
+        for binding in bindings:
+            role_by_name.setdefault(binding.name, set()).add(role)
     participants = []
     seen: set[int] = set()
-    for binding, role in ordered:
+    for binding in ordered_bindings:
         if len(binding.node_ids) != 1:
             raise ValueError(
                 "one CHI flow lifeline requires exactly one NodeID"
@@ -237,6 +246,11 @@ def chi_network_flow_participants(
         if node_id in seen:
             continue
         seen.add(node_id)
+        role = "/".join(
+            item
+            for item in role_order
+            if item in role_by_name[binding.name]
+        )
         participants.append(
             ChiFlowParticipant(
                 node_id,

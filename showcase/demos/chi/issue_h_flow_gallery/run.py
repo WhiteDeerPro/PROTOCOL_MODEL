@@ -67,7 +67,7 @@ def _build_publication(directory: Path) -> Path:
         publisher.render_dot(
             "topology",
             flow_case_topology_dot(case),
-            kind="resolved_topology_or_participant_boundary",
+            kind="resolved_topology",
             case=case.case_id,
         )
         store.write_json(
@@ -122,21 +122,20 @@ def _build_publication(directory: Path) -> Path:
             "protocol_model_version": __version__,
             "case_order": list(cases),
             "execution": {
-                "resolved_network_scheduler": [
+                "resolved_network_round_robin": [
                     "clean-read-unique-fanout",
                     "dirty-peer-clean-unique",
                     "make-unique-local-intent",
                     "clean-evict-retry",
                 ],
-                "scenario_controlled_participant_runtime": [
+                "resolved_network_selected_moves": [
                     "writeback-snoop-cancel"
                 ],
             },
             "views": {
                 "topology": (
-                    "resolved SystemProtocol connections for four network "
-                    "cases; emitted-packet participant boundary for the "
-                    "scenario-controlled WriteBackFull case"
+                    "resolved SystemProtocol participant-XP connections "
+                    "for all five cases"
                 ),
                 "transaction-time-space": (
                     "accepted CHI messages and selected participant/Home "
@@ -156,11 +155,16 @@ def _build_publication(directory: Path) -> Path:
                 "causal DOT and WaveJSON"
             ),
             "xp_visibility": (
-                "the four resolved flow cases construct direct participant "
-                "topologies and therefore show no XP; real forwarding "
-                "bindings would appear as XP-like routing abstractions, "
-                "while per-hop MOVE events remain outside the semantic "
+                "all five cases construct and execute one store-forward "
+                "XP abstraction; endpoint routes contain two transport "
+                "legs and forwarding counters retire every packet, while "
+                "per-hop MOVE events remain outside the semantic "
                 "time-space projection"
+            ),
+            "selected_ordering": (
+                "the WriteBackFull case holds only its RN0-to-XP REQ "
+                "router-capture candidate until CleanUnique retires; this "
+                "is model ordering control, not a latency or cycle claim"
             ),
             "reference_boundary": (
                 "docs/reviews/chi-injected-flow-digest.md guided case "
@@ -193,12 +197,12 @@ def _build_publication(directory: Path) -> Path:
                 "scope": "system",
                 "identity": "chi.issue_h.coherence_and_progress_witnesses",
                 "definition": (
-                    "resolved participant authority plus one explicit "
-                    "scenario-controlled interference ordering"
+                    "resolved participant authority and XP routes, including "
+                    "one selected-move interference ordering"
                 ),
                 "parameters": {
-                    "resolved_network_cases": 4,
-                    "participant_interleaving_cases": 1,
+                    "resolved_network_cases": 5,
+                    "selected_scheduler_cases": 1,
                 },
             },
         ),

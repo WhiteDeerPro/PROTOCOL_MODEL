@@ -425,10 +425,10 @@ def _bind_feature_authority(
 ) -> ChiFeatureContract:
     """Derive Home and eligible Snoopee roles from one address scope.
 
-    The caller still chooses the initiating Requester and required features.
-    Home and Snoopee are system authority, so accepting them as parallel
-    caller-authored role facts would recreate the construction inversion this
-    resolver is intended to remove.
+    The caller still chooses the initiating Requester set and required
+    features.  Home and Snoopee are system authority, so accepting them as
+    parallel caller-authored role facts would recreate the construction
+    inversion this resolver is intended to remove.
     """
 
     derived_roles = {"home", "snoopee"}
@@ -480,22 +480,26 @@ def _bind_feature_authority(
     eligible_snoopees: tuple[str, ...] | None = None
     if requires_coherence_domain or "snoopee" in required_roles:
         requester_members = feature_contract.role_members("requester")
-        if (
-            requester_members is None
-            or len(requester_members) != 1
-            or feature_contract.role_is_set("requester")
-        ):
+        if not requester_members:
             raise ValueError(
-                "coherence authority derivation requires one scalar requester"
+                "coherence authority derivation requires at least one "
+                "requester"
             )
         if authority.coherence_domain is None:
             raise ValueError(
                 f"CHI Home authority for claim {feature_address_claim!r} "
                 "does not select a coherence domain"
             )
-        eligible_snoopees = authority_plan.eligible_snoopees(
-            feature_address_claim,
-            requester_members[0],
+        # A resolved construction admits Snoop traffic from any RN that can
+        # be selected as a peer of at least one enabled Requester.  For one
+        # Requester this is the familiar domain-minus-self set.  With two or
+        # more Requesters the union can include the Requesters themselves:
+        # each remains a potential Snoopee for another Requester's operation.
+        eligible_snoopees = (
+            authority_plan.eligible_snoopees_for_requesters(
+                feature_address_claim,
+                requester_members,
+            )
         )
     if "snoopee" in required_roles:
         assert eligible_snoopees is not None

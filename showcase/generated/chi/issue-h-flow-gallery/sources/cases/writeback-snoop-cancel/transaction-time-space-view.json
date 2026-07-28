@@ -13,26 +13,26 @@
   "lifelines": [
     {
       "ref": "rn0",
-      "label": "RN0 · old dirty owner",
-      "kind": "requester",
+      "label": "RN0 · requester/snoopee",
+      "kind": "requester/snoopee",
       "display_fields": {
         "NodeID": "0x7"
       }
     },
     {
-      "ref": "hn0",
-      "label": "HN0 · Home",
-      "kind": "home",
+      "ref": "rn1",
+      "label": "RN1 · requester/snoopee",
+      "kind": "requester/snoopee",
       "display_fields": {
-        "NodeID": "0x21"
+        "NodeID": "0x8"
       }
     },
     {
-      "ref": "rn1",
-      "label": "RN1 · CleanUnique requester",
-      "kind": "requester",
+      "ref": "hn0",
+      "label": "HN0 · home",
+      "kind": "home",
       "display_fields": {
-        "NodeID": "0x8"
+        "NodeID": "0x21"
       }
     }
   ],
@@ -42,7 +42,7 @@
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "source": "rn1",
       "destination": "hn0",
-      "time": 2,
+      "time": 30,
       "label": "CleanUnique",
       "lane": "req",
       "channel": "req",
@@ -60,7 +60,7 @@
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "source": "hn0",
       "destination": "rn0",
-      "time": 3,
+      "time": 52,
       "label": "SnpCleanInvalid",
       "lane": "snp",
       "channel": "snp",
@@ -76,7 +76,7 @@
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "source": "rn0",
       "destination": "hn0",
-      "time": 4,
+      "time": 74,
       "label": "SnpRespData",
       "lane": "dat",
       "channel": "dat",
@@ -93,7 +93,7 @@
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "source": "hn0",
       "destination": "rn1",
-      "time": 5,
+      "time": 96,
       "label": "Comp",
       "lane": "rsp",
       "channel": "rsp",
@@ -110,7 +110,7 @@
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "source": "rn1",
       "destination": "hn0",
-      "time": 6,
+      "time": 118,
       "label": "CompAck",
       "lane": "rsp",
       "channel": "rsp",
@@ -126,7 +126,7 @@
       "operation_ref": "writeback-snoop-cancel:n7:h21:t31",
       "source": "rn0",
       "destination": "hn0",
-      "time": 7,
+      "time": 127,
       "label": "WriteBackFull",
       "lane": "req",
       "channel": "req",
@@ -144,7 +144,7 @@
       "operation_ref": "writeback-snoop-cancel:n7:h21:t31",
       "source": "hn0",
       "destination": "rn0",
-      "time": 8,
+      "time": 149,
       "label": "CompDBIDResp",
       "lane": "rsp",
       "channel": "rsp",
@@ -161,7 +161,7 @@
       "operation_ref": "writeback-snoop-cancel:n7:h21:t31",
       "source": "rn0",
       "destination": "hn0",
-      "time": 9,
+      "time": 171,
       "label": "CopyBackWrData",
       "lane": "dat",
       "channel": "dat",
@@ -187,119 +187,119 @@
       "display_fields": {
         "badge": "UD CB31:live",
         "summary": "rn0: UD → UD CB31:live",
-        "transition": "issue WriteBackFull"
+        "transition": "local request issue"
       }
     },
     {
-      "event_ref": "writeback-snoop-cancel:state:001:rn1",
+      "event_ref": "writeback-snoop-cancel:state:002:rn1",
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "lifeline": "rn1",
-      "time": 1,
+      "time": 2,
       "before": "line=- | txn=- | copyback=- | retry=-",
       "after": "line=- | txn=0x32 | copyback=- | retry=-",
       "label": "coherence/transaction state",
       "display_fields": {
         "badge": "- T32",
         "summary": "rn1: - → - T32",
-        "transition": "issue CleanUnique"
+        "transition": "local request issue"
       }
     },
     {
-      "event_ref": "writeback-snoop-cancel:state:002:hn0",
+      "event_ref": "writeback-snoop-cancel:state:030:hn0",
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "lifeline": "hn0",
-      "time": 2,
+      "time": 30,
       "before": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=0",
       "after": "dir[U=0x7;S=-;SD=-] | pending=0x200 | copyback=- | backing=v0 | retry_debt=0 reserved=0",
       "label": "coherence/transaction state",
       "display_fields": {
         "badge": "D:U7 P1 Bv0",
         "summary": "hn0: D:U7 Bv0 → D:U7 P1 Bv0",
-        "transition": "deliver CleanUnique to Home"
+        "transition": "hn0 accepts CleanUnique"
       }
     },
     {
-      "event_ref": "writeback-snoop-cancel:state:003:rn0",
+      "event_ref": "writeback-snoop-cancel:state:052:rn0",
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "lifeline": "rn0",
-      "time": 3,
+      "time": 52,
       "before": "line=UD | txn=- | copyback=0x31:live_ud | retry=-",
       "after": "line=I | txn=- | copyback=0x31:canceled_i | retry=-",
       "label": "coherence/transaction state",
       "display_fields": {
         "badge": "I CB31:cancel",
         "summary": "rn0: UD CB31:live → I CB31:cancel",
-        "transition": "deliver invalidating Snoop"
+        "transition": "rn0 accepts SnpCleanInvalid"
       }
     },
     {
-      "event_ref": "writeback-snoop-cancel:state:005:rn1",
+      "event_ref": "writeback-snoop-cancel:state:096:rn1",
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "lifeline": "rn1",
-      "time": 5,
+      "time": 96,
       "before": "line=- | txn=0x32 | copyback=- | retry=-",
       "after": "line=UCE | txn=- | copyback=- | retry=-",
       "label": "coherence/transaction state",
       "display_fields": {
         "badge": "UCE",
         "summary": "rn1: - T32 → UCE",
-        "transition": "deliver CleanUnique completion"
+        "transition": "rn1 accepts Comp"
       }
     },
     {
-      "event_ref": "writeback-snoop-cancel:state:006:hn0",
+      "event_ref": "writeback-snoop-cancel:state:118:hn0",
       "operation_ref": "writeback-snoop-cancel:n8:h21:t32",
       "lifeline": "hn0",
-      "time": 6,
+      "time": 118,
       "before": "dir[U=0x7;S=-;SD=-] | pending=0x200 | copyback=- | backing=v0 | retry_debt=0 reserved=0",
       "after": "dir[U=0x8;S=-;SD=-] | pending=- | copyback=- | backing=v1 | retry_debt=0 reserved=0",
       "label": "coherence/transaction state",
       "display_fields": {
         "badge": "D:U8 Bv1",
         "summary": "hn0: D:U7 P1 Bv0 → D:U8 Bv1",
-        "transition": "deliver CleanUnique CompAck"
+        "transition": "hn0 accepts CompAck"
       }
     },
     {
-      "event_ref": "writeback-snoop-cancel:state:007:hn0",
+      "event_ref": "writeback-snoop-cancel:state:127:hn0",
       "operation_ref": "writeback-snoop-cancel:n7:h21:t31",
       "lifeline": "hn0",
-      "time": 7,
+      "time": 127,
       "before": "dir[U=0x8;S=-;SD=-] | pending=- | copyback=- | backing=v1 | retry_debt=0 reserved=0",
       "after": "dir[U=0x8;S=-;SD=-] | pending=- | copyback=0x201 | backing=v1 | retry_debt=0 reserved=0",
       "label": "coherence/transaction state",
       "display_fields": {
         "badge": "D:U8 CB1 Bv1",
         "summary": "hn0: D:U8 Bv1 → D:U8 CB1 Bv1",
-        "transition": "deliver late WriteBackFull request"
+        "transition": "hn0 accepts WriteBackFull"
       }
     },
     {
-      "event_ref": "writeback-snoop-cancel:state:008:rn0",
+      "event_ref": "writeback-snoop-cancel:state:149:rn0",
       "operation_ref": "writeback-snoop-cancel:n7:h21:t31",
       "lifeline": "rn0",
-      "time": 8,
+      "time": 149,
       "before": "line=I | txn=- | copyback=0x31:canceled_i | retry=-",
       "after": "line=I | txn=- | copyback=- | retry=-",
       "label": "coherence/transaction state",
       "display_fields": {
         "badge": "I",
         "summary": "rn0: I CB31:cancel → I",
-        "transition": "deliver cancellation response"
+        "transition": "rn0 accepts CompDBIDResp"
       }
     },
     {
-      "event_ref": "writeback-snoop-cancel:state:009:hn0",
+      "event_ref": "writeback-snoop-cancel:state:171:hn0",
       "operation_ref": "writeback-snoop-cancel:n7:h21:t31",
       "lifeline": "hn0",
-      "time": 9,
+      "time": 171,
       "before": "dir[U=0x8;S=-;SD=-] | pending=- | copyback=0x201 | backing=v1 | retry_debt=0 reserved=0",
       "after": "dir[U=0x8;S=-;SD=-] | pending=- | copyback=- | backing=v1 | retry_debt=0 reserved=0",
       "label": "coherence/transaction state",
       "display_fields": {
         "badge": "D:U8 Bv1",
         "summary": "hn0: D:U8 CB1 Bv1 → D:U8 Bv1",
-        "transition": "deliver cancellation data"
+        "transition": "hn0 accepts CopyBackWrData"
       }
     }
   ],
@@ -310,7 +310,7 @@
       "reason": "local issue emits"
     },
     {
-      "source_event_ref": "writeback-snoop-cancel:state:001:rn1",
+      "source_event_ref": "writeback-snoop-cancel:state:002:rn1",
       "destination_event_ref": "writeback-snoop-cancel:message:00",
       "reason": "local issue emits"
     },
@@ -345,7 +345,7 @@
       "reason": "participant emits"
     },
     {
-      "source_event_ref": "writeback-snoop-cancel:state:003:rn0",
+      "source_event_ref": "writeback-snoop-cancel:state:052:rn0",
       "destination_event_ref": "writeback-snoop-cancel:message:06",
       "reason": "same-line cancel selects response"
     }

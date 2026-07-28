@@ -34,7 +34,7 @@
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "source": "rn0",
       "destination": "hn0",
-      "time": 8,
+      "time": 20,
       "label": "Evict",
       "lane": "req",
       "channel": "req",
@@ -52,7 +52,7 @@
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "source": "hn0",
       "destination": "rn0",
-      "time": 16,
+      "time": 38,
       "label": "RetryAck",
       "lane": "rsp",
       "channel": "rsp",
@@ -68,7 +68,7 @@
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "source": "hn0",
       "destination": "rn0",
-      "time": 21,
+      "time": 49,
       "label": "PCrdGrant",
       "lane": "rsp",
       "channel": "rsp",
@@ -84,7 +84,7 @@
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "source": "rn0",
       "destination": "hn0",
-      "time": 30,
+      "time": 70,
       "label": "Evict",
       "lane": "req",
       "channel": "req",
@@ -102,7 +102,7 @@
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "source": "hn0",
       "destination": "rn0",
-      "time": 36,
+      "time": 86,
       "label": "Comp",
       "lane": "rsp",
       "channel": "rsp",
@@ -131,10 +131,10 @@
       }
     },
     {
-      "event_ref": "clean-evict-retry:state:008:hn0",
+      "event_ref": "clean-evict-retry:state:020:hn0",
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "lifeline": "hn0",
-      "time": 8,
+      "time": 20,
       "before": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=0",
       "after": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=1 reserved=0",
       "label": "coherence/transaction state",
@@ -145,10 +145,10 @@
       }
     },
     {
-      "event_ref": "clean-evict-retry:state:012:hn0",
+      "event_ref": "clean-evict-retry:state:026:hn0",
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "lifeline": "hn0",
-      "time": 12,
+      "time": 26,
       "before": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=1 reserved=0",
       "after": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=1",
       "label": "coherence/transaction state",
@@ -159,10 +159,10 @@
       }
     },
     {
-      "event_ref": "clean-evict-retry:state:016:rn0",
+      "event_ref": "clean-evict-retry:state:038:rn0",
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "lifeline": "rn0",
-      "time": 16,
+      "time": 38,
       "before": "line=I | txn=0x31 | copyback=- | retry=0x31:initial_in_flight",
       "after": "line=I | txn=0x31 | copyback=- | retry=0x31:wait_retry_credit",
       "label": "coherence/transaction state",
@@ -173,10 +173,10 @@
       }
     },
     {
-      "event_ref": "clean-evict-retry:state:024:rn0",
+      "event_ref": "clean-evict-retry:state:054:rn0",
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "lifeline": "rn0",
-      "time": 24,
+      "time": 54,
       "before": "line=I | txn=0x31 | copyback=- | retry=0x31:wait_retry_credit",
       "after": "line=I | txn=0x31 | copyback=- | retry=0x31:retried_in_flight",
       "label": "coherence/transaction state",
@@ -187,10 +187,10 @@
       }
     },
     {
-      "event_ref": "clean-evict-retry:state:030:hn0",
+      "event_ref": "clean-evict-retry:state:070:hn0",
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "lifeline": "hn0",
-      "time": 30,
+      "time": 70,
       "before": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=1",
       "after": "dir[U=-;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=0",
       "label": "coherence/transaction state",
@@ -201,10 +201,10 @@
       }
     },
     {
-      "event_ref": "clean-evict-retry:state:036:rn0",
+      "event_ref": "clean-evict-retry:state:086:rn0",
       "operation_ref": "clean-evict-retry:n7:h21:t31",
       "lifeline": "rn0",
-      "time": 36,
+      "time": 86,
       "before": "line=I | txn=0x31 | copyback=- | retry=0x31:retried_in_flight",
       "after": "line=I | txn=- | copyback=- | retry=-",
       "label": "coherence/transaction state",
@@ -227,12 +227,12 @@
       "reason": "participant emits"
     },
     {
-      "source_event_ref": "clean-evict-retry:state:012:hn0",
+      "source_event_ref": "clean-evict-retry:state:026:hn0",
       "destination_event_ref": "clean-evict-retry:message:02",
       "reason": "local issue emits"
     },
     {
-      "source_event_ref": "clean-evict-retry:state:024:rn0",
+      "source_event_ref": "clean-evict-retry:state:054:rn0",
       "destination_event_ref": "clean-evict-retry:message:03",
       "reason": "local issue emits"
     },
@@ -243,7 +243,7 @@
     },
     {
       "source_event_ref": "clean-evict-retry:message:00",
-      "destination_event_ref": "clean-evict-retry:state:012:hn0",
+      "destination_event_ref": "clean-evict-retry:state:026:hn0",
       "reason": "Retry debt enables P-Credit"
     },
     {

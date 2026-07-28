@@ -8,11 +8,11 @@
 | 发布集 | 证据边界 |
 |---|---|
 | [AXI4 场景集](axi4/README.zh-CN.md) | 合法/违规 transaction、verdict、pin-level 波形与因果图 |
-| [CHI Issue H flow gallery](chi/issue-h-flow-gallery/README.md) | 5 个实际执行 coherence/progress 流程的拓扑/交互边界、transaction 时空图、显式因果图与语义事件时间线 |
+| [CHI Issue H flow gallery](chi/issue-h-flow-gallery/README.md) | 5 个实际执行 coherence/progress 流程的 resolved XP topology、transaction 时空图、显式因果图与语义事件时间线 |
 | [CHI 异构 ring + star](system/chi-issue-h-heterogeneous-ring-star/README.md) | 非均匀 attachment、方向化 exact route 和 quiescence 证据 |
 | [CHI 4×4 mesh](system/chi-issue-h-four-by-four-mesh/README.md) | 16-router 构造、角到角 exact route 和 quiescence 证据 |
 
-CHI flow gallery 的 topology 只声明各案实际构造或 participant 交互边界，timeline 不是 pin/cycle RTL
+CHI flow gallery 的 topology 只声明各案实际构造并执行的 XP forwarding boundary，timeline 不是 pin/cycle RTL
 波形；独立 topology leaf 也不以网络规模声明 opcode 覆盖。
 
 ## 所有权与重建

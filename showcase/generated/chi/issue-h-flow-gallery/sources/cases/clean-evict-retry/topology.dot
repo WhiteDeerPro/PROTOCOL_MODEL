@@ -4,7 +4,10 @@ digraph "chi_flow_clean-evict-retry" {
   edge [fontname="sans-serif", fontsize=8, color="#64748b", fontcolor="#334155", arrowsize=0.62];
   "rn0" [label="RN0\nrequester\nNodeID 0x7", fillcolor="#dbeafe", color="#2563eb"];
   "hn0" [label="HN0\nhome\nNodeID 0x21", fillcolor="#ffedd5", color="#ea580c"];
-  "rn0" -> "hn0" [label="evict_request\ntransport · REQ", tooltip="rn0.tx_req → hn0.rx_req"];
-  "hn0" -> "rn0" [label="evict_completion\ntransport · RSP", tooltip="hn0.tx_rsp → rn0.rx_rsp"];
-  evidence [shape=note, style="filled", fillcolor="#f8fafc", color="#94a3b8", fontsize=8, label="2 VirtualDuts · 2 declared connections\nsolid arrows come from resolved construction\ndirect participant topology · no XP-like forwarder constructed\nflow time-space omits per-hop transport MOVE events"];
+  "xp0" [label="XP0\nrouting forwarder (XP abstraction)", fillcolor="#ede9fe", color="#7c3aed"];
+  "rn0" -> "xp0" [label="rn0_to_xp_req\ntransport · REQ", tooltip="rn0.tx_req → xp0.from_rn0"];
+  "xp0" -> "hn0" [label="xp_to_hn0_req\ntransport · REQ", tooltip="xp0.to_hn0 → hn0.rx_req"];
+  "hn0" -> "xp0" [label="hn0_to_xp_rsp\ntransport · RSP", tooltip="hn0.tx_rsp → xp0.from_hn0"];
+  "xp0" -> "rn0" [label="xp_to_rn0_rsp\ntransport · RSP", tooltip="xp0.to_rn0 → rn0.rx_rsp"];
+  evidence [shape=note, style="filled", fillcolor="#f8fafc", color="#94a3b8", fontsize=8, label="3 VirtualDuts · 4 declared connections\nsolid arrows come from resolved construction\n1 XP-like forwarding abstraction is shown explicitly\nflow time-space omits per-hop transport MOVE events"];
 }

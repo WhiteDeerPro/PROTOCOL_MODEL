@@ -1,9 +1,9 @@
 """Executable CHI Issue H coherence stories for the flow gallery.
 
-The cases in this module are deliberately small direct topologies.  They run
-the production coherence participants and transport scheduler; the returned
-events are therefore observations of the model, not a hand-authored message
-sequence for a diagram.
+The cases in this module use a small explicit XP-star topology.  They run the
+production coherence participants, store-and-forward router, links, and
+transport scheduler; the returned events are therefore observations of the
+model, not a hand-authored message sequence for a diagram.
 """
 
 from __future__ import annotations
@@ -21,11 +21,13 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiCacheLine,
     ChiCacheState,
     ChiCoherentHomeNode,
+    ChiExactNodeRoute,
     ChiFacetKind,
     ChiHomeDirectoryEntry,
     ChiParticipantBinding,
     ChiParticipantCapability,
     ChiParticipantPortBinding,
+    ChiStoreForwardRouterNode,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants.capability import (
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
@@ -96,6 +98,7 @@ from protocol_model.system import (
 )
 from protocol_model.virtual_dut.backend import BackingLine, FullLineBackingCore
 from protocol_model.virtual_dut.boundary import (
+    DutBehaviorTag,
     TransportDirection,
     TransportPort,
     VirtualDut,
@@ -156,7 +159,7 @@ class _Peer:
 
 
 @dataclass(frozen=True)
-class _DirectCase:
+class _RoutedCase:
     name: str
     requester_state: ChiCacheState
     requester_data: int | None
@@ -217,18 +220,18 @@ def _link_profile(
     )
 
 
-def _build_direct_session(case: _DirectCase) -> ChiCoherenceNetworkSession:
+def _build_routed_session(case: _RoutedCase) -> ChiCoherenceNetworkSession:
     builder = SystemProtocolBuilder(case.name)
     builder.add_dut(
         VirtualDut(
             "rn0",
             {
-                "tx_request_ack": _port(
-                    "tx_request_ack",
+                "tx_to_xp": _port(
+                    "tx_to_xp",
                     TransportDirection.TRANSMIT,
                 ),
-                "rx_completion": _port(
-                    "rx_completion",
+                "rx_from_xp": _port(
+                    "rx_from_xp",
                     TransportDirection.RECEIVE,
                 ),
             },
@@ -239,12 +242,12 @@ def _build_direct_session(case: _DirectCase) -> ChiCoherenceNetworkSession:
             VirtualDut(
                 peer.dut_name,
                 {
-                    "rx_snoop": _port(
-                        "rx_snoop",
+                    "rx_from_xp": _port(
+                        "rx_from_xp",
                         TransportDirection.RECEIVE,
                     ),
-                    "tx_snoop_result": _port(
-                        "tx_snoop_result",
+                    "tx_to_xp": _port(
+                        "tx_to_xp",
                         TransportDirection.TRANSMIT,
                     ),
                 },
@@ -254,69 +257,99 @@ def _build_direct_session(case: _DirectCase) -> ChiCoherenceNetworkSession:
         VirtualDut(
             "hn0",
             {
-                "rx_request_ack": _port(
-                    "rx_request_ack",
+                "rx_from_xp": _port(
+                    "rx_from_xp",
                     TransportDirection.RECEIVE,
                 ),
-                "tx_completion": _port(
-                    "tx_completion",
+                "tx_to_xp": _port(
+                    "tx_to_xp",
                     TransportDirection.TRANSMIT,
                 ),
+            },
+        )
+    )
+    participant_names = (
+        "rn0",
+        *(peer.dut_name for peer in case.peers),
+        "hn0",
+    )
+    builder.add_dut(
+        VirtualDut(
+            "xp0",
+            {
                 **{
-                    f"tx_snoop_{peer.dut_name}": _port(
-                        f"tx_snoop_{peer.dut_name}",
-                        TransportDirection.TRANSMIT,
-                    )
-                    for peer in case.peers
-                },
-                **{
-                    f"rx_result_{peer.dut_name}": _port(
-                        f"rx_result_{peer.dut_name}",
+                    f"from_{name}": _port(
+                        f"from_{name}",
                         TransportDirection.RECEIVE,
                     )
-                    for peer in case.peers
+                    for name in participant_names
+                },
+                **{
+                    f"to_{name}": _port(
+                        f"to_{name}",
+                        TransportDirection.TRANSMIT,
+                    )
+                    for name in participant_names
                 },
             },
+            behavior_tags=frozenset((DutBehaviorTag.ROUTING,)),
         )
     )
 
     connection_specs = [
         (
-            "request_ack",
-            VirtualDutPortRef("rn0", "tx_request_ack"),
-            VirtualDutPortRef("hn0", "rx_request_ack"),
+            "rn0_to_xp",
+            VirtualDutPortRef("rn0", "tx_to_xp"),
+            VirtualDutPortRef("xp0", "from_rn0"),
             frozenset((ChiChannelKind.REQ, ChiChannelKind.RSP)),
         ),
         (
-            "completion",
-            VirtualDutPortRef("hn0", "tx_completion"),
-            VirtualDutPortRef("rn0", "rx_completion"),
+            "hn0_to_xp",
+            VirtualDutPortRef("hn0", "tx_to_xp"),
+            VirtualDutPortRef("xp0", "from_hn0"),
+            frozenset(
+                (ChiChannelKind.SNP, case.completion_channel)
+            ),
+        ),
+        (
+            "xp_to_rn0",
+            VirtualDutPortRef("xp0", "to_rn0"),
+            VirtualDutPortRef("rn0", "rx_from_xp"),
             frozenset((case.completion_channel,)),
+        ),
+        (
+            "xp_to_hn0",
+            VirtualDutPortRef("xp0", "to_hn0"),
+            VirtualDutPortRef("hn0", "rx_from_xp"),
+            frozenset(
+                (
+                    ChiChannelKind.REQ,
+                    ChiChannelKind.RSP,
+                    *case.peer_return_channels,
+                )
+            ),
         ),
     ]
     for peer in case.peers:
         connection_specs.extend(
             (
                 (
-                    f"snoop_{peer.dut_name}",
+                    f"{peer.dut_name}_to_xp",
+                    VirtualDutPortRef(peer.dut_name, "tx_to_xp"),
                     VirtualDutPortRef(
-                        "hn0",
-                        f"tx_snoop_{peer.dut_name}",
-                    ),
-                    VirtualDutPortRef(peer.dut_name, "rx_snoop"),
-                    frozenset((ChiChannelKind.SNP,)),
-                ),
-                (
-                    f"result_{peer.dut_name}",
-                    VirtualDutPortRef(
-                        peer.dut_name,
-                        "tx_snoop_result",
-                    ),
-                    VirtualDutPortRef(
-                        "hn0",
-                        f"rx_result_{peer.dut_name}",
+                        "xp0",
+                        f"from_{peer.dut_name}",
                     ),
                     case.peer_return_channels,
+                ),
+                (
+                    f"xp_to_{peer.dut_name}",
+                    VirtualDutPortRef(
+                        "xp0",
+                        f"to_{peer.dut_name}",
+                    ),
+                    VirtualDutPortRef(peer.dut_name, "rx_from_xp"),
+                    frozenset((ChiChannelKind.SNP,)),
                 ),
             )
         )
@@ -333,7 +366,7 @@ def _build_direct_session(case: _DirectCase) -> ChiCoherenceNetworkSession:
     builder.add_address_claim(
         AddressClaim(
             claim_name,
-            VirtualDutPortRef("hn0", "rx_request_ack"),
+            VirtualDutPortRef("hn0", "rx_from_xp"),
             AddressWindow(ADDRESS, 0x40),
         )
     )
@@ -345,10 +378,10 @@ def _build_direct_session(case: _DirectCase) -> ChiCoherenceNetworkSession:
         REQUESTER,
         HOME,
         port_channels={
-            "tx_request_ack": frozenset(
+            "tx_to_xp": frozenset(
                 (ChiChannelKind.REQ, ChiChannelKind.RSP)
             ),
-            "rx_completion": frozenset((case.completion_channel,)),
+            "rx_from_xp": frozenset((case.completion_channel,)),
         },
         initial_lines=(
             ChiCacheLine(
@@ -366,8 +399,8 @@ def _build_direct_session(case: _DirectCase) -> ChiCoherenceNetworkSession:
             peer.node_id,
             HOME,
             port_channels={
-                "rx_snoop": frozenset((ChiChannelKind.SNP,)),
-                "tx_snoop_result": case.peer_return_channels,
+                "rx_from_xp": frozenset((ChiChannelKind.SNP,)),
+                "tx_to_xp": case.peer_return_channels,
             },
             initial_lines=(
                 ChiCacheLine(ADDRESS, peer.state, peer.data),
@@ -403,33 +436,106 @@ def _build_direct_session(case: _DirectCase) -> ChiCoherenceNetworkSession:
         home,
         (
             port_binding(
-                duts["hn0"].port("rx_request_ack"),
-                frozenset((ChiChannelKind.REQ, ChiChannelKind.RSP)),
+                duts["hn0"].port("rx_from_xp"),
+                frozenset(
+                    (
+                        ChiChannelKind.REQ,
+                        ChiChannelKind.RSP,
+                        *case.peer_return_channels,
+                    )
+                ),
             ),
             port_binding(
-                duts["hn0"].port("tx_completion"),
-                frozenset((case.completion_channel,)),
-            ),
-            *(
-                binding
-                for peer in case.peers
-                for binding in (
-                    port_binding(
-                        duts["hn0"].port(
-                            f"tx_snoop_{peer.dut_name}"
-                        ),
-                        frozenset((ChiChannelKind.SNP,)),
-                    ),
-                    port_binding(
-                        duts["hn0"].port(
-                            f"rx_result_{peer.dut_name}"
-                        ),
-                        case.peer_return_channels,
-                    ),
+                duts["hn0"].port("tx_to_xp"),
+                frozenset(
+                    (ChiChannelKind.SNP, case.completion_channel)
                 )
             ),
         ),
         frozenset((HOME,)),
+    )
+    router_receive_channels = {
+        "rn0": frozenset(
+            (ChiChannelKind.REQ, ChiChannelKind.RSP)
+        ),
+        **{
+            peer.dut_name: case.peer_return_channels
+            for peer in case.peers
+        },
+        "hn0": frozenset(
+            (ChiChannelKind.SNP, case.completion_channel)
+        ),
+    }
+    router_transmit_channels = {
+        "rn0": frozenset((case.completion_channel,)),
+        **{
+            peer.dut_name: frozenset((ChiChannelKind.SNP,))
+            for peer in case.peers
+        },
+        "hn0": frozenset(
+            (
+                ChiChannelKind.REQ,
+                ChiChannelKind.RSP,
+                *case.peer_return_channels,
+            )
+        ),
+    }
+    router = ChiStoreForwardRouterNode(
+        "xp0",
+        ingress_ports=tuple(
+            f"from_{name}" for name in participant_names
+        ),
+        egress_ports=tuple(
+            f"to_{name}" for name in participant_names
+        ),
+        routes=(
+            ChiExactNodeRoute(
+                REQUESTER,
+                "to_rn0",
+                frozenset((case.completion_channel,)),
+            ),
+            *(
+                ChiExactNodeRoute(
+                    peer.node_id,
+                    f"to_{peer.dut_name}",
+                    frozenset((ChiChannelKind.SNP,)),
+                )
+                for peer in case.peers
+            ),
+            ChiExactNodeRoute(
+                HOME,
+                "to_hn0",
+                frozenset(
+                    (
+                        ChiChannelKind.REQ,
+                        ChiChannelKind.RSP,
+                        *case.peer_return_channels,
+                    )
+                ),
+            ),
+        ),
+        queue_capacity=1,
+    )
+    router_binding = ChiParticipantBinding(
+        "xp0",
+        duts["xp0"],
+        router,
+        (
+            *(
+                port_binding(
+                    duts["xp0"].port(f"from_{name}"),
+                    router_receive_channels[name],
+                )
+                for name in participant_names
+            ),
+            *(
+                port_binding(
+                    duts["xp0"].port(f"to_{name}"),
+                    router_transmit_channels[name],
+                )
+                for name in participant_names
+            ),
+        ),
     )
 
     resolved = resolve_chi_system(
@@ -443,6 +549,10 @@ def _build_direct_session(case: _DirectCase) -> ChiCoherenceNetworkSession:
             ChiBehaviorFacet.from_binding(
                 home_binding,
                 ChiFacetKind.TRANSACTION,
+            ),
+            ChiBehaviorFacet.from_binding(
+                router_binding,
+                ChiFacetKind.FORWARDING,
             ),
         ),
         feature_contract=ChiFeatureContract(
@@ -532,6 +642,30 @@ def _result(
     run: SemanticRun,
     assertions: Mapping[str, bool],
 ) -> FlowCaseRun:
+    endpoint_count = len(_endpoint_events(run))
+    router_state = run.final_state.network.routers["xp0"]
+    routed_assertions = {
+        **assertions,
+        "one_explicit_xp_forwarder": (
+            tuple(
+                binding.name
+                for binding in session.resolved.forwarding_bindings
+            )
+            == ("xp0",)
+        ),
+        "all_feature_flows_cross_xp_in_two_hops": all(
+            len(route) == 2
+            and session.network.hops[route[0]].receiver.dut == "xp0"
+            and session.network.hops[route[1]].transmitter.dut == "xp0"
+            for route in session.route_by_packet_key.values()
+        ),
+        "xp_forwarded_every_endpoint_packet": (
+            router_state.accepted_count
+            == router_state.forwarded_count
+            == endpoint_count
+            and router_state.depth == 0
+        ),
+    }
     return FlowCaseRun(
         case_id=case_id,
         title=title,
@@ -539,7 +673,7 @@ def _result(
         initial_state=initial,
         final_state=run.final_state,
         verdict=run.verdict,
-        assertions=assertions,
+        assertions=routed_assertions,
         emissions=run.emissions,
         state_history=run.state_history,
         run=run,
@@ -553,8 +687,8 @@ def run_clean_read_unique_fanout() -> FlowCaseRun:
         _Peer("rn1", FIRST_PEER, ChiCacheState.SC, CLEAN_DATA),
         _Peer("rn2", SECOND_PEER, ChiCacheState.SC, CLEAN_DATA),
     )
-    session = _build_direct_session(
-        _DirectCase(
+    session = _build_routed_session(
+        _RoutedCase(
             name="showcase_clean_read_unique_fanout",
             requester_state=ChiCacheState.I,
             requester_data=None,
@@ -656,8 +790,8 @@ def run_dirty_peer_clean_unique() -> FlowCaseRun:
     """CleanUnique absorbs shared-dirty peer data through DAT."""
 
     peer = _Peer("rn1", FIRST_PEER, ChiCacheState.SD, DIRTY_DATA)
-    session = _build_direct_session(
-        _DirectCase(
+    session = _build_routed_session(
+        _RoutedCase(
             name="showcase_dirty_peer_clean_unique",
             requester_state=ChiCacheState.SC,
             requester_data=DIRTY_DATA,
@@ -760,8 +894,8 @@ def run_make_unique_local_intent() -> FlowCaseRun:
     """MakeUnique obtains permission without carrying the local write on DAT."""
 
     peer = _Peer("rn1", FIRST_PEER, ChiCacheState.SD, CLEAN_DATA)
-    session = _build_direct_session(
-        _DirectCase(
+    session = _build_routed_session(
+        _RoutedCase(
             name="showcase_make_unique_local_intent",
             requester_state=ChiCacheState.I,
             requester_data=None,

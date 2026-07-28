@@ -14,38 +14,38 @@ digraph transaction_time_space {
   point_1_0 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_0; point_0_0; point_1_0; }
   time_0 -> point_0_0 -> point_1_0 [style=invis, weight=100];
-  time_1 [shape=plaintext, group="time", label="model_step 8"];
+  time_1 [shape=plaintext, group="time", label="model_step 20"];
   point_0_1 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
-  point_1_1 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 RD1 Bv0", tooltip="clean-evict-retry:state:008:hn0: hn0: D:U7 Bv0 → D:U7 RD1 Bv0"];
+  point_1_1 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 RD1 Bv0", tooltip="clean-evict-retry:state:020:hn0: hn0: D:U7 Bv0 → D:U7 RD1 Bv0"];
   { rank=same; time_1; point_0_1; point_1_1; }
   time_1 -> point_0_1 -> point_1_1 [style=invis, weight=100];
-  time_2 [shape=plaintext, group="time", label="model_step 12"];
+  time_2 [shape=plaintext, group="time", label="model_step 26"];
   point_0_2 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
-  point_1_2 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 PR1 Bv0", tooltip="clean-evict-retry:state:012:hn0: hn0: D:U7 RD1 Bv0 → D:U7 PR1 Bv0"];
+  point_1_2 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 PR1 Bv0", tooltip="clean-evict-retry:state:026:hn0: hn0: D:U7 RD1 Bv0 → D:U7 PR1 Bv0"];
   { rank=same; time_2; point_0_2; point_1_2; }
   time_2 -> point_0_2 -> point_1_2 [style=invis, weight=100];
-  time_3 [shape=plaintext, group="time", label="model_step 16"];
-  point_0_3 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I T31 R31:wait-credit", tooltip="clean-evict-retry:state:016:rn0: rn0: I T31 R31:init → I T31 R31:wait-credit"];
+  time_3 [shape=plaintext, group="time", label="model_step 38"];
+  point_0_3 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I T31 R31:wait-credit", tooltip="clean-evict-retry:state:038:rn0: rn0: I T31 R31:init → I T31 R31:wait-credit"];
   point_1_3 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_3; point_0_3; point_1_3; }
   time_3 -> point_0_3 -> point_1_3 [style=invis, weight=100];
-  time_4 [shape=plaintext, group="time", label="model_step 21"];
+  time_4 [shape=plaintext, group="time", label="model_step 49"];
   point_0_4 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
   point_1_4 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_4; point_0_4; point_1_4; }
   time_4 -> point_0_4 -> point_1_4 [style=invis, weight=100];
-  time_5 [shape=plaintext, group="time", label="model_step 24"];
-  point_0_5 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I T31 R31:retry-flight", tooltip="clean-evict-retry:state:024:rn0: rn0: I T31 R31:wait-credit → I T31 R31:retry-flight"];
+  time_5 [shape=plaintext, group="time", label="model_step 54"];
+  point_0_5 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I T31 R31:retry-flight", tooltip="clean-evict-retry:state:054:rn0: rn0: I T31 R31:wait-credit → I T31 R31:retry-flight"];
   point_1_5 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_5; point_0_5; point_1_5; }
   time_5 -> point_0_5 -> point_1_5 [style=invis, weight=100];
-  time_6 [shape=plaintext, group="time", label="model_step 30"];
+  time_6 [shape=plaintext, group="time", label="model_step 70"];
   point_0_6 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
-  point_1_6 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:I Bv0", tooltip="clean-evict-retry:state:030:hn0: hn0: D:U7 PR1 Bv0 → D:I Bv0"];
+  point_1_6 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:I Bv0", tooltip="clean-evict-retry:state:070:hn0: hn0: D:U7 PR1 Bv0 → D:I Bv0"];
   { rank=same; time_6; point_0_6; point_1_6; }
   time_6 -> point_0_6 -> point_1_6 [style=invis, weight=100];
-  time_7 [shape=plaintext, group="time", label="model_step 36"];
-  point_0_7 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I", tooltip="clean-evict-retry:state:036:rn0: rn0: I T31 R31:retry-flight → I"];
+  time_7 [shape=plaintext, group="time", label="model_step 86"];
+  point_0_7 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I", tooltip="clean-evict-retry:state:086:rn0: rn0: I T31 R31:retry-flight → I"];
   point_1_7 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_7; point_0_7; point_1_7; }
   time_7 -> point_0_7 -> point_1_7 [style=invis, weight=100];

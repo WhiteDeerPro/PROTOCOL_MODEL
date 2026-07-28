@@ -28,7 +28,7 @@ trace、拓扑和诊断证据。
 | 展示 | 主要内容 |
 |---|---|
 | [AXI4 场景集](showcase/generated/axi4/README.zh-CN.md) | 24 个确定性合法/违规场景；每案连接输入、verdict、波形、因果图和机器结果 |
-| [CHI Issue H flow gallery](showcase/generated/chi/issue-h-flow-gallery/README.md) | 5 个实际执行流程；每案连接实际拓扑/交互边界、transaction 时空图、显式因果图与语义事件时间线 |
+| [CHI Issue H flow gallery](showcase/generated/chi/issue-h-flow-gallery/README.md) | 5 个实际执行流程；每案连接 resolved XP topology、transaction 时空图、显式因果图与语义事件时间线 |
 | [CHI 异构 ring + star](showcase/generated/system/chi-issue-h-heterogeneous-ring-star/README.md) | 非均匀环形骨干、星形叶节点与方向化 exact-route witness |
 | [CHI 4×4 mesh](showcase/generated/system/chi-issue-h-four-by-four-mesh/README.md) | 16-router mesh、角到角长路径与 route-table closure witness |
 

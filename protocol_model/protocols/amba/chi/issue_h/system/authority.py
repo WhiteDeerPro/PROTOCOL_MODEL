@@ -317,6 +317,40 @@ class ChiResolvedCoherenceAuthorityPlan:
             member for member in domain.members if member != requester
         )
 
+    def eligible_snoopees_for_requesters(
+        self,
+        claim: str,
+        requesters: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Return the union of peer authority for a finite Requester set.
+
+        A Requester can appear in this union when another Requester can
+        target it.  Directory state still chooses the actual Snoopees for an
+        individual transaction.
+        """
+
+        requester_items = tuple(requesters)
+        if not requester_items:
+            raise ValueError(
+                "eligible Snoopee union requires at least one Requester"
+            )
+        if len(set(requester_items)) != len(requester_items):
+            raise ValueError(
+                "eligible Snoopee union requires distinct Requesters"
+            )
+        return tuple(
+            sorted(
+                {
+                    snoopee
+                    for requester in requester_items
+                    for snoopee in self.eligible_snoopees(
+                        claim,
+                        requester,
+                    )
+                }
+            )
+        )
+
 
 def resolve_chi_coherence_authority(
     system: ElaboratedSystemProtocol,

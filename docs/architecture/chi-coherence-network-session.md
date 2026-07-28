@@ -214,6 +214,11 @@ scheduler 可以尝试其他候选。轮转顺序是确定性 reference policy�
 participant 后续输出。调用方不需要逐包手工选择 Snoop、Comp 或 CompAck，但当前也没有后台线程或
 真实时钟自动产生业务 operation。
 
+场景需要控制合法交错时，可从只读 `scheduler_candidates` 取得在该 resolved session 内稳定的候选名，并提交
+`ChiAdvanceCoherenceNetwork(candidate=...)` 只尝试一个候选；未启用时原子返回 blocked，未知名称拒绝。
+省略 candidate 仍使用上述 round-robin reference policy。这个入口用于选择模型提交顺序，不把候选次数
+解释成周期、链路延迟或 CHI 仲裁要求。
+
 endpoint participant 返回 `BLOCK` 时，候选不 drain 输入 capture，packet 仍位于同一个 endpoint head；
 scheduler 可以推进其他候选，并在后续 `advance()` 中重新尝试该 delivery。因而 Home 同址 reservation
 由首笔事务的 `CompAck` 释放后，等待请求会自动 replay，不要求调用方重新提交或手工重送 packet。
@@ -934,9 +939,11 @@ old RN holds UD and emits WriteBackFull(TxnID=A), but its REQ is delayed
 ```
 
 这条 witness 同时证明 dirty payload 只通过 Snoop response 转移一次、迟到 WriteBack 不会 stale-commit，
-并拒绝以同一 DBID 伪造 `CopyBackWrData_UD_PD`。它使用 direct `ChiCoherenceSession` 中两个 requester；
-当前 resolved construction 仍只派生一个 requester authority，因此不能据此声称一般多 Requester
-topology 已闭合。
+并拒绝以同一 DBID 伪造 `CopyBackWrData_UD_PD`。原 direct `ChiCoherenceSession` 见证仍保留；新增 resolved
+XP witness 把 CleanUnique 与 dirty WriteBack 的 requester role 绑定为有限集合，按各 requester 的
+eligible-peer 并集闭合 Snoopee authority 和双向 route。场景用公开具名 scheduler candidate 暂停 WBF REQ
+的 XP capture，CleanUnique 退休后再释放；这只是顺序选择，不是周期或网络时延。该窄组合不能外推为异构
+per-feature requester scope 或一般多 Requester topology。
 
 当前 cache-line 数据不分片，因此所有参与 coherence lifecycle 的 DAT route 都在打开 session 时检查为
 512-bit。128/256-bit DAT connection 需要先提供 splitter/reassembler 和 fragment correlation，不能只因
@@ -982,7 +989,7 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 | CHI lifecycle/profile 覆盖 | deliberate dirty invalidate；`WriteEvictFull(CAH=1)` 的 `UC→SC`/非失效 Snoop 及 Retry/error 组合；`WriteEvictOrEvict` post-response/其他 Snoop phase、Retry/error、CAH=1 与容量驱动 outcome；MakeUnique Retry、DERR/NDERR、MTE Update、partial write；CMO/DVM；dirty-writeback 与 Retry/error/Snoop 的其他 phase 组合；一般 transient、Retry cancel 与到达次序。WEF(CAH=1) response 前 invalidating-Snoop→`I` 已闭合，post-response/pre-terminal 同址 Snoop 是负向 ordering 边界 | 限制可执行 operation/modifier 组合，是继续补 CHI 功能时的直接候选 |
 | representation / packetization | opcode/conditional-field encoding inventory 与 raw packed-bit codec；message→multi-packet DAT、multi-flit response 与 narrow completion | 分片字段与 codec 属于表示；split/reassembly、缺失/重复/乱序检查和 terminal retirement 属于 transaction/session 聚合。可执行 opcode 还需要 lifecycle、capability/flow、状态效应与 witness；这些增量不否定当前 full-line single-packet traffic |
 | participant / VirtualDut policy | 自动 victim/LRU、replacement/writeback scheduling、容量策略、stateful snoop filter | snoop filter 是 Home/ICN 维护的 cache-presence/选靶结构；当前 exact directory holder set 是 reference oracle。容量型 filter 的假阳性只增加 Snoop，若据其抑制 Snoop，假阴性会破坏一致性 |
-| system authority/construction | 一般多 Requester topology；dynamic multi-Home、SAM remap、按地址动态 Home 与多 scope domain；一个 port 的多 NodeID runtime；独立 Memory/SN participant 与 topology-visible HN→SN downstream commit | SAM 是 System Address Map；address→Home/SAM/domain 属于 SystemProtocol authority。HN→SN 是独立下游 participant/flow slice，不是 reference-backing RN↔Home closure 的缺口 |
+| system authority/construction | 异构 per-feature requester scope 与一般多 Requester topology；dynamic multi-Home、SAM remap、按地址动态 Home 与多 scope domain；一个 port 的多 NodeID runtime；独立 Memory/SN participant 与 topology-visible HN→SN downstream commit | CleanUnique 系列与 dirty WriteBack 的 requester requirement 分别支持同构有限集合；当前 XP witness 同时启用二者。SAM 是 System Address Map；address→Home/SAM/domain 属于 SystemProtocol authority。HN→SN 是独立下游 participant/flow slice，不是 reference-backing RN↔Home closure 的缺口 |
 | network forwarding/runtime | router multicast/topology-wide broadcast、独立 fanout branch admission/storage、virtual channel、adaptive route、mesh/ring route-table generation | 是可选 network mechanism/profile；当前按显式 per-target packet copy 与 resolved route 的网络仍可执行 |
 | coherence-state/policy 扩展 | 可生成/维持的 `SD`/Owned、dirty `SnpShared`、owner handoff 与 shared-dirty replacement | 属于 MOESI-like 状态扩展；当前 no-SD MESI slice 可独立成立 |
 | forwarding/DCT lifecycle | forwarding Snoop、peer→requester DAT 与 Home correlation | 属于可选 CHI transaction/capability 和性能路径，不要求 `SD`/Owned |
@@ -1027,13 +1034,14 @@ no-data case 运输 REQ/RSP/RSP，每种恰好三个 packet、零 SNP，并检�
 removal、clean-residency effect 与 backing invariance。direct participant session
 另有双 Requester CleanUnique 串行见证：第一笔
 CleanUnique 失效第二个 requester 的 pending line，第二笔随后经 `Comp_UC` 获得 `UCE`，再以 full-line write
-进入 `UD`；另两条 direct 双 Requester witness 分别组合 `CleanUnique + delayed WriteBack` 和
+进入 `UD`；另两条双 Requester witness 分别组合 `CleanUnique + delayed WriteBack` 和
 `CleanUnique + delayed WriteEvictFull`，验证
 `LIVE_UD→CANCELED_I→CopyBackWrData_I`、system-derived stale-owner evidence 与 Home
 snapshot/version guard，以及 clean cancel 不覆盖新 owner/backing/residency。WEOE 再以一条
 `UC/SC × data/no-data` direct 双 Requester 矩阵验证 delayed request 经
-`CopyBackWrData_I`/`CompAck_I` 安全退休、篡改 terminal 被原子拒绝。它们不经过 resolved
-construction，因而不证明一般多 Requester topology。
+`CopyBackWrData_I`/`CompAck_I` 安全退休、篡改 terminal 被原子拒绝。其中 delayed WriteBack 已另有
+resolved XP witness；WriteEvictFull/WEOE 组合仍是 direct construction。它们都不证明一般多 Requester
+topology。
 前者不是通用 `MeshBuilder`，这些 witness 也尚未替代全部测试夹具。
 下列内容仍需要保留在定向测试中：
 

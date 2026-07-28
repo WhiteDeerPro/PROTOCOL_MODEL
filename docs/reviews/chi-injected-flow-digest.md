@@ -75,7 +75,7 @@ executable lifecycle 仍查 canonical status。
 ## 可执行投影
 
 [CHI Issue H flow gallery](../../showcase/generated/chi/issue-h-flow-gallery/README.md) 从 5 个实际执行场景生成
-各案的 resolved topology/participant boundary、transaction 时空图、显式因果图和以语义事件为基准的
+各案的 resolved XP topology、transaction 时空图、显式因果图和以语义事件为基准的
 timeline；场景源码及重建入口见
 [`showcase/demos/chi/issue_h_flow_gallery/`](../../showcase/demos/chi/issue_h_flow_gallery/README.md)。
 首批场景选择 clean `ReadUnique`、dirty-peer `CleanUnique`、`MakeUnique`、clean `Evict` Retry，以及

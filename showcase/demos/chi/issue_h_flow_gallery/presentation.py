@@ -19,9 +19,8 @@ def guide(
         "每个具名案例分别执行一次模型；该案例的四种互相链接"
         "视图均由这次案例执行投影：",
         "",
-        "1. **topology / participant boundary**：前四案画 resolved "
-        "SystemProtocol 的真实连接，WriteBackFull 案只画实际 packet "
-        "交互边界；",
+        "1. **resolved topology**：五案都画 `SystemProtocol` 的真实"
+        " participant→XP→participant 连接；",
         "2. **transaction time-space**：参与者、已接收消息和"
         "可见状态变化；",
         "3. **explicit causality**：只画模型产出、correlation、fan-out/join、"
@@ -66,7 +65,7 @@ def guide(
             (
                 f"### {case.title}",
                 "",
-                f"![{case.title} topology or participant boundary]"
+                f"![{case.title} resolved topology]"
                 f"(cases/{case.case_id}/topology.svg)",
                 "",
                 f"![{case.title} transaction time-space]"
@@ -92,18 +91,16 @@ def guide(
             "也不由示例数量推断规范覆盖率；",
             "- `model_step` 是离散语义提交顺序。图中没有 packed "
             "pin/phit、物理时延、CDC 或 RTL sampling；",
-            "- 当前四个 resolved flow 都是 direct topology，没有构造 "
-            "XP/router。若案例实际提供 forwarding binding，拓扑会将其显示为 "
-            "`routing forwarder (XP abstraction)`；",
+            "- 五个 flow 都构造并执行一个 forwarding VirtualDut；拓扑将其显示为 "
+            "`routing forwarder (XP abstraction)`，每个 endpoint packet 的"
+            " route 和最终 router 计数均可检查；",
             "- 时空图过滤逐 hop transport `MOVE`；原 `model_step` 标签的"
             "间隔只保留模型提交次序线索，不是 XP 周期延迟；",
-            "- WriteBackFull 案的包交付顺序与延后交付由 scenario "
-            "显式编排；它没有建模网络时延或 transport hop。包和状态转移"
-            "仍来自生产 participant runtime；",
-            "- 其余四案通过 resolved direct topology 与 "
-            "coherence-network scheduler；",
-            "- 因而最后一案的虚线图只证明 participant 间实际 packet "
-            "交互，不把它提升为已构造、已执行的 transport hop。",
+            "- WriteBackFull 案用公开 scheduler candidate 暂停一个已进入"
+            " RN→XP link 的 WBF REQ capture，让 CleanUnique 先经其它 channel "
+            "闭合，再释放 WBF；这是 scenario ordering，不是网络时延；",
+            "- 其余四案使用默认 round-robin coherence-network scheduler。"
+            "五案的 packet 和状态转移都来自生产 participant/network runtime；",
             "",
             "机器结果见 [result.json](result.json)，生成边界见"
             " [provenance.json](provenance.json)，全部资产清单见"

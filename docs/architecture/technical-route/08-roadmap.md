@@ -74,10 +74,11 @@ Request-Retry/P-Credit 合同和原有 ReadUnique lifecycle。Retry 阶段不建
 credit 与重发。一次 Retry 后成功是独立基线；下文另记录已闭合的 Retry/Snoop/pre-Snoop-NDERR 窄组合。
 cancel 与多 waiter fairness 仍未实现。
 第一条 construction authority
-切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home，并从
-coherence-domain membership 派生 `eligible Snoopees = members - requester`；NodeID、逐成员 capability
-与 REQ/SNP/RSP/DAT flow 随后使用同一派生结果闭合。Home directory 仍只选择一笔事务的实际 holder，
-不取代静态 domain authority。
+切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home。scalar requester
+从 coherence-domain membership 派生 `eligible Snoopees = members - requester`；CleanUnique 与 dirty
+WriteBack 的有限 requester set 则取各 requester eligible-peer 的并集。NodeID、逐成员 capability 与
+REQ/SNP/RSP/DAT flow 随后使用同一派生结果闭合。Home directory 仍只选择一笔事务的实际 holder，不取代
+静态 domain authority。
 
 第一条 coherent error 切片也已闭合：Home 在 admission 后、Snoop 前由显式 policy 选择
 `ReadUnique→CompData_I(NDERR)→CompAck`，不发 SNP；Requester 保持原 `I`/`SC` 与 payload，Home 保持
@@ -95,7 +96,8 @@ held/wait/release evidence，不把一次资源释放夸大成 packet 已接纳�
 correlation。后续无数据 `Comp_UC` 在 full-line payload 仍在时形成 `UC`，payload 已不存在时形成
 `UCE`；`UCE` 表示“拥有 unique authority、尚无有效 payload”，不能保存 cache-line data，第一次 full-line
 local write 原子安装 payload 并进入 `UD`。direct `ChiCoherenceSession` 的双 Requester witness 已证明两笔
-`CleanUnique` 可由 Home reservation 串行完成；这不等于 resolved construction 已支持一般多 Requester。
+`CleanUnique` 可由 Home reservation 串行完成；同构 CleanUnique requester set 也已能闭合 resolved route，
+但这不等于异构 per-feature requester scope 或一般多 Requester construction。
 
 第三条 same-line progress 切片现已闭合 `WriteBackFull` 的 Snoop cancel：RN pending 显式区分
 `LIVE_UD` 与 `CANCELED_I`；前者收到同址 `SnpUnique`/`SnpCleanInvalid` 后把 dirty payload 通过
@@ -107,7 +109,8 @@ non-owner REQ 自行推断。Home 接纳时冻结当前 directory snapshot 与 b
 `CopyBackWrData_I` 时确认二者未变，只释放 DBID，不覆盖新 backing/owner。direct 双 Requester witness 已
 闭合 `CleanUnique + delayed WriteBack`。normal 与 canceled outcome 现共用两阶段 exact packet evidence：
 Home-produced `CompDBIDResp` 与 RN-produced `CopyBackWrData` 分别只允许成功消费一次，伪造或 replay
-不推进 participant state；一般多 Requester resolved construction 仍未闭合。
+不推进 participant state。同时启用 CleanUnique 与 dirty WriteBack 的双 Requester resolved XP witness 已闭合这一窄组合；
+异构 per-feature requester scope 和一般多 Requester construction 仍未闭合。
 
 第一条 Retry/Snoop/error 窄组合也已闭合。被 `RetryAck` 拒绝的初始 `ReadUnique` 不会产生 Snoop；
 Requester 在 `WAIT_RETRY_CREDIT` 期间可以响应另一笔同址 transaction 引发的 `SnpUnique`，由
@@ -273,7 +276,8 @@ witness 保持原语义，并让 WEF(CAH=1) 的 DAT/ack 双终态不再增加一
 scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 resolver 核对；同一 runtime 按地址动态
 切换多个 Home、由 SAM（System Address Map）route 派生 system-visible window、remap 和跨 domain 执行属于后续
 SystemProtocol authority/construction，不是当前单 Home network 的 opcode 缺口。
-read/retry/coherence profile 另固定单 Requester、受限 opcode 与 full-line DAT；
+read/retry 及其余 coherence feature profile 仍固定单 Requester；CleanUnique 与 dirty WriteBack 可在同一
+scope 绑定同构有限 requester set。所有 profile 仍只覆盖受限 opcode 与 full-line DAT；
 AddressTarget 路径固定对齐，只闭合成功与 decode/access→NDERR completion；coherent path 另闭合
 pre-snoop `ReadUnique` NDERR 及其与 Retry/独立同址 Snoop 的窄组合。两者都未覆盖 DERR、
 post-snoop failure、sideband lowering 或

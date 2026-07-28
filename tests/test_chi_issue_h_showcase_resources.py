@@ -77,7 +77,7 @@ class ChiIssueHShowcaseResourceTest(unittest.TestCase):
         )
 
     def test_each_case_has_linked_flow_views_and_topology_evidence(self) -> None:
-        for index, case in enumerate(self.cases.values()):
+        for case in self.cases.values():
             with self.subTest(case=case.case_id):
                 time_space = transaction_time_space_dot(case.view)
                 causality = transaction_causal_dot(case.view)
@@ -91,28 +91,27 @@ class ChiIssueHShowcaseResourceTest(unittest.TestCase):
                 self.assertIn("SEMANTIC EVENTS ONLY", timeline["foot"]["text"])
                 self.assertIn("NOT PINS/CYCLES/RTL", timeline["foot"]["text"])
                 self.assertIn("explicit causality", causality)
-                if index < 4:
-                    self.assertIn(
-                        "resolved SystemProtocol topology",
-                        topology,
-                    )
-                    self.assertIn(
-                        "solid arrows come from resolved construction",
-                        topology,
-                    )
-                    self.assertIn(
-                        "no XP-like forwarder constructed",
-                        topology,
-                    )
-                else:
-                    self.assertIn(
-                        "participant interaction boundary",
-                        topology,
-                    )
-                    self.assertIn(
-                        "no transport connections or hop execution claimed",
-                        topology,
-                    )
+                self.assertIn(
+                    "resolved SystemProtocol topology",
+                    topology,
+                )
+                self.assertIn(
+                    "solid arrows come from resolved construction",
+                    topology,
+                )
+                self.assertIn(
+                    "1 XP-like forwarding abstraction is shown explicitly",
+                    topology,
+                )
+                self.assertIn(
+                    "routing forwarder (XP abstraction)",
+                    topology,
+                )
+                self.assertTrue(
+                    case.execution.assertions[
+                        "one_explicit_xp_forwarder"
+                    ]
+                )
 
 
 if __name__ == "__main__":

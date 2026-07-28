@@ -16,33 +16,33 @@ digraph transaction_time_space {
   point_2_0 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_0; point_0_0; point_1_0; point_2_0; }
   time_0 -> point_0_0 -> point_1_0 -> point_2_0 [style=invis, weight=100];
-  time_1 [shape=plaintext, group="time", label="model_step 14"];
+  time_1 [shape=plaintext, group="time", label="model_step 28"];
   point_0_1 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
-  point_1_1 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:S7,8/SD8 P1 Bv0", tooltip="dirty-peer-clean-unique:state:014:hn0: hn0: D:S7,8/SD8 Bv0 → D:S7,8/SD8 P1 Bv0"];
+  point_1_1 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:S7,8/SD8 P1 Bv0", tooltip="dirty-peer-clean-unique:state:028:hn0: hn0: D:S7,8/SD8 Bv0 → D:S7,8/SD8 P1 Bv0"];
   point_2_1 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_1; point_0_1; point_1_1; point_2_1; }
   time_1 -> point_0_1 -> point_1_1 -> point_2_1 [style=invis, weight=100];
-  time_2 [shape=plaintext, group="time", label="model_step 24"];
+  time_2 [shape=plaintext, group="time", label="model_step 50"];
   point_0_2 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
   point_1_2 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
-  point_2_2 [shape=point, width=0.10, height=0.10, group="lifeline_2", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I", tooltip="dirty-peer-clean-unique:state:024:rn1: rn1: SD → I"];
+  point_2_2 [shape=point, width=0.10, height=0.10, group="lifeline_2", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I", tooltip="dirty-peer-clean-unique:state:050:rn1: rn1: SD → I"];
   { rank=same; time_2; point_0_2; point_1_2; point_2_2; }
   time_2 -> point_0_2 -> point_1_2 -> point_2_2 [style=invis, weight=100];
-  time_3 [shape=plaintext, group="time", label="model_step 34"];
+  time_3 [shape=plaintext, group="time", label="model_step 72"];
   point_0_3 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
   point_1_3 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
   point_2_3 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_3; point_0_3; point_1_3; point_2_3; }
   time_3 -> point_0_3 -> point_1_3 -> point_2_3 [style=invis, weight=100];
-  time_4 [shape=plaintext, group="time", label="model_step 44"];
-  point_0_4 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="UC", tooltip="dirty-peer-clean-unique:state:044:rn0: rn0: SC T31 → UC"];
+  time_4 [shape=plaintext, group="time", label="model_step 94"];
+  point_0_4 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="UC", tooltip="dirty-peer-clean-unique:state:094:rn0: rn0: SC T31 → UC"];
   point_1_4 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
   point_2_4 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_4; point_0_4; point_1_4; point_2_4; }
   time_4 -> point_0_4 -> point_1_4 -> point_2_4 [style=invis, weight=100];
-  time_5 [shape=plaintext, group="time", label="model_step 54"];
+  time_5 [shape=plaintext, group="time", label="model_step 116"];
   point_0_5 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
-  point_1_5 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 Bv1", tooltip="dirty-peer-clean-unique:state:054:hn0: hn0: D:S7,8/SD8 P1 Bv0 → D:U7 Bv1"];
+  point_1_5 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 Bv1", tooltip="dirty-peer-clean-unique:state:116:hn0: hn0: D:S7,8/SD8 P1 Bv0 → D:U7 Bv1"];
   point_2_5 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
   { rank=same; time_5; point_0_5; point_1_5; point_2_5; }
   time_5 -> point_0_5 -> point_1_5 -> point_2_5 [style=invis, weight=100];

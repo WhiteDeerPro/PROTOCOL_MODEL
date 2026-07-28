@@ -11,15 +11,10 @@ from showcase.demos.chi.issue_h_flow_gallery.coherence_cases import (
     run_coherence_cases,
 )
 from showcase.demos.chi.issue_h_flow_gallery.progress_cases import (
-    CONTENDER_NODE_ID,
-    HOME_NODE_ID,
     LINE_ADDRESS,
-    REQUESTER_NODE_ID,
     run_progress_cases,
 )
 from protocol_model.protocols.amba.chi.issue_h.observation import (
-    ChiFlowParticipant,
-    ChiOperationObservationStep,
     chi_network_flow_participants,
     chi_network_observation_steps,
     project_chi_transaction_flow,
@@ -51,34 +46,34 @@ _CASE_NARRATIVE = MappingProxyType(
         "clean-read-unique-fanout": (
             "Fan one ReadUnique out to two clean peers, join both Snoop "
             "responses, then commit Unique authority.",
-            "Clean MESI authority transfer over a resolved direct topology; "
-            "no dirty-owner forwarding or performance claim.",
+            "Clean MESI authority transfer over one resolved XP star; no "
+            "dirty-owner forwarding or performance claim.",
         ),
         "dirty-peer-clean-unique": (
             "Return shared-dirty peer data on DAT, update Home backing once, "
             "and complete CleanUnique with Comp/CompAck.",
-            "Restricted shared-dirty CleanUnique path; not general Owned/SD "
-            "or DCT behavior.",
+            "Restricted shared-dirty CleanUnique path through one resolved "
+            "XP; not general Owned/SD or DCT behavior.",
         ),
         "make-unique-local-intent": (
             "Obtain Unique permission with a dataless network lifecycle and "
             "install the requester's local full-line write intent.",
-            "MakeUnique plus one modeled local store intent; not partial "
-            "write or arbitrary cache-pipeline behavior.",
+            "MakeUnique through one resolved XP plus a modeled local store "
+            "intent; not partial write or arbitrary cache-pipeline behavior.",
         ),
         "clean-evict-retry": (
             "Observe RetryAck, Home P-Credit debt/grant, credited reissue, "
             "and the terminal clean Evict completion.",
-            "One deterministic successful retry cycle; not general "
-            "Retry/error composition, fairness, or liveness proof.",
+            "One deterministic successful retry cycle through a resolved XP; "
+            "not general Retry/error composition, fairness, or liveness proof.",
         ),
         "writeback-snoop-cancel": (
             "Delay an emitted dirty WriteBackFull while a same-line "
             "invalidating Snoop transfers ownership, then close the late "
             "request with zero-byte cancellation data.",
-            "Scenario-controlled participant interleaving. Every packet and "
-            "state transition is model-produced, but transport hop timing is "
-            "not simulated for this case.",
+            "Scenario-selected moves over one resolved XP hold the WBF REQ "
+            "before router capture. This controls ordering, not transport "
+            "latency or cycles.",
         ),
     }
 )
@@ -97,50 +92,6 @@ def _network_view(case, *, address: int) -> TransactionTimeSpaceView:
     )
 
 
-def _writeback_view(case) -> TransactionTimeSpaceView:
-    participants = (
-        ChiFlowParticipant(
-            REQUESTER_NODE_ID,
-            "rn0",
-            "RN0 · old dirty owner",
-            "requester",
-            {"NodeID": f"0x{REQUESTER_NODE_ID:x}"},
-        ),
-        ChiFlowParticipant(
-            HOME_NODE_ID,
-            "hn0",
-            "HN0 · Home",
-            "home",
-            {"NodeID": f"0x{HOME_NODE_ID:x}"},
-        ),
-        ChiFlowParticipant(
-            CONTENDER_NODE_ID,
-            "rn1",
-            "RN1 · CleanUnique requester",
-            "requester",
-            {"NodeID": f"0x{CONTENDER_NODE_ID:x}"},
-        ),
-    )
-    steps = tuple(
-        ChiOperationObservationStep(
-            model_step=index,
-            label=step.label,
-            before=step.before_state,
-            after=step.after_state,
-            accepted_packet=step.accepted_packet,
-            produced=step.produced,
-        )
-        for index, step in enumerate(case.observation_steps)
-    )
-    return project_chi_transaction_flow(
-        name=case.title,
-        operation_prefix=case.case_id,
-        address=LINE_ADDRESS,
-        participants=participants,
-        steps=steps,
-    )
-
-
 def execute_flow_gallery() -> Mapping[str, FlowGalleryCase]:
     """Run all selected cases and build their typed visualization views."""
 
@@ -155,17 +106,14 @@ def execute_flow_gallery() -> Mapping[str, FlowGalleryCase]:
         learning_goal, model_boundary = _CASE_NARRATIVE[
             execution.case_id
         ]
-        view = (
-            _writeback_view(execution)
-            if execution.case_id == "writeback-snoop-cancel"
-            else _network_view(
-                execution,
-                address=(
-                    LINE_ADDRESS
-                    if execution.case_id == "clean-evict-retry"
-                    else ADDRESS
-                ),
-            )
+        view = _network_view(
+            execution,
+            address=(
+                LINE_ADDRESS
+                if execution.case_id
+                in ("clean-evict-retry", "writeback-snoop-cancel")
+                else ADDRESS
+            ),
         )
         cases.append(
             FlowGalleryCase(

@@ -25,46 +25,15 @@ from showcase.demos.chi.issue_h_flow_gallery.progress_cases import (
     CONTENDER_NODE_ID,
     HOME_NODE_ID,
     LINE_ADDRESS,
-    REQUESTER_NODE_ID,
     run_clean_evict_retry,
     run_writeback_snoop_cancellation,
 )
 
 
-def _participant_steps(case) -> tuple[ChiOperationObservationStep, ...]:
-    return tuple(
-        ChiOperationObservationStep(
-            model_step=index,
-            label=step.label,
-            before=step.before_state,
-            after=step.after_state,
-            accepted_packet=step.accepted_packet,
-            produced=step.produced,
-        )
-        for index, step in enumerate(case.observation_steps)
-    )
-
-
-def _writeback_participants() -> tuple[ChiFlowParticipant, ...]:
-    return (
-        ChiFlowParticipant(
-            REQUESTER_NODE_ID,
-            "rn0",
-            "RN0 · old dirty owner",
-            "requester",
-        ),
-        ChiFlowParticipant(
-            HOME_NODE_ID,
-            "hn0",
-            "HN0 · Home",
-            "home",
-        ),
-        ChiFlowParticipant(
-            CONTENDER_NODE_ID,
-            "rn1",
-            "RN1 · contender",
-            "requester",
-        ),
+def _writeback_steps(case) -> tuple[ChiOperationObservationStep, ...]:
+    return chi_network_observation_steps(
+        case.emissions,
+        case.state_history,
     )
 
 
@@ -147,7 +116,7 @@ class ChiIssueHFlowObservationTest(unittest.TestCase):
         self,
     ) -> None:
         case = run_writeback_snoop_cancellation()
-        steps = list(_participant_steps(case))
+        steps = list(_writeback_steps(case))
         producer_index, response = next(
             (index, packet)
             for index, step in enumerate(steps)
@@ -179,7 +148,7 @@ class ChiIssueHFlowObservationTest(unittest.TestCase):
             name="different requester DBID response",
             operation_prefix="unrelated-dbid",
             address=LINE_ADDRESS,
-            participants=_writeback_participants(),
+            participants=chi_network_flow_participants(case.session),
             steps=steps,
         )
 
@@ -195,7 +164,7 @@ class ChiIssueHFlowObservationTest(unittest.TestCase):
         self,
     ) -> None:
         case = run_writeback_snoop_cancellation()
-        steps = list(_participant_steps(case))
+        steps = list(_writeback_steps(case))
         request = next(
             packet
             for step in steps
@@ -249,7 +218,7 @@ class ChiIssueHFlowObservationTest(unittest.TestCase):
             name="later copyback generation",
             operation_prefix="copyback-generation",
             address=LINE_ADDRESS,
-            participants=_writeback_participants(),
+            participants=chi_network_flow_participants(case.session),
             steps=steps,
         )
 

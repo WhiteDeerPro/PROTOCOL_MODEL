@@ -1,9 +1,9 @@
 """Compact topology projections for the CHI Issue H flow gallery.
 
 Resolved-network cases are projected from their elaborated
-``SystemProtocol`` connections.  The participant-runtime writeback case has
-no transport construction, so its dashed edges summarize only model-emitted
-packet interactions at the participant boundary.
+``SystemProtocol`` connections.  A participant-runtime fallback remains for
+other callers that deliberately have no transport construction; its dashed
+edges summarize only model-emitted packet interactions at that boundary.
 """
 
 from __future__ import annotations

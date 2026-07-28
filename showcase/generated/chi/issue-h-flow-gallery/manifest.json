@@ -2,7 +2,7 @@
   "schema": "protocol-model.run/v4",
   "subject": "issue-h-flow-gallery",
   "run_id": "issue-h-flow-gallery",
-  "generated_at": "2026-07-28T19:38:52.227499+00:00",
+  "generated_at": "2026-07-28T20:27:55.054876+00:00",
   "tool_version": "0.4.0",
   "verdict": "PASS",
   "protocols": [
@@ -18,10 +18,10 @@
     {
       "scope": "system",
       "identity": "chi.issue_h.coherence_and_progress_witnesses",
-      "definition": "resolved participant authority plus one explicit scenario-controlled interference ordering",
+      "definition": "resolved participant authority and XP routes, including one selected-move interference ordering",
       "parameters": {
-        "resolved_network_cases": 4,
-        "participant_interleaving_cases": 1
+        "resolved_network_cases": 5,
+        "selected_scheduler_cases": 1
       }
     }
   ],
@@ -118,7 +118,10 @@
         "one_comp_data_and_ack_completed": true,
         "requester_became_unique_clean": true,
         "clean_peers_were_invalidated": true,
-        "directory_committed_unique_owner": true
+        "directory_committed_unique_owner": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "xp_forwarded_every_endpoint_packet": true
       },
       "messages": 7,
       "state_changes": 6,
@@ -136,7 +139,10 @@
         "home_absorbed_dirty_data": true,
         "requester_became_unique_clean": true,
         "dirty_peer_was_invalidated": true,
-        "directory_committed_unique_owner": true
+        "directory_committed_unique_owner": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "xp_forwarded_every_endpoint_packet": true
       },
       "messages": 5,
       "state_changes": 5,
@@ -154,7 +160,10 @@
         "local_full_line_intent_installed_dirty_unique": true,
         "dirty_peer_was_invalidated_without_dat": true,
         "backing_copy_was_not_rewritten": true,
-        "directory_committed_unique_owner": true
+        "directory_committed_unique_owner": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "xp_forwarded_every_endpoint_packet": true
       },
       "messages": 5,
       "state_changes": 5,
@@ -166,6 +175,9 @@
     "clean-evict-retry": {
       "assertions": {
         "resolved_topology_closed": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "xp_forwarded_all_five_packets": true,
         "scheduler_passed": true,
         "scheduler_not_blocked": true,
         "session_quiescent": true,
@@ -187,6 +199,15 @@
     },
     "writeback-snoop-cancel": {
       "assertions": {
+        "resolved_topology_closed": true,
+        "multi_requester_authority_closed": true,
+        "one_explicit_xp_forwarder": true,
+        "all_feature_flows_cross_xp_in_two_hops": true,
+        "selected_scheduler_completed": true,
+        "exact_eight_packet_endpoint_flow": true,
+        "writeback_req_held_until_clean_unique_retired": true,
+        "every_endpoint_packet_crossed_xp": true,
+        "xp_forwarded_all_eight_packets": true,
         "old_owner_invalidated": true,
         "pending_writeback_marked_canceled": true,
         "snoop_carries_dirty_payload": true,
@@ -242,7 +263,7 @@
       "source": false
     },
     {
-      "kind": "resolved_topology_or_participant_boundary",
+      "kind": "resolved_topology",
       "path": "cases/clean-evict-retry/topology.svg",
       "media_type": "image/svg+xml",
       "case": "clean-evict-retry",
@@ -270,7 +291,7 @@
       "source": false
     },
     {
-      "kind": "resolved_topology_or_participant_boundary",
+      "kind": "resolved_topology",
       "path": "cases/clean-read-unique-fanout/topology.svg",
       "media_type": "image/svg+xml",
       "case": "clean-read-unique-fanout",
@@ -298,7 +319,7 @@
       "source": false
     },
     {
-      "kind": "resolved_topology_or_participant_boundary",
+      "kind": "resolved_topology",
       "path": "cases/dirty-peer-clean-unique/topology.svg",
       "media_type": "image/svg+xml",
       "case": "dirty-peer-clean-unique",
@@ -326,7 +347,7 @@
       "source": false
     },
     {
-      "kind": "resolved_topology_or_participant_boundary",
+      "kind": "resolved_topology",
       "path": "cases/make-unique-local-intent/topology.svg",
       "media_type": "image/svg+xml",
       "case": "make-unique-local-intent",
@@ -354,7 +375,7 @@
       "source": false
     },
     {
-      "kind": "resolved_topology_or_participant_boundary",
+      "kind": "resolved_topology",
       "path": "cases/writeback-snoop-cancel/topology.svg",
       "media_type": "image/svg+xml",
       "case": "writeback-snoop-cancel",
@@ -396,7 +417,7 @@
       "source": true
     },
     {
-      "kind": "resolved_topology_or_participant_boundary_source",
+      "kind": "resolved_topology_source",
       "path": "sources/cases/clean-evict-retry/topology.dot",
       "media_type": "text/vnd.graphviz",
       "case": "clean-evict-retry",
@@ -431,7 +452,7 @@
       "source": true
     },
     {
-      "kind": "resolved_topology_or_participant_boundary_source",
+      "kind": "resolved_topology_source",
       "path": "sources/cases/clean-read-unique-fanout/topology.dot",
       "media_type": "text/vnd.graphviz",
       "case": "clean-read-unique-fanout",
@@ -466,7 +487,7 @@
       "source": true
     },
     {
-      "kind": "resolved_topology_or_participant_boundary_source",
+      "kind": "resolved_topology_source",
       "path": "sources/cases/dirty-peer-clean-unique/topology.dot",
       "media_type": "text/vnd.graphviz",
       "case": "dirty-peer-clean-unique",
@@ -501,7 +522,7 @@
       "source": true
     },
     {
-      "kind": "resolved_topology_or_participant_boundary_source",
+      "kind": "resolved_topology_source",
       "path": "sources/cases/make-unique-local-intent/topology.dot",
       "media_type": "text/vnd.graphviz",
       "case": "make-unique-local-intent",
@@ -536,7 +557,7 @@
       "source": true
     },
     {
-      "kind": "resolved_topology_or_participant_boundary_source",
+      "kind": "resolved_topology_source",
       "path": "sources/cases/writeback-snoop-cancel/topology.dot",
       "media_type": "text/vnd.graphviz",
       "case": "writeback-snoop-cancel",

@@ -12,24 +12,25 @@
     "writeback-snoop-cancel"
   ],
   "execution": {
-    "resolved_network_scheduler": [
+    "resolved_network_round_robin": [
       "clean-read-unique-fanout",
       "dirty-peer-clean-unique",
       "make-unique-local-intent",
       "clean-evict-retry"
     ],
-    "scenario_controlled_participant_runtime": [
+    "resolved_network_selected_moves": [
       "writeback-snoop-cancel"
     ]
   },
   "views": {
-    "topology": "resolved SystemProtocol connections for four network cases; emitted-packet participant boundary for the scenario-controlled WriteBackFull case",
+    "topology": "resolved SystemProtocol participant-XP connections for all five cases",
     "transaction-time-space": "accepted CHI messages and selected participant/Home state transitions",
     "causal": "explicit packet production, correlation, Snoop join, Retry/P-Credit, and same-line cancellation edges",
     "semantic-event-timeline": "WaveJSON rendering of the same model_step event refs; not pins, cycles, or RTL timing"
   },
   "source_ir": "typed TransactionTimeSpaceView JSON plus topology/flow/causal DOT and WaveJSON",
-  "xp_visibility": "the four resolved flow cases construct direct participant topologies and therefore show no XP; real forwarding bindings would appear as XP-like routing abstractions, while per-hop MOVE events remain outside the semantic time-space projection",
+  "xp_visibility": "all five cases construct and execute one store-forward XP abstraction; endpoint routes contain two transport legs and forwarding counters retire every packet, while per-hop MOVE events remain outside the semantic time-space projection",
+  "selected_ordering": "the WriteBackFull case holds only its RN0-to-XP REQ router-capture candidate until CleanUnique retires; this is model ordering control, not a latency or cycle claim",
   "reference_boundary": "docs/reviews/chi-injected-flow-digest.md guided case selection; raw injected images are not publication inputs",
   "model_boundary": "selected executable Issue H lifecycle witnesses, not a complete opcode catalog, specification coverage claim, packed pin/phit model, CDC analysis, or deadlock proof"
 }

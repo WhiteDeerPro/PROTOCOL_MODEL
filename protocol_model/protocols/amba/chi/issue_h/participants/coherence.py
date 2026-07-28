@@ -71,6 +71,7 @@ from ..representation.snp import (
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
 )
+from .progress import chi_line_resource_name
 
 
 _CACHE_LINE_BYTES = 64
@@ -734,7 +735,7 @@ class ChiCoherentRnNode(
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
-                    f"{self.name}.line[{request.address:#x}]",
+                    chi_line_resource_name(self.name, request.address),
                     ConstraintScope.VIRTUAL_DUT,
                     available=0,
                     capacity=1,
@@ -860,7 +861,7 @@ class ChiCoherentRnNode(
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
-                    f"{self.name}.line[{request.address:#x}]",
+                    chi_line_resource_name(self.name, request.address),
                     ConstraintScope.VIRTUAL_DUT,
                     available=0,
                     capacity=1,
@@ -1079,18 +1080,28 @@ class ChiCoherentRnNode(
                 "snoop_shape",
                 "first coherent RN profile requires a line-aligned snoop",
             )
-        if state.pending_for_address(snoop.address):
+        same_line = state.pending_for_address(snoop.address)
+        read_unique_overlap = (
+            isinstance(snoop, ChiSnpUniqueMessage)
+            and same_line
+            and all(
+                isinstance(request, ChiReadUniqueMessage)
+                for request in same_line
+            )
+        )
+        if same_line and not read_unique_overlap:
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
-                    f"{self.name}.line[{snoop.address:#x}]",
+                    chi_line_resource_name(self.name, snoop.address),
                     ConstraintScope.VIRTUAL_DUT,
                     available=0,
                     capacity=1,
                     reason=(
-                        "an RN-local coherent transaction reserves this "
-                        "cache line; the first transient policy defers "
-                        "the Snoop"
+                        "the staged transient policy defers the Snoop because "
+                        "an RN-local transaction reserves this cache line; "
+                        "only the ReadUnique/SnpUnique same-line transient "
+                        "is implemented"
                     ),
                     location=self.name,
                 ),
@@ -1490,7 +1501,7 @@ class ChiCoherentRnNode(
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
-                    f"{self.name}.line[{request.address:#x}]",
+                    chi_line_resource_name(self.name, request.address),
                     ConstraintScope.VIRTUAL_DUT,
                     available=0,
                     capacity=1,
@@ -2406,7 +2417,7 @@ class ChiCoherentHomeNode(
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
-                    f"{self.name}.line[{request.address:#x}]",
+                    chi_line_resource_name(self.name, request.address),
                     ConstraintScope.SYSTEM,
                     available=0,
                     capacity=1,
@@ -3107,7 +3118,7 @@ class ChiCoherentHomeNode(
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
-                    f"{self.name}.line[{request.address:#x}]",
+                    chi_line_resource_name(self.name, request.address),
                     ConstraintScope.SYSTEM,
                     available=0,
                     capacity=1,

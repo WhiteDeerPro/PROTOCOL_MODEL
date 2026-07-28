@@ -56,6 +56,7 @@ from ..participants.coherence import (
     ChiRnRetryCoherentRequest,
     ChiRnWriteCacheLine,
 )
+from ..participants.progress import chi_line_resource_name
 from ..representation.dat import (
     ChiCompDataMessage,
     ChiCopyBackWrDataMessage,
@@ -449,6 +450,14 @@ class ChiCoherenceSession(
                     "all Request Nodes in this profile must name the "
                     "registered Home"
                 )
+        participant_names = (
+            home.name,
+            *(node.name for node in nodes.values()),
+        )
+        if len(set(participant_names)) != len(participant_names):
+            raise ValueError(
+                "CHI coherence participant names must be unique"
+            )
         if home.node_id in nodes:
             raise ValueError("CHI Home and Request Nodes must have distinct NodeIDs")
         features = (
@@ -987,7 +996,9 @@ class ChiCoherenceSession(
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
-                    f"{self.name}.line[{action.address:#x}]",
+                    chi_line_resource_name(
+                        self.home.name, action.address
+                    ),
                     ConstraintScope.SYSTEM,
                     available=0,
                     capacity=1,
@@ -1049,7 +1060,9 @@ class ChiCoherenceSession(
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
-                    f"{self.name}.line[{action.request.address:#x}]",
+                    chi_line_resource_name(
+                        self.home.name, action.request.address
+                    ),
                     ConstraintScope.SYSTEM,
                     available=0,
                     capacity=1,

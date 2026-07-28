@@ -9,14 +9,22 @@ from protocol_model.protocols.amba.chi.issue_h.participants.coherence import (
     ChiCacheLine,
     ChiCacheState,
     ChiCoherentHomeNode,
+    ChiCoherentRnNode,
     ChiHomeDirectoryEntry,
+    ChiRnAcceptCompData,
+    ChiRnAcceptSnoop,
+    ChiRnIssueCleanUnique,
+    ChiRnIssueCoherentRead,
+    ChiRnIssueWriteBackFull,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.dat import (
     ChiCompDataMessage,
     ChiIssueHDatProfile,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.req import (
+    ChiCleanUniqueMessage,
     ChiReadUniqueMessage,
+    ChiWriteBackFullMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.packet import (
     ChiNetworkPacket,
@@ -27,6 +35,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation.response import (
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.rsp import (
     ChiCompAckMessage,
+    ChiSnpRespMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.snp import (
     ChiSnpUniqueMessage,
@@ -131,6 +140,37 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
         self.assertIsNone(transition.blocked)
         return transition
 
+    def build_requester(
+        self,
+        state: ChiCacheState | None,
+    ):
+        return build_chi_cache_participant_fixture(
+            "rn_requester",
+            self.REQUESTER,
+            self.HOME,
+            initial_lines=(
+                ()
+                if state is None
+                else (
+                    ChiCacheLine(
+                        self.ADDRESS,
+                        state,
+                        self.DATA,
+                    ),
+                )
+            ),
+        )
+
+    def snoop_unique_packet(self) -> ChiNetworkPacket:
+        return ChiNetworkPacket.snoop(
+            ChiSnpUniqueMessage(
+                transaction_id=0x100,
+                address=self.ADDRESS,
+            ),
+            source_id=self.HOME,
+            target_id=self.REQUESTER,
+        )
+
     def test_read_unique_invalidates_all_clean_sharers(self) -> None:
         session = self.build_session()
         request = ChiReadUniqueMessage(
@@ -224,6 +264,347 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
                 retired.state.request_nodes,
             )
         )
+
+    def test_sc_read_unique_transient_accepts_same_line_snp_unique(
+        self,
+    ) -> None:
+        requester = self.build_requester(ChiCacheState.SC)
+        request = ChiReadUniqueMessage(
+            transaction_id=0x12,
+            address=self.ADDRESS,
+        )
+        issued = self.apply(
+            requester,
+            requester.initial_state(),
+            ChiRnIssueCoherentRead(request),
+        )
+        retained_pending = issued.state.pending_transactions
+        retained_retry = issued.state.request_retry
+
+        snooped = self.apply(
+            requester,
+            issued.state,
+            ChiRnAcceptSnoop(self.snoop_unique_packet()),
+        )
+
+        invalidated = snooped.state.line_at(self.ADDRESS)
+        assert invalidated is not None
+        self.assertIs(ChiCacheState.I, invalidated.state)
+        self.assertIsNone(invalidated.data)
+        self.assertNotIn(self.ADDRESS, snooped.state.cache.lines)
+        self.assertEqual(
+            retained_pending,
+            snooped.state.pending_transactions,
+        )
+        self.assertEqual(retained_retry, snooped.state.request_retry)
+        self.assertEqual(
+            {request.transaction_id},
+            set(snooped.state.pending_transactions),
+        )
+        self.assertEqual(
+            {request.transaction_id},
+            set(snooped.state.request_retry.entries),
+        )
+        self.assertEqual(1, len(snooped.emissions))
+        response = snooped.emissions[0]
+        self.assertIsInstance(response.message, ChiSnpRespMessage)
+        self.assertIs(ChiRespCode.I, response.message.response)
+        self.assertEqual(self.REQUESTER, response.source_id)
+        self.assertEqual(self.HOME, response.target_id)
+
+        completed = self.apply(
+            requester,
+            snooped.state,
+            ChiRnAcceptCompData(
+                ChiNetworkPacket.data(
+                    ChiCompDataMessage(
+                        transaction_id=request.transaction_id,
+                        data=self.DATA,
+                        home_node_id=self.HOME,
+                        response=ChiRespCode.UC,
+                        data_buffer_id=0x200,
+                    ),
+                    source_id=self.HOME,
+                    target_id=self.REQUESTER,
+                )
+            ),
+        )
+
+        installed = completed.state.line_at(self.ADDRESS)
+        assert installed is not None
+        self.assertIs(ChiCacheState.UC, installed.state)
+        self.assertEqual(self.DATA, installed.data)
+        self.assertFalse(completed.state.pending_transactions)
+        self.assertFalse(completed.state.request_retry.entries)
+        self.assertEqual(1, len(completed.emissions))
+        self.assertIsInstance(
+            completed.emissions[0].message,
+            ChiCompAckMessage,
+        )
+        self.assertEqual(
+            0x200,
+            completed.emissions[0].message.transaction_id,
+        )
+
+    def test_i_read_unique_transient_accepts_same_line_snp_unique(
+        self,
+    ) -> None:
+        requester = self.build_requester(None)
+        request = ChiReadUniqueMessage(
+            transaction_id=0x13,
+            address=self.ADDRESS,
+        )
+        issued = self.apply(
+            requester,
+            requester.initial_state(),
+            ChiRnIssueCoherentRead(request),
+        )
+        retained_pending = issued.state.pending_transactions
+        retained_retry = issued.state.request_retry
+
+        snooped = self.apply(
+            requester,
+            issued.state,
+            ChiRnAcceptSnoop(self.snoop_unique_packet()),
+        )
+
+        self.assertIsNone(snooped.state.line_at(self.ADDRESS))
+        self.assertEqual(
+            retained_pending,
+            snooped.state.pending_transactions,
+        )
+        self.assertEqual(retained_retry, snooped.state.request_retry)
+        self.assertEqual(1, len(snooped.emissions))
+        self.assertIsInstance(
+            snooped.emissions[0].message,
+            ChiSnpRespMessage,
+        )
+        self.assertIs(
+            ChiRespCode.I,
+            snooped.emissions[0].message.response,
+        )
+
+    def test_two_pending_read_unique_requests_serialize_via_snoop(
+        self,
+    ) -> None:
+        first = self.build_requester(ChiCacheState.SC)
+        second = build_chi_cache_participant_fixture(
+            "rn_second_requester",
+            self.FIRST_SHARER,
+            self.HOME,
+            initial_lines=(
+                ChiCacheLine(
+                    self.ADDRESS,
+                    ChiCacheState.SC,
+                    self.DATA,
+                ),
+            ),
+        )
+        home = ChiCoherentHomeNode(
+            "home",
+            self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
+            ),
+            initial_directory=(
+                ChiHomeDirectoryEntry(
+                    self.ADDRESS,
+                    sharers=frozenset(
+                        (self.REQUESTER, self.FIRST_SHARER)
+                    ),
+                ),
+            ),
+            initial_snoop_transaction_id=0x100,
+            initial_data_buffer_id=0x200,
+        )
+        session = ChiCoherenceSession(
+            "two_pending_read_unique_requests",
+            home,
+            {
+                self.REQUESTER: first,
+                self.FIRST_SHARER: second,
+            },
+        )
+        first_request = ChiReadUniqueMessage(0x20, self.ADDRESS)
+        second_request = ChiReadUniqueMessage(0x21, self.ADDRESS)
+
+        first_issued = self.apply(
+            session,
+            session.initial_state(),
+            ChiSubmitCoherentRead(self.REQUESTER, first_request),
+        )
+        first_packet = first_issued.emissions[0]
+        second_issued = self.apply(
+            session,
+            first_issued.state,
+            ChiSubmitCoherentRead(
+                self.FIRST_SHARER,
+                second_request,
+            ),
+        )
+        second_packet = second_issued.emissions[0]
+
+        first_accepted = self.apply(
+            session,
+            second_issued.state,
+            ChiDeliverCoherencePacket(first_packet),
+        )
+        self.assertEqual(1, len(first_accepted.emissions))
+        first_snoop = first_accepted.emissions[0]
+        self.assertEqual(self.FIRST_SHARER, first_snoop.target_id)
+
+        second_snooped = self.apply(
+            session,
+            first_accepted.state,
+            ChiDeliverCoherencePacket(first_snoop),
+        )
+        second_state = second_snooped.state.request_nodes[
+            self.FIRST_SHARER
+        ]
+        self.assertIs(
+            ChiCacheState.I,
+            second_state.line_at(self.ADDRESS).state,
+        )
+        self.assertEqual(
+            {second_request.transaction_id},
+            set(second_state.pending_transactions),
+        )
+        self.assertEqual(
+            {second_request.transaction_id},
+            set(second_state.request_retry.entries),
+        )
+        first_completed_at_home = self.apply(
+            session,
+            second_snooped.state,
+            ChiDeliverCoherencePacket(second_snooped.emissions[0]),
+        )
+        first_installed = self.apply(
+            session,
+            first_completed_at_home.state,
+            ChiDeliverCoherencePacket(
+                first_completed_at_home.emissions[0]
+            ),
+        )
+        first_retired = self.apply(
+            session,
+            first_installed.state,
+            ChiDeliverCoherencePacket(first_installed.emissions[0]),
+        )
+        self.assertFalse(first_retired.state.home.pending)
+        self.assertEqual(
+            self.REQUESTER,
+            first_retired.state.home.directory[
+                self.ADDRESS
+            ].unique_owner,
+        )
+
+        second_accepted = self.apply(
+            session,
+            first_retired.state,
+            ChiDeliverCoherencePacket(second_packet),
+        )
+        self.assertEqual(1, len(second_accepted.emissions))
+        self.assertEqual(
+            self.REQUESTER,
+            second_accepted.emissions[0].target_id,
+        )
+        first_snooped = self.apply(
+            session,
+            second_accepted.state,
+            ChiDeliverCoherencePacket(second_accepted.emissions[0]),
+        )
+        second_completed_at_home = self.apply(
+            session,
+            first_snooped.state,
+            ChiDeliverCoherencePacket(first_snooped.emissions[0]),
+        )
+        second_installed = self.apply(
+            session,
+            second_completed_at_home.state,
+            ChiDeliverCoherencePacket(
+                second_completed_at_home.emissions[0]
+            ),
+        )
+        retired = self.apply(
+            session,
+            second_installed.state,
+            ChiDeliverCoherencePacket(second_installed.emissions[0]),
+        )
+
+        first_line = retired.state.request_nodes[
+            self.REQUESTER
+        ].line_at(self.ADDRESS)
+        second_line = retired.state.request_nodes[
+            self.FIRST_SHARER
+        ].line_at(self.ADDRESS)
+        assert first_line is not None
+        assert second_line is not None
+        self.assertIs(ChiCacheState.I, first_line.state)
+        self.assertIs(ChiCacheState.UC, second_line.state)
+        self.assertEqual(self.DATA, second_line.data)
+        self.assertEqual(
+            self.FIRST_SHARER,
+            retired.state.home.directory[
+                self.ADDRESS
+            ].unique_owner,
+        )
+        self.assertTrue(session.is_quiescent(retired.state))
+        self.assertFalse(
+            ChiCoherenceInvariantMonitor().explain(
+                retired.state.home,
+                retired.state.request_nodes,
+            )
+        )
+
+    def test_clean_unique_transient_defers_same_line_snp_unique(
+        self,
+    ) -> None:
+        requester = self.build_requester(ChiCacheState.SC)
+        issued = self.apply(
+            requester,
+            requester.initial_state(),
+            ChiRnIssueCleanUnique(
+                ChiCleanUniqueMessage(0x14, self.ADDRESS)
+            ),
+        )
+
+        blocked = requester.step(
+            issued.state,
+            ChiRnAcceptSnoop(self.snoop_unique_packet()),
+        )
+
+        self.assertIsNone(blocked.fault)
+        self.assertIsNotNone(blocked.blocked)
+        assert blocked.blocked is not None
+        self.assertIn("defers the Snoop", blocked.blocked.reason)
+        self.assertIs(issued.state, blocked.state)
+        self.assertFalse(blocked.emissions)
+
+    def test_writeback_full_transient_defers_same_line_snp_unique(
+        self,
+    ) -> None:
+        requester = self.build_requester(ChiCacheState.UD)
+        issued = self.apply(
+            requester,
+            requester.initial_state(),
+            ChiRnIssueWriteBackFull(
+                ChiWriteBackFullMessage(0x15, self.ADDRESS)
+            ),
+        )
+
+        blocked = requester.step(
+            issued.state,
+            ChiRnAcceptSnoop(self.snoop_unique_packet()),
+        )
+
+        self.assertIsNone(blocked.fault)
+        self.assertIsNotNone(blocked.blocked)
+        assert blocked.blocked is not None
+        self.assertIn("defers the Snoop", blocked.blocked.reason)
+        self.assertIs(issued.state, blocked.state)
+        self.assertFalse(blocked.emissions)
 
     def _assert_read_unique_nderr_lifecycle(
         self,
@@ -562,6 +943,35 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
                     )
                 ),
             )
+
+    def test_session_rejects_ambiguous_participant_names(self) -> None:
+        base = self.build_session()
+
+        for duplicate_name in (
+            base.home.name,
+            base.request_nodes[self.REQUESTER].name,
+        ):
+            with self.subTest(duplicate_name=duplicate_name):
+                template = base.request_nodes[self.REQUESTER]
+                duplicate = ChiCoherentRnNode(
+                    duplicate_name,
+                    0x0A,
+                    self.HOME,
+                    cache_core=template.cache_core,
+                    initial_permissions=template.initial_permissions,
+                )
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "participant names must be unique",
+                ):
+                    ChiCoherenceSession(
+                        "ambiguous_participant_names",
+                        base.home,
+                        {
+                            **base.request_nodes,
+                            duplicate.node_id: duplicate,
+                        },
+                    )
 
     def test_session_rejects_an_orphan_data_return_snoop(
         self,

@@ -13,7 +13,7 @@ issue_h/
 ├── interface/        transaction correlation、outstanding、Retry/P-Credit ledger
 ├── participants/     transaction/forwarding facet、能力声明与节点局部行为
 └── system/           topology-backed network runtime、identity/capability closure
-                      与完整 read/retry composition
+                      完整 read/retry composition 与只读 progress evidence
 ```
 
 这些目录是彼此组合的视图，不是严格的协议栈继承关系：
@@ -382,6 +382,12 @@ payload state；topology-visible SN physical commit 仍未实现。
 participant emission、首 hop enqueue、Link、router 和 endpoint delivery。因此一致性状态机不固化
 direct、ring 或 mesh 拓扑，具体形状仍由调用方构造并由 resolver 闭合。
 
+Home 因同址 reservation 暂不接纳 endpoint packet 时，组合 transition 不 drain transport capture；
+packet 留在 endpoint head，首笔事务的 `CompAck` 释放 reservation 后由 scheduler 自动 replay。只读
+`project_progress()` 从 Home/RN pending 与 endpoint head 派生 `ChiHeldLine`/`ChiLineWait`，
+`project_wakeups()` 只报告 exact holder 的释放证据；它们不反向驱动 scheduler，也不形成一般 wait-for
+graph、fairness 或 deadlock verdict。
+
 一次 Home transition 可能同时产生多份 SNP。组合 session 先把完整 emission 原子保存为显式
 `pending_egress` batch，再按网络容量逐 packet 接纳；这样不要求所有 Snoopee 路径同一时刻有空位，也不会
 在背压时遗失尚未入网的分支。当前只有一个 batch 槽，会串行化产生新输出的 participant transition。
@@ -454,13 +460,17 @@ direct topology、调用方组装的一个或多个 router topology 和具体 FI
 不属于 CHI 核心 API。coherent `ReadUnique` Retry 已保存单 XP router witness；direct `ReadNoSnp`
 Retry/Cancel 仍保留为独立、较窄的 profile。
 
+pending `ReadUnique` 已可处理同址 `SnpUnique`：RN 的 `I` 保持 absent，或把 `SC` copy 失效为 `I`，
+返回 `SnpResp_I` 的同时保留 pending/Retry correlation，随后由自己的 `CompData_UC` 重新安装 line。
+Home 仍只允许一个同址 lifecycle；direct packet-delivery fixture 可表达两个 requester 的串行化，但
+resolved system 仍只有一个构造期 Requester authority，不能据此声称一般多 Requester topology 已闭合。
+
 仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、`MakeUnique`、clean `Evict`、自动
 victim/writeback scheduling、coherent DERR 与 post-snoop/组合错误路径、Retry 与
-error/Snoop/writeback 的并发组合、same-line transient/hazard、
+error/Snoop/writeback 的并发组合、CleanUnique/WriteBack 同址 Snoop、显式 transient phase/等待者合并、
 完整 `SD`/Owned lifecycle、forwarding snoop、真实 snoop filter、可共同执行的 Home→Memory/SN
 participant 与 topology-visible `WriteNoSnp` physical commit、multi-packet DAT、同一 runtime 的
-multi-Home/SAM 选择、
-跨 domain 执行，以及跨 hop wait-for/deadlock
+一般多 Requester、multi-Home/SAM 选择、跨 domain 执行，以及跨 hop wait-for/deadlock
 分析。准确状态只在
 [实现状态](../../../../../docs/architecture/implementation-status.md)维护，协议/网络/链路的分工见
 [通信建模的三张视图](../../../../../docs/architecture/communication-scope-and-transport.md)。

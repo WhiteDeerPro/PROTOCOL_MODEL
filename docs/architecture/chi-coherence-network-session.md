@@ -130,6 +130,11 @@ message→multi-packet fragmentation 是两类关系；首版 fanout packet 仍�
 
 route/delivery 索引、role registry 和 enabled feature 属于 session 的不可变构造结果，不进入每个动态状态。
 
+`ChiCoherenceNetworkSession.project_progress(state)` 从这份组合状态只读派生
+`ChiCoherenceProgress`：Home/RN pending 是 `ChiHeldLine`，当前 transport endpoint head 若因其中一项
+line resource 返回 `ResourceDemand`，则形成 `ChiLineWait`。这些对象不反向驱动 participant 或 scheduler，
+也不复制 pending/packet 的所有权。
+
 ### 4.1 跨 packet 因果证据
 
 transport runtime 已保存 packet 在每条 connection 上的 lineage；组合 session 在 endpoint accept 和
@@ -188,6 +193,10 @@ scheduler 可以尝试其他候选。轮转顺序是确定性 reference policy�
 participant 后续输出。调用方不需要逐包手工选择 Snoop、Comp 或 CompAck，但当前也没有后台线程或
 真实时钟自动产生业务 operation。
 
+endpoint participant 返回 `BLOCK` 时，候选不 drain 输入 capture，packet 仍位于同一个 endpoint head；
+scheduler 可以推进其他候选，并在后续 `advance()` 中重新尝试该 delivery。因而 Home 同址 reservation
+由首笔事务的 `CompAck` 释放后，等待请求会自动 replay，不要求调用方重新提交或手工重送 packet。
+
 ### 5.1 共同静止条件
 
 组合 session 只有同时满足以下条件才静止：
@@ -229,6 +238,10 @@ commit(coherence_step.state, network_candidate, egress_batch)
 这条规则避免 Home 已改变 transaction state、但其 SNP emission 没有任何持有者的半提交状态，也避免
 endpoint packet 已经 drain、participant 却因资源不足未接纳的状态。packet 后续进入首 hop 受网络容量
 控制；未接纳的 packet 继续留在 batch 中。
+
+`project_wakeups(before, after)` 只在原 `ChiLineWait` 消失且其 exact `ChiHeldLine` 也已释放时形成
+`ChiLineWakeup`。它是解释 scheduler 为何可以重新尝试的 release evidence，不声称等待 packet 已经接纳、
+没有其他 blocker，或系统已经排除 deadlock。
 
 ## 7. 多 Snoopee fanout
 
@@ -324,9 +337,10 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
 - clean eviction，以及从 victim policy 自动触发 eviction/writeback；显式选择一条 `UD` line 后的
   `WriteBackFull → CompDBIDResp → CopyBackWrData` 已经闭合；
 - 普通 `ReadShared` 命中 `UD` 时的 policy；当前 no-SD 行为由显式 `ReadNotSharedDirty` 路径承担；
-- 同 line 并发目前只有 RN/Home 单 owner reservation：第二笔本地 transaction 和撞上 local pending 的
-  Snoop 返回可重试的 `ResourceDemand`；等待者合并、显式 transient phase、Snoop 优先级，以及
-  Retry/error/Snoop 组合与取消尚未闭合；
+- 同 line 并发已闭合一条 `ReadUnique/SnpUnique` RN transient：pending ReadUnique 期间收到同址
+  `SnpUnique`，RN 可从 `I` 或 `SC` 返回 `SnpResp_I`，保留 pending/Retry correlation，再由自己的
+  `CompData` 安装 `UC`。第二笔 Home 请求仍由 line reservation 串行化。CleanUnique/WriteBack 同址
+  Snoop、等待者合并、显式 transient phase、Snoop 优先级，以及 Retry/error/Snoop 组合与取消尚未闭合；
 - runtime 按地址动态选择多个 Home、SAM remap 和跨 domain 执行。
 
 当前 `SD` 只是一条受限 CleanUnique 前置状态及其失效出口，不是完整 MOESI/Owned profile。后者还需要
@@ -485,12 +499,21 @@ coherence lifecycle”的验证语义，但不宣称等于一种 RTL MSHR 组织
 合并、背压或进度时才应把这些字段加入 participant。dirty victim 的写回队列同理，应作为独立有限资源，
 不与 read-miss slot 被动合并成一个含义模糊的容量。
 
-当前第一个 transient policy 是每个 RN cache line 同时只允许一个本地 coherent lifecycle；同地址第二笔请求
-被 block，已捕获的同地址 Snoop 可保留并在 reservation 释放后重试。`WriteBackFull` 从发 REQ 到收到
-`CompDBIDResp` 期间保留 resident `UD` payload；收到 DBID 后，RN 在一个 transition 中读取最新数据、产生
-`CopyBackWrData_UD_PD`、删除 payload 并转为 `I`。Home 直到收到 DAT 才更新 backing、清除 unique owner 和
-释放 DBID。这个切片明确了 UD→I 的责任转移时点，但还没有把 I→S、S→U 等全部等待阶段编码成完整 transient
-状态机。
+当前每个 RN cache line 同时只允许一个本地 coherent lifecycle；同地址第二笔本地请求被 block。唯一放宽的
+重叠是 pending `ReadUnique` 收到同址 `SnpUnique`：`I` 保持 absent，`SC` copy 被失效，两者都返回
+`SnpResp_I`，且 pending transaction 与 Request-Retry ledger 原样保留；后续 `CompData_UC` 再安装完整
+payload 和 `UC` permission。CleanUnique 或 WriteBackFull pending 遇到同址 Snoop 仍返回可重试的
+`ResourceDemand`；topology-backed session 会保留该 endpoint packet，待 reservation 释放后重新尝试。
+`WriteBackFull` 从发 REQ 到收到 `CompDBIDResp` 期间保留 resident `UD` payload；收到 DBID 后，RN 在一个
+transition 中读取最新数据、产生 `CopyBackWrData_UD_PD`、删除 payload 并转为 `I`。Home 直到收到 DAT 才
+更新 backing、清除 unique owner 和释放 DBID。这个切片明确了 ReadUnique/SnpUnique 重叠及 UD→I 的责任
+转移时点，但还没有把 I→S、S→U 等全部等待阶段编码成完整 transient 状态机。
+
+Home 的 coherent pending、Home writeback pending、RN coherent pending 与 RN writeback pending 分别可由
+`project_progress()` 投影为 held line，其 release event 记录为 `CompAck`、`CopyBackWrData`、
+`Comp`/`CompData` 与 `CompDBIDResp`。waiting 只枚举当前 transport endpoint head 且 demand 命中这些
+exact resource 的 packet；`project_wakeups()` 比较前后快照给出 holder release evidence。该投影仍留在
+CHI family，不生成 wait-for edge、公平性结论或 deadlock verdict。
 
 因此 MSHR 和 write buffer 与一致性有关，但不是 MESI/MOESI 的协议状态本身。MESI 的正确性至少需要 line
 permission、dirty responsibility、Home authority 和 transaction lifecycle；替换算法、set associativity
@@ -629,7 +652,8 @@ clean ReadUnique 现另有一次成功 Retry 的 modifier：
 `ReadUnique→RetryAck→PCrdGrant→AllowRetry=0 重发` 之后复用本页既有 SnpUnique/CompData/CompAck
 lifecycle。Home 拒绝阶段只建立 Retry debt；Grant 预留真实 transaction slot，credited reissue 原子消费
 reservation 后才建立 coherence pending。direct packet-delivery 与单 XP topology witness 均覆盖该路径，
-但 cancel、Retry/error composition、多 waiter 与同址 Snoop 并发仍延期。
+但 cancel、Retry/error composition、多 waiter，以及 Retry 与同址 Snoop 的组合仍延期。基础
+ReadUnique/SnpUnique 重叠由上面的独立 transient 切片覆盖。
 
 展示产物优先包含一张 topology、一张简化 MSC 和一份最终 directory/cache-state 摘要。Link tick 等内部
 microstep 保存在诊断记录中，无需全部放入主 MSC。
@@ -638,20 +662,23 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 
 下列能力仍在当前切片之外：
 
-- `MakeUnique`、clean `Evict`、自动 victim selection/writeback scheduling、CMO/DVM 和并发 line
-  transient/hazard；
+- `MakeUnique`、clean `Evict`、自动 victim selection/writeback scheduling、CMO/DVM，以及
+  CleanUnique/WriteBack 同址 Snoop、等待者合并和一般 transient phase；
 - dirty writeback 与 RetryAck/P-Credit、错误响应或同地址 Snoop 的并发组合；
 - 让 Home participant 与独立 Memory/SN VirtualDut 通过 topology-visible protocol transaction 共同执行，
   以及相应 HN→SN physical write lifecycle；
 - 完整 MOESI `SD`/Owned：当前只实现 seedable `SD→I` dirty-peer CleanUnique 出口，尚无 `SD` 生成、
   dirty `SnpShared`、owner handoff、forwarding snoop/DCT 或 shared-dirty replacement；
-- 多 requester、多 Home、address→Home 自动 authority 和 coherence-domain 自动 membership；
+- 一般多 Requester resolved topology、多 Home、address→Home 自动 authority 和 coherence-domain 自动
+  membership；
 - 一个 component/port 承载多个 NodeID 的运行时选择；
 - 动态 snoop filter、router multicast 和 topology-wide broadcast；
 - 独立 fanout branch admission、fanout continuation 及其额外 storage；
 - message→multi-packet DAT splitter/reassembler、multi-flit response、narrow completion、DERR 与
   post-snoop error completion；
 - 多个 coherence Retry waiter、cancel，以及 Retry/error/同址 Snoop 的并发组合；
+- 多 waiter 公平性、跨资源 wait-for graph、escape transition 搜索和 deadlock verdict；当前
+  `ChiCoherenceProgress` 只提供 family-local held/wait/wakeup evidence；
 - virtual channel、adaptive route、QoS/fairness property 和 deadlock/livelock proof；
 - raw packed bit codec、phit/lane、FLITPEND、pin waveform 和 cycle-accurate RTL timing；
 - 自动生成 mesh/ring route table；
@@ -673,7 +700,8 @@ feature/capability/flow closure、packet-delivery coherence session 和 topology
 
 - malformed identity、route、capability 与 feature dependency 负例；
 - fanout 在有限容量下的原子保存；
-- orphan/重复 Snoop response、双 dirty owner 和 same-line hazard；
+- orphan/重复 Snoop response、双 dirty owner、ReadUnique/SnpUnique 同址重叠，以及
+  CleanUnique/WriteBack 同址 Snoop 的保守 block；
 - clean 与 dirty participant 状态转换的局部诊断；
 - `SD`/`shared_dirty_owner` 对齐、DAT route/capability 和 reference backing 提交时点；
 - coherent pre-snoop NDERR 的零 SNP、状态不变与 DBID/CompAck 定向生命周期；

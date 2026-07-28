@@ -115,6 +115,7 @@ from .capability import (
     CHI_SNOOPEE_DIRTY_SNP_DATA_PRODUCE,
     CHI_SNOOPEE_DIRTY_TO_CLEAN_SHARED_DOWNGRADE,
     CHI_SNOOPEE_SNP_NOT_SHARED_DIRTY_ACCEPT,
+    CHI_SNOOPEE_READ_UNIQUE_PENDING_SNP_UNIQUE_ACCEPT,
     CHI_SNOOPEE_SNP_SHARED_ACCEPT,
     CHI_SNOOPEE_SNP_UNIQUE_ACCEPT,
     ChiCapabilityKey,
@@ -142,6 +143,7 @@ from .router import (
     ChiStoreForwardRouterNode,
     ChiStoreForwardRouterState,
 )
+from .progress import chi_line_resource_name
 from .retry_home import (
     ChiRetryAdmissionPolicy,
     ChiRetryDebt,
@@ -230,6 +232,7 @@ __all__ = [
     "CHI_SNOOPEE_DIRTY_SNP_DATA_PRODUCE",
     "CHI_SNOOPEE_DIRTY_TO_CLEAN_SHARED_DOWNGRADE",
     "CHI_SNOOPEE_SNP_NOT_SHARED_DIRTY_ACCEPT",
+    "CHI_SNOOPEE_READ_UNIQUE_PENDING_SNP_UNIQUE_ACCEPT",
     "CHI_SNOOPEE_SNP_SHARED_ACCEPT",
     "CHI_SNOOPEE_SNP_UNIQUE_ACCEPT",
     "ChiAddressHomeNode",
@@ -296,4 +299,5 @@ __all__ = [
     "ChiRetryHomeReturn",
     "ChiRetryHomeState",
     "ChiVirtualDutFacets",
+    "chi_line_resource_name",
 ]

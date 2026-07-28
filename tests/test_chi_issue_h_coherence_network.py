@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from dataclasses import replace
 import unittest
 
 from protocol_model.integrations.recipes.amba.chi import (
@@ -77,6 +78,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     ChiCoherenceNetworkState,
     ChiFeatureContract,
     ChiHomeAuthority,
+    ChiLineRelease,
     ChiSubmitCoherentRead,
     ChiSubmitWriteBackFull,
     ChiWriteUniqueCacheLine,
@@ -1666,6 +1668,255 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "full 512-bit cache line"):
             ChiCoherenceNetworkSession.from_resolved(resolved)
+
+    def test_progress_projects_held_waiting_and_release_wakeup(
+        self,
+    ) -> None:
+        session = ChiCoherenceNetworkSession.from_resolved(
+            self.build_resolved(nderr=True)
+        )
+        issued = self.apply(
+            session,
+            session.initial_state(),
+            ChiSubmitCoherentRead(
+                self.REQUESTER,
+                ChiReadUniqueMessage(0x31, self.ADDRESS),
+            ),
+        )
+        state = issued.state
+        for _ in range(256):
+            if state.coherence.home.pending:
+                break
+            state = self.apply(
+                session,
+                state,
+                ChiAdvanceCoherenceNetwork(),
+            ).state
+        else:
+            self.fail("first ReadUnique did not reserve its Home line")
+
+        progress = session.project_progress(state)
+        home_name = session.coherence.home.name
+        requester_name = session.coherence.request_nodes[
+            self.REQUESTER
+        ].name
+        held_by_resource = {
+            item.resource: item for item in progress.held
+        }
+        self.assertEqual(2, len(progress.held))
+        self.assertIs(
+            ChiLineRelease.COMP_ACK,
+            held_by_resource[
+                f"{home_name}.line[{self.ADDRESS:#x}]"
+            ].release_on,
+        )
+        self.assertEqual(
+            0x200,
+            held_by_resource[
+                f"{home_name}.line[{self.ADDRESS:#x}]"
+            ].release_transaction_id,
+        )
+        self.assertIs(
+            ChiLineRelease.COMP_DATA,
+            held_by_resource[
+                f"{requester_name}.line[{self.ADDRESS:#x}]"
+            ].release_on,
+        )
+        self.assertEqual(
+            0x31,
+            held_by_resource[
+                f"{requester_name}.line[{self.ADDRESS:#x}]"
+            ].release_transaction_id,
+        )
+        self.assertEqual((), progress.waiting)
+
+        for _ in range(512):
+            requester = state.coherence.request_nodes[self.REQUESTER]
+            if (
+                state.coherence.home.pending
+                and not requester.pending_transactions
+                and not state.pending_egress
+            ):
+                break
+            state = self.apply(
+                session,
+                state,
+                ChiAdvanceCoherenceNetwork(),
+            ).state
+        else:
+            self.fail(
+                "NDERR did not expose the Home-CompAck reservation window"
+            )
+
+        second = self.apply(
+            session,
+            state,
+            ChiSubmitCoherentRead(
+                self.REQUESTER,
+                ChiReadUniqueMessage(0x32, self.ADDRESS),
+            ),
+        )
+        state = second.state
+        second_packet = second.emissions[0].packet
+        self.assertIsNotNone(second_packet)
+
+        # Fix only the relative interleaving under test: the second request
+        # was issued through the public RN action above.  Commit the runtime's
+        # existing first scheduler candidate as one complete microstep so
+        # cursor and accounting invariants remain identical to advance().
+        admitted = session._enqueue_pending(state)
+        self.assertIsNone(admitted.fault)
+        self.assertIsNone(admitted.blocked)
+        self.assertEqual(1, len(admitted.emissions))
+        self.assertIs(
+            ChiCoherenceNetworkEventKind.EGRESS_ENQUEUE,
+            admitted.emissions[0].kind,
+        )
+        self.assertIs(second_packet, admitted.emissions[0].packet)
+        state = replace(
+            admitted.state,
+            scheduler_cursor=1,
+            committed_microsteps=state.committed_microsteps + 1,
+        )
+        self.assertEqual(1, state.scheduler_cursor)
+        self.assertEqual(
+            admitted.state.committed_microsteps + 1,
+            state.committed_microsteps,
+        )
+
+        for _ in range(512):
+            progress = session.project_progress(state)
+            if progress.waiting:
+                break
+            state = self.apply(
+                session,
+                state,
+                ChiAdvanceCoherenceNetwork(),
+            ).state
+        else:
+            self.fail(
+                "second ReadUnique did not wait behind the first Home holder"
+            )
+        self.assertEqual(1, len(progress.waiting))
+        wait = progress.waiting[0]
+        self.assertIs(second_packet, wait.endpoint.packet)
+        self.assertEqual(
+            f"{home_name}.line[{self.ADDRESS:#x}]",
+            wait.demand.resource,
+        )
+        self.assertEqual(0x32, wait.waiter.transaction_id)
+
+        for _ in range(1024):
+            advanced = self.apply(
+                session,
+                state,
+                ChiAdvanceCoherenceNetwork(),
+            )
+            wakeups = session.project_wakeups(state, advanced.state)
+            state = advanced.state
+            if wakeups:
+                break
+        else:
+            self.fail("CompAck did not release the retained line waiter")
+
+        self.assertEqual(1, len(wakeups))
+        wakeup = wakeups[0]
+        self.assertIs(second_packet, wakeup.endpoint.packet)
+        self.assertEqual(wait.demand.resource, wakeup.resource)
+        self.assertIs(
+            ChiLineRelease.COMP_ACK,
+            wakeup.released_holder.release_on,
+        )
+        self.assertEqual(
+            0x200,
+            wakeup.released_holder.release_transaction_id,
+        )
+        retained = session.network.peek_delivery(
+            state.network, "xp_to_hn0", ChiChannelKind.REQ
+        )
+        self.assertIsNotNone(retained)
+        assert retained is not None
+        self.assertIs(second_packet, retained.packet)
+
+        for _ in range(512):
+            accepted = self.apply(
+                session,
+                state,
+                ChiAdvanceCoherenceNetwork(),
+            )
+            state = accepted.state
+            if any(
+                event.kind
+                is ChiCoherenceNetworkEventKind.ENDPOINT_ACCEPT
+                and event.packet is second_packet
+                for event in accepted.emissions
+            ):
+                break
+        else:
+            self.fail("released second ReadUnique was not accepted by Home")
+
+        run = session.run_until_quiescent(state, max_steps=1024)
+        self.assertTrue(run.ok)
+        self.assertIsNone(run.blocked)
+        self.assertTrue(session.is_quiescent(run.final_state))
+
+    def test_progress_probe_does_not_execute_unblocked_home_policy(
+        self,
+    ) -> None:
+        session = ChiCoherenceNetworkSession.from_resolved(
+            self.build_resolved(nderr=True)
+        )
+        policy_calls = []
+
+        def counted_nderr_policy(request, state):
+            policy_calls.append((request.transaction_id, state))
+            return True
+
+        session.coherence.home.read_unique_nderr_policy = (
+            counted_nderr_policy
+        )
+        issued = self.apply(
+            session,
+            session.initial_state(),
+            ChiSubmitCoherentRead(
+                self.REQUESTER,
+                ChiReadUniqueMessage(0x33, self.ADDRESS),
+            ),
+        )
+        state = issued.state
+        for _ in range(256):
+            delivery = session.network.peek_delivery(
+                state.network,
+                "xp_to_hn0",
+                ChiChannelKind.REQ,
+            )
+            if delivery is not None:
+                break
+            state = self.apply(
+                session,
+                state,
+                ChiAdvanceCoherenceNetwork(),
+            ).state
+        else:
+            self.fail("ReadUnique did not reach the Home endpoint")
+
+        self.assertFalse(policy_calls)
+        progress = session.project_progress(state)
+        self.assertEqual((), progress.waiting)
+        self.assertFalse(policy_calls)
+
+        for _ in range(256):
+            state = self.apply(
+                session,
+                state,
+                ChiAdvanceCoherenceNetwork(),
+            ).state
+            if policy_calls:
+                break
+        else:
+            self.fail("Home never executed the NDERR admission policy")
+        self.assertEqual(1, len(policy_calls))
+        self.assertEqual(0x33, policy_calls[0][0])
 
 
 if __name__ == "__main__":

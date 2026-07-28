@@ -60,6 +60,12 @@ from .network import (
     ChiTransportNetworkSession,
     ChiTransportNetworkState,
 )
+from .progress import (
+    ChiCoherenceProgress,
+    ChiLineWakeup,
+    _project_chi_coherence_progress,
+    _project_chi_line_wakeups,
+)
 from .resolved import ResolvedChiSystem
 
 
@@ -416,6 +422,29 @@ class ChiCoherenceNetworkSession(
             and not state.pending_egress
             and self.coherence.is_quiescent(state.coherence)
             and self.network.is_quiescent(state.network)
+        )
+
+    def project_progress(
+        self,
+        state: ChiCoherenceNetworkState,
+    ) -> ChiCoherenceProgress:
+        """Return read-only CHI line holder and endpoint-wait evidence."""
+
+        fault = self._state_fault(state)
+        if fault is not None:
+            raise ValueError(fault.reason)
+        return _project_chi_coherence_progress(self, state)
+
+    def project_wakeups(
+        self,
+        before: ChiCoherenceNetworkState,
+        after: ChiCoherenceNetworkState,
+    ) -> tuple[ChiLineWakeup, ...]:
+        """Project exact line releases that can wake retained endpoint heads."""
+
+        return _project_chi_line_wakeups(
+            self.project_progress(before),
+            self.project_progress(after),
         )
 
     def offers(

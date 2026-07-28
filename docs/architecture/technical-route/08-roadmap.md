@@ -64,8 +64,14 @@ coherence-domain membership 派生 `eligible Snoopees = members - requester`；N
 directory/backing/Snoop ID，只把 DBID 和同址 reservation 保留到 Ack。独立 modifier 复用 base flow，
 并由单 XP 三 packet witness 证明。
 
-1. 以 direct/coherent NDERR 为错误语义基线，下一步增加显式 same-line transient/hazard 及
-   held lease、waiting condition、wakeup projection，再处理 Retry/Snoop/error 组合；DERR 等待
+第一条 same-line progress 切片也已闭合：pending `ReadUnique` 的 RN 可以接纳同址 `SnpUnique`，以
+`I/SC→I` 响应而保留原 pending/Retry correlation，随后由自己的 `CompData` 重新安装 `UC`。Home 仍以
+line reservation 串行化同址请求；被 block 的 endpoint packet 留在网络，`CompAck` 释放 reservation 后由
+family scheduler 自动 replay。`project_progress()` 与 `project_wakeups()` 提供 family-local、只读的
+held/wait/release evidence，不把一次资源释放夸大成 packet 已接纳或 deadlock verdict。
+
+1. 以这条 `ReadUnique/SnpUnique` transient 和 direct/coherent NDERR 为基线，下一步扩展
+   CleanUnique/WriteBack 同址 Snoop、Retry/Snoop/error 组合与显式 transient phase；DERR 等待
    ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；可选 victim/writeback scheduling 与
    replacement policy 保持独立 refinement；
 2. 在已闭合 clean/shared-dirty-peer `CleanUnique`、协议中立 Home backing 与 canonical Home binder
@@ -137,7 +143,8 @@ multi-hop resolution 与 bridge auto-lowering 仍是本阶段后续内容。
 当前 runtime 已能用 `ResourceDemand` 表示未接纳工作，以 `BLOCK` 整步回滚，并通过显式 advance 推进部分
 queued backend。后续需要把 admission 从整个外部 action 细化到 emission/egress，补齐跨 connection lineage、
 held lease、waiting demand 和可恢复的 wakeup 条件。这个阶段扩展现有 fixed-point runtime，不要求同时引入
-物理时钟。
+物理时钟。CHI family 已先用 participant pending 与 endpoint head 提供一条只读 held/wait/wakeup 投影，
+但它不等价于通用 SystemProtocol 动态资源合同。
 
 ### S5 · wait-for 与 deadlock 证据
 

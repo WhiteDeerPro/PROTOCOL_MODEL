@@ -130,6 +130,15 @@ from .read_no_snp_retry import (
     ChiReadNoSnpRetrySystemSession,
     ChiReadNoSnpRetrySystemState,
 )
+from .progress import (
+    ChiCoherenceProgress,
+    ChiCoherenceTxnRef,
+    ChiEndpointHeadRef,
+    ChiHeldLine,
+    ChiLineRelease,
+    ChiLineWait,
+    ChiLineWakeup,
+)
 from .resolved import ResolvedChiSystem, resolve_chi_system
 
 __all__ = [
@@ -211,8 +220,10 @@ __all__ = [
     "ChiCoherenceNetworkEventKind",
     "ChiCoherenceNetworkSession",
     "ChiCoherenceNetworkState",
+    "ChiCoherenceProgress",
     "ChiCoherenceSession",
     "ChiCoherenceState",
+    "ChiCoherenceTxnRef",
     "ChiDeliverCoherencePacket",
     "ChiGrantCoherentHomePCredit",
     "ChiRetryCoherentRequest",
@@ -224,6 +235,11 @@ __all__ = [
     "ChiNetworkEventKind",
     "ChiNetworkRouterToConnection",
     "ChiNetworkTick",
+    "ChiEndpointHeadRef",
+    "ChiHeldLine",
+    "ChiLineRelease",
+    "ChiLineWait",
+    "ChiLineWakeup",
     "ChiPendingCoherenceEgressBatch",
     "ChiReadNoSnpSystemAction",
     "ChiReadNoSnpSystemEvent",

@@ -121,7 +121,11 @@ correlation，等该 transaction 退休后再以 P-Credit 重发，并由上述 
 `CleanUnique→UC→local write→UD` 保留本地数据完成权限升级，也可通过
 `ReadUnique→UC→local write→UD` 走需要返回数据的路径。clean `Evict` 已闭合
 `UC/UCE/SC→I→Evict→Comp_I` 的 REQ/RSP-only lifecycle、条件 directory removal 和最小 topology
-witness。独立的 `MakeUnique(0x0C)` 切片也已闭合：REQ 不携带写数据，submit API 将 RN-local
+witness。它的独立 Retry modifier 复用同一 Request-Retry/P-Credit ledger，并闭合
+`Evict→RetryAck→PCrdGrant→AllowRetry=0 重发→Comp_I` 的五 packet resolved witness。初始拒绝不改变
+directory/backing、不分配 DBID/Snoop；system composition 对 RetryAck 与 P-Credit 使用一次性 exact packet
+evidence，避免伪造或 replay response 驱动 RN 状态。独立的 `MakeUnique(0x0C)` 切片也已闭合：REQ
+不携带写数据，submit API 将 RN-local
 512-bit store intent 保存在 requester pending state；Home 用 `SnpMakeInvalid(0x0A)` 使任意当前已表示的
 peer state 进入 `I`，只接收 `SnpResp_I` 且不接收 DAT。`Comp_UC` 到达 requester 时原子覆盖/安装 intent
 为 `UD` 并产生 `CompAck`；Home 到 Ack 才提交 unique owner，backing payload/version 保持不变。规范描述
@@ -139,7 +143,7 @@ facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，�
 证明。
 
 后续扩展继续以可执行 lifecycle 为单位增加，不把此处建议固化成永久顺序。若继续扩展
-opcode/lifecycle，可优先比较 Evict Retry 与 deliberate dirty invalidate/WriteEvict；若下一场景首先受
+opcode/lifecycle，可优先比较 deliberate dirty invalidate/WriteEvict 与其他未闭合 operation；若下一场景首先受
 并发资源阻塞，则先闭合同一 Home/type 下多个 waiter 的具名选择、释放与公平性 witness。
 `PCrdGrant`、`RetryAck` 仍走 Home→Requester 的 RSP 路径；`PCrdReturn` 根据 CHI Issue H B2.5.6 走
 Requester→Home 的 REQ 路径，router 继续只按 `channel + TgtID` 透明转发。NodeID ownership 与首条

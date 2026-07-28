@@ -311,7 +311,7 @@ clean `ReadShared` 与任一允许 `UD` 的 feature 组合仍在本 profile 之�
 `SC→ReadUnique→UC→local write→UD` 与保留本地数据的 `SC→CleanUnique→UC→local write→UD` 已实现；
 clean `ReadUnique` 的单次 Retry 也已经经 resolved XP topology 自动闭合 RetryAck、PCrdGrant、
 credited reissue 与原有 SnpUnique lifecycle；显式 `UD` writeback 已经经同类 topology 闭合。真实 snoop
-filter、router multicast、自动 dirty victim/writeback scheduling、Evict Retry/deliberate
+filter、router multicast、自动 dirty victim/writeback scheduling、deliberate
 dirty invalidate/WriteEvict、一般 same-line transient/hazard 和
 一般 MOESI `SD`/Owned 仍属于后续
 participant/system 能力。
@@ -319,7 +319,10 @@ participant/system 能力。
 clean `Evict` 已作为独立 REQ/RSP-only feature 闭合：RN 从 `UC/UCE/SC` 先转 `I`，Home 只条件删除
 matching clean holder 并返回 `Comp_I`；stale 或目录明确标记为 shared-dirty responsibility 的 hint
 no-op，且不产生 SNP/DAT/CompAck 或 backing update。最小
-direct topology witness 证明这两条 flow 可由同一 resolved network runtime 自动推进。
+direct topology witness 证明这两条 flow 可由同一 resolved network runtime 自动推进。独立 Retry
+modifier 另闭合 `Evict→RetryAck→PCrdGrant→AllowRetry=0 重发→Comp_I`：拒绝阶段不改
+directory/backing，Grant 预留真实 Home capacity，system 对两个 retry response 使用一次性 exact packet
+evidence；五 packet witness 仍为零 SNP/DAT/CompAck。
 
 `MakeUnique` 也已作为独立、无 DAT 的 feature 闭合。REQ `MakeUnique(0x0C)` 不携带写数据，requester
 另存 RN-local 512-bit store intent；Home 对实际 peer 发 `SnpMakeInvalid(0x0A)`，peer 无论原来是否 dirty
@@ -366,6 +369,8 @@ transport projection；其余 property 仍未闭合：
   dirty responsibility；clean/shared-dirty-peer `CleanUnique` 与显式 `UD` writeback 也已闭合经 XP 的
   REQ/SNP/RSP/DAT route 和相应提交结果。clean ReadUnique Retry modifier 复用 transaction-local
   Request-Retry/P-Credit 合同，Home grant 与 requester reissue 由同一 composition scheduler 自主推进；
+  clean Evict Retry 以独立 feature/policy gate 复用同一 ledger，并闭合 exact RetryAck/P-Credit
+  correlation 与五 packet resolved witness；
   direct address-backed read 已把 authority 内 decode/access failure 映射为沿原 DAT route 返回的
   `CompData_I(NDERR)`；coherent `ReadUnique` 也已闭合 pre-snoop
   `CompData_I(NDERR)→CompAck`、零 SNP 与 cache/directory/backing 不变式。MakeUnique 的独立
@@ -377,7 +382,7 @@ transport projection；其余 property 仍未闭合：
   或超出该窄 witness 的 Retry/Snoop 到达次序。通用 participant plan、
   multi-Home/SAM authority、
   MakeUnique Retry/error/MTE Update/partial-write 扩展、自动 dirty victim/writeback scheduling、
-  Evict Retry/deliberate dirty invalidate/WriteEvict、
+  deliberate dirty invalidate/WriteEvict、
   一般 same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；

@@ -105,8 +105,8 @@ request 已发出 Snoop 后的 error 与任意到达次序所需的 accepted-but
 backing payload/version。packet-delivery session 保存 Home-produced completion evidence，拒绝 early/forged
 completion；pending Evict 遇同址 Snoop 返回 `SnpResp_I` 并保留 correlation。独立 feature 只声明
 Requester→Home REQ 与 Home→Requester RSP，两 packet topology witness 不产生 SNP/DAT/CompAck。
-自动 victim/LRU、普通 dirty replacement、deliberate dirty invalidate、WriteEvict family 与 Evict Retry
-没有并入该 slice。
+自动 victim/LRU、普通 dirty replacement、deliberate dirty invalidate 与 WriteEvict family
+没有并入 clean Evict base slice；Request-Retry modifier 见下文独立切片。
 
 第一条 `MakeUnique` 切片也已闭合。REQ `MakeUnique(0x0C)` 本身不携带数据；提交 API 另保存一份
 RN-local 512-bit full-line store intent，它不是 wire payload。规范描述的 expected initial state 是
@@ -125,6 +125,18 @@ holder）、`TraceTag=0` 与 OK-only；引入 MTE Dirty tags 时需重新闭合 
 MTE Update、partial write 和 multi-Home 不在本切片中。resolved dirty-peer witness 恰好运输
 REQ、SNP、SnpResp、Comp、CompAck 五个 packet，并确认零 DAT。
 
+第一条 clean `Evict` Request-Retry modifier 也已闭合：
+`Evict→RetryAck→PCrdGrant→AllowRetry=0/匹配 PCrdType 重发→Comp_I`。RN 在首发前已经从
+`UC/UCE/SC` 进入无 payload 的 `I`，Retry 期间保留 pending 与同一份 opcode-neutral retry entry；Home
+拒绝阶段只登记 retry debt，不改 directory/backing/identifier allocator，也不建立 coherence pending 或
+DBID。Grant 为 `(Requester, PCrdType)` 预留真实 transaction slot，并允许先于 RetryAck 到达；credited
+Evict 原子消费 reservation 后才执行原有 matching-holder removal/stale no-op。packet-delivery state 对
+Home 产生的 `RetryAck` 与 `PCrdGrant` 也保存并一次性消费完整 packet evidence，防止伪造或 replay
+P-Credit；initial/credited REQ 另与 retained entry 的 current form/phase 核对，旧 initial REQ replay
+在 Home mutation 前失败。resolved direct-topology witness 恰好运输两份 Evict REQ、RetryAck、PCrdGrant 和 `Comp_I`
+五个 packet，零 SNP/DAT/CompAck。该 modifier 与 ReadUnique Retry 使用同一 Request-Retry ledger，但采用
+独立 admission policy 与 feature gate；当前只证明一次 Retry 后成功，不包含 cancel 或多 waiter fairness。
+
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
 | 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
@@ -135,11 +147,12 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 3 · Retry/Snoop/error 窄组合 | `RetryAck`、`PCrdGrant`、独立 transaction 的 SNP、`CompData_I(NDERR)`；DERR 原子待来源 | 既有 Retry ledger、same-line transient、coherence pending 与 pre-Snoop NDERR modifier | 无新增；正交组合 `ChiRequestRetryPhase × ChiCacheState` | 本切片已闭合 |
 | 4 · clean `Evict` | `Evict`、`Comp_I`；无 DAT/CompAck/DBID lease | 复用 RN TxnID/line reservation、条件 directory removal、system return correlation 与 REQ/RSP topology | RN clean→I pending intent；Home-produced completion evidence；无新 cache 稳态 | 本切片已闭合 |
 | 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid`、`SnpResp_I`、`Comp_UC`、`CompAck`；无 DAT | 复用失效 fanout、Home DBID/line reservation 与 full-line cache store | RN-local store intent；operation-specific correlation；`Comp_UC` 原子覆盖安装 `UD` | 本切片已闭合 |
+| 6 · clean `Evict` Retry | `RetryAck`、`PCrdGrant`、credited `Evict`、`Comp_I` | 复用 opcode-neutral Retry ledger、Home capacity reservation、Evict exact completion 与 REQ/RSP scheduler | Evict-specific policy/feature gate；exact RetryAck/P-Credit delivery evidence；无新 cache 稳态 | 本切片已闭合 |
 
 1. 下一条主线应按现有缺口和验证目标选择，而不是固化永久顺序：若继续扩展 opcode/lifecycle，可优先比较
-   Evict Retry 与 deliberate dirty invalidate/WriteEvict；若下一场景首先受并发资源阻塞，则先做同
-   Home/type 多 waiter 的具名选择、释放和公平性 witness。DERR 继续等待 ECC/Poison/DataCheck 来源，
-   不用普通 decode/access failure 冒充；
+   deliberate dirty invalidate 与 `WriteEvictFull`/`WriteEvictOrEvict`；若下一场景首先受并发资源阻塞，
+   则先做同 Home/type 多 waiter 的具名选择、释放和公平性 witness。DERR 继续等待
+   ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
 2. 只有验证目标需要观察 physical commit 时，才增加
    topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；
 3. 增加多 waiter 选择/公平性、多个 pending emission batch 和 wait-for cycle witness；只有这些运行投影

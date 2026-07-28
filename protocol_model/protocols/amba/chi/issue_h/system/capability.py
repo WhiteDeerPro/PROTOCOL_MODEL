@@ -111,6 +111,9 @@ CHI_FEATURE_DIRTY_WRITEBACK = ChiFeatureKey(
 CHI_FEATURE_CLEAN_EVICT = ChiFeatureKey(
     "chi.feature.clean_evict"
 )
+CHI_FEATURE_CLEAN_EVICT_RETRY = ChiFeatureKey(
+    "chi.feature.clean_evict.retry"
+)
 CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY = ChiFeatureKey(
     "chi.feature.mesi_read_not_shared_dirty"
 )
@@ -162,6 +165,9 @@ CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE = ChiCapabilityKey(
 )
 CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE = ChiCapabilityKey(
     "chi.system.clean_evict.lifecycle"
+)
+CHI_SYSTEM_CLEAN_EVICT_RETRY_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.clean_evict.retry.lifecycle"
 )
 CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE = ChiCapabilityKey(
     "chi.system.mesi_read_not_shared_dirty.lifecycle"
@@ -911,6 +917,42 @@ CHI_CLEAN_EVICT_DEFINITION = ChiFeatureDefinition(
     ),
 )
 
+CHI_CLEAN_EVICT_RETRY_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_CLEAN_EVICT_RETRY,
+    dependencies=frozenset((CHI_FEATURE_CLEAN_EVICT,)),
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            frozenset(
+                (
+                    CHI_REQUESTER_RETRY_ACK_ACCEPT,
+                    CHI_REQUESTER_PCREDIT_CONSUME,
+                )
+            ),
+        ),
+        ChiRoleRequirement(
+            "home",
+            frozenset(
+                (
+                    CHI_HOME_RETRY_ACK_PRODUCE,
+                    CHI_HOME_PCREDIT_GRANT,
+                )
+            ),
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "retry_response",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_CLEAN_EVICT_RETRY_LIFECYCLE,)
+    ),
+)
+
 CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION = ChiFeatureDefinition(
     CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
     roles=(
@@ -997,6 +1039,7 @@ CHI_BUILTIN_FEATURE_CATALOG = ChiFeatureCatalog(
         ),
         CHI_FEATURE_DIRTY_WRITEBACK: CHI_DIRTY_WRITEBACK_DEFINITION,
         CHI_FEATURE_CLEAN_EVICT: CHI_CLEAN_EVICT_DEFINITION,
+        CHI_FEATURE_CLEAN_EVICT_RETRY: CHI_CLEAN_EVICT_RETRY_DEFINITION,
         CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY: (
             CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION
         ),
@@ -1601,6 +1644,7 @@ __all__ = [
     "CHI_BASE_PATH_CAPABILITIES",
     "CHI_BUILTIN_FEATURE_CATALOG",
     "CHI_CLEAN_EVICT_DEFINITION",
+    "CHI_CLEAN_EVICT_RETRY_DEFINITION",
     "CHI_CLEAN_READ_SHARED_DEFINITION",
     "CHI_CLEAN_READ_UNIQUE_DEFINITION",
     "CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION",
@@ -1614,6 +1658,7 @@ __all__ = [
     "CHI_FEATURE_READ_NO_SNP_NDERR",
     "CHI_FEATURE_CLEAN_READ_SHARED",
     "CHI_FEATURE_CLEAN_EVICT",
+    "CHI_FEATURE_CLEAN_EVICT_RETRY",
     "CHI_FEATURE_CLEAN_READ_UNIQUE",
     "CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR",
     "CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY",
@@ -1633,6 +1678,7 @@ __all__ = [
     "CHI_REQUEST_RETRY_DEFINITION",
     "CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE",
+    "CHI_SYSTEM_CLEAN_EVICT_RETRY_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE",

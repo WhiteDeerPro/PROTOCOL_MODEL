@@ -10,7 +10,8 @@ The profile is intentionally narrow.  It closes clean ``ReadShared`` and
 ``CleanUnique`` permission upgrades, the ``UD`` owner-transfer path for
 ``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
 clean ``Evict``, explicit ``UD`` ``WriteBackFull``, one successful clean
-``ReadUnique`` Request-Retry cycle, a pre-snoop ``ReadUnique`` NDERR
+``ReadUnique`` or clean ``Evict`` Request-Retry cycle, a pre-snoop
+``ReadUnique`` NDERR
 completion, and their
 narrow composition with an independent same-line Snoop while the Requester
 waits for P-Credit.  The ``SD`` state exists only for the CleanUnique
@@ -34,6 +35,7 @@ from protocol_model.semantics import (
 )
 from protocol_model.system.contracts.address import AddressWindow
 
+from ..interface.request_retry import ChiRequestRetryPhase
 from ..participants.coherence import (
     ChiCacheState,
     ChiCoherentHomeNode,
@@ -99,6 +101,7 @@ from ..representation.snp import (
 )
 from .capability import (
     CHI_FEATURE_CLEAN_EVICT,
+    CHI_FEATURE_CLEAN_EVICT_RETRY,
     CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
@@ -123,6 +126,7 @@ _COHERENCE_FEATURES = frozenset(
     (
         *_CLEAN_READ_FEATURES,
         CHI_FEATURE_CLEAN_EVICT,
+        CHI_FEATURE_CLEAN_EVICT_RETRY,
         CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
         CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
         CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
@@ -131,6 +135,12 @@ _COHERENCE_FEATURES = frozenset(
         CHI_FEATURE_DIRTY_WRITEBACK,
         CHI_FEATURE_MAKE_UNIQUE,
         CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
+    )
+)
+_COHERENCE_RETRY_FEATURES = frozenset(
+    (
+        CHI_FEATURE_CLEAN_EVICT_RETRY,
+        CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
     )
 )
 _COHERENCE_SNOOP_TYPES = (
@@ -308,7 +318,7 @@ class ChiGrantCoherentHomePCredit:
 
 @dataclass(frozen=True)
 class ChiRetryCoherentRequest:
-    """Ask one requester to consume credit and reissue ReadUnique."""
+    """Ask one requester to consume credit and reissue a retained request."""
 
     requester_node_id: int
     transaction_id: int
@@ -363,6 +373,11 @@ class ChiCoherenceState:
         tuple[int, int],
         ChiNetworkPacket,
     ] = field(default_factory=dict)
+    expected_retry_acks: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
+    expected_pcredit_grants: tuple[ChiNetworkPacket, ...] = ()
     expected_snoop_deliveries: Mapping[
         tuple[int, int],
         ChiNetworkPacket,
@@ -713,6 +728,119 @@ class ChiCoherenceState:
                 "request requires exactly one expected CompData"
             )
 
+        retry_acks = dict(self.expected_retry_acks)
+        for key, retry_ack_packet in retry_acks.items():
+            retry_ack = (
+                retry_ack_packet.message
+                if isinstance(retry_ack_packet, ChiNetworkPacket)
+                else None
+            )
+            valid_key = (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and all(
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                    for value in key
+                )
+                and key[1] < (1 << 12)
+                and key[0] in request_nodes
+            )
+            requester_state = (
+                request_nodes[key[0]] if valid_key else None
+            )
+            pending_request = (
+                requester_state.pending_transactions.get(key[1])
+                if requester_state is not None
+                else None
+            )
+            retry_entry = (
+                requester_state.request_retry.entries.get(key[1])
+                if requester_state is not None
+                else None
+            )
+            if (
+                not valid_key
+                or not isinstance(retry_ack, ChiRetryAckMessage)
+                or retry_ack_packet.target_id != key[0]
+                or retry_ack_packet.packet_index != 0
+                or retry_ack_packet.packet_count != 1
+                or retry_ack.transaction_id != key[1]
+                or not isinstance(
+                    pending_request,
+                    (ChiReadUniqueMessage, ChiEvictMessage),
+                )
+                or retry_entry is None
+                or retry_entry.current_request != pending_request
+                or retry_entry.phase
+                is not ChiRequestRetryPhase.INITIAL_IN_FLIGHT
+            ):
+                raise ValueError(
+                    "expected RetryAck requires one exact Home packet and "
+                    "one initial retained retryable request"
+                )
+            matching_debt = any(
+                debt.requester_id == key[0]
+                and debt.transaction_id == key[1]
+                and debt.protocol_credit_type
+                == retry_ack.protocol_credit_type
+                for debt in self.home.request_retry.retry_debts
+            )
+            matching_reservation = (
+                self.home.request_retry.reservations.get(
+                    (key[0], retry_ack.protocol_credit_type),
+                    0,
+                )
+                > 0
+            )
+            if not matching_debt and not matching_reservation:
+                raise ValueError(
+                    "expected RetryAck has no matching Home debt or "
+                    "granted reservation"
+                )
+        object.__setattr__(
+            self,
+            "expected_retry_acks",
+            MappingProxyType(retry_acks),
+        )
+
+        pcredit_grants = tuple(self.expected_pcredit_grants)
+        if any(
+            not isinstance(packet, ChiNetworkPacket)
+            or not isinstance(packet.message, ChiPCrdGrantMessage)
+            or packet.target_id not in request_nodes
+            or packet.packet_index != 0
+            or packet.packet_count != 1
+            for packet in pcredit_grants
+        ):
+            raise ValueError(
+                "expected P-Credit grants require exact single-packet "
+                "Home responses to registered Requesters"
+            )
+        expected_grants_by_key: dict[tuple[int, int], int] = {}
+        for packet in pcredit_grants:
+            key = (
+                packet.target_id,
+                packet.message.protocol_credit_type,
+            )
+            expected_grants_by_key[key] = (
+                expected_grants_by_key.get(key, 0) + 1
+            )
+        if any(
+            count
+            > self.home.request_retry.reservations.get(key, 0)
+            for key, count in expected_grants_by_key.items()
+        ):
+            raise ValueError(
+                "expected P-Credit grant exceeds its Home reservation"
+            )
+        object.__setattr__(
+            self,
+            "expected_pcredit_grants",
+            pcredit_grants,
+        )
+
         snoop_deliveries = dict(self.expected_snoop_deliveries)
         snoop_responses = dict(self.expected_snoop_responses)
 
@@ -1042,6 +1170,13 @@ class ChiCoherenceSession(
                 "ReadUnique Retry requires the clean ReadUnique base feature"
             )
         if (
+            CHI_FEATURE_CLEAN_EVICT_RETRY in features
+            and CHI_FEATURE_CLEAN_EVICT not in features
+        ):
+            raise ValueError(
+                "Evict Retry requires the clean Evict base feature"
+            )
+        if (
             home.read_unique_nderr_policy is not None
             and CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR not in features
         ):
@@ -1072,6 +1207,22 @@ class ChiCoherenceSession(
             raise ValueError(
                 "the ReadUnique Retry feature requires a configured coherent "
                 "Home retry policy"
+            )
+        if (
+            home.evict_retry_policy is not None
+            and CHI_FEATURE_CLEAN_EVICT_RETRY not in features
+        ):
+            raise ValueError(
+                "a configured coherent Home Evict retry policy requires "
+                "the Evict Retry feature"
+            )
+        if (
+            CHI_FEATURE_CLEAN_EVICT_RETRY in features
+            and home.evict_retry_policy is None
+        ):
+            raise ValueError(
+                "the Evict Retry feature requires a configured coherent "
+                "Home Evict retry policy"
             )
         if (
             CHI_FEATURE_DIRTY_UNIQUE_TRANSFER in features
@@ -1410,6 +1561,8 @@ class ChiCoherenceSession(
             and not state.expected_clean_unique_completions
             and not state.expected_make_unique_completions
             and not state.expected_coherent_read_completions
+            and not state.expected_retry_acks
+            and not state.expected_pcredit_grants
             and not state.expected_snoop_deliveries
             and not state.expected_snoop_responses
         )
@@ -1458,6 +1611,8 @@ class ChiCoherenceSession(
                 *state.expected_clean_unique_completions.values(),
                 *state.expected_make_unique_completions.values(),
                 *state.expected_coherent_read_completions.values(),
+                *state.expected_retry_acks.values(),
+                *state.expected_pcredit_grants,
             )
         ):
             return SemanticFault(
@@ -1569,18 +1724,39 @@ class ChiCoherenceSession(
         state: ChiCoherenceState,
     ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
         if (
-            CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
-            not in self.enabled_features
+            not self.enabled_features & _COHERENCE_RETRY_FEATURES
         ):
             return self._fault(
                 state,
                 "retry_feature",
-                "ReadUnique Retry is not enabled by the feature contract",
+                "no coherent Request-Retry modifier is enabled by the "
+                "feature contract",
             )
         transition = self.home.step(
             state.home,
             ChiHomeGrantPCredit(),
         )
+        expected_pcredit_grants = state.expected_pcredit_grants
+        if (
+            transition.fault is None
+            and transition.blocked is None
+        ):
+            if (
+                len(transition.emissions) != 1
+                or not isinstance(
+                    transition.emissions[0].message,
+                    ChiPCrdGrantMessage,
+                )
+            ):
+                return self._fault(
+                    state,
+                    "pcredit_grant_shape",
+                    "Home P-Credit grant must emit exactly one PCrdGrant",
+                )
+            expected_pcredit_grants = (
+                *state.expected_pcredit_grants,
+                transition.emissions[0],
+            )
         candidate = ChiCoherenceState(
             home=transition.state,
             request_nodes=state.request_nodes,
@@ -1596,6 +1772,8 @@ class ChiCoherenceSession(
             expected_coherent_read_completions=(
                 state.expected_coherent_read_completions
             ),
+            expected_retry_acks=state.expected_retry_acks,
+            expected_pcredit_grants=expected_pcredit_grants,
             expected_snoop_deliveries=(
                 state.expected_snoop_deliveries
             ),
@@ -1608,15 +1786,6 @@ class ChiCoherenceSession(
         state: ChiCoherenceState,
         action: ChiRetryCoherentRequest,
     ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
-        if (
-            CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
-            not in self.enabled_features
-        ):
-            return self._fault(
-                state,
-                "retry_feature",
-                "ReadUnique Retry is not enabled by the feature contract",
-            )
         node = self.request_nodes.get(action.requester_node_id)
         if node is None:
             return self._fault(
@@ -1630,6 +1799,20 @@ class ChiCoherenceSession(
                 "requester_authority",
                 f"NodeID {action.requester_node_id} cannot retry requests "
                 "in this construction",
+            )
+        retained_request = state.request_nodes[
+            action.requester_node_id
+        ].pending_transactions.get(action.transaction_id)
+        retry_feature = self._retry_feature(retained_request)
+        if (
+            retry_feature is None
+            or retry_feature not in self.enabled_features
+        ):
+            return self._fault(
+                state,
+                "retry_feature",
+                "the retained request opcode is not enabled by its "
+                "Request-Retry modifier",
             )
         transition = node.step(
             state.request_nodes[action.requester_node_id],
@@ -2013,7 +2196,25 @@ class ChiCoherenceSession(
                         "clean Evict is not enabled by the resolved feature "
                         "contract",
                     )
+                if (
+                    not message.allow_retry
+                    and CHI_FEATURE_CLEAN_EVICT_RETRY
+                    not in self.enabled_features
+                ):
+                    return self._fault(
+                        state,
+                        "retry_feature",
+                        "credited Evict is not enabled by the feature "
+                        "contract",
+                    )
                 requester_state = state.request_nodes[packet.source_id]
+                retry_fault = self._retry_request_delivery_fault(
+                    state,
+                    packet,
+                    message,
+                )
+                if retry_fault is not None:
+                    return SemanticStep(state, fault=retry_fault)
                 pending_request = requester_state.pending_transactions.get(
                     message.transaction_id
                 )
@@ -2127,6 +2328,14 @@ class ChiCoherenceSession(
                         "credited ReadUnique is not enabled by the feature "
                         "contract",
                     )
+                if isinstance(message, ChiReadUniqueMessage):
+                    retry_fault = self._retry_request_delivery_fault(
+                        state,
+                        packet,
+                        message,
+                    )
+                    if retry_fault is not None:
+                        return SemanticStep(state, fault=retry_fault)
                 action = ChiHomeAcceptCoherentRead(packet)
             elif isinstance(message, ChiWriteBackFullMessage):
                 if packet.source_id not in self.requester_node_ids:
@@ -2391,6 +2600,8 @@ class ChiCoherenceSession(
             expected_coherent_read_completions = (
                 state.expected_coherent_read_completions
             )
+            expected_retry_acks = state.expected_retry_acks
+            expected_pcredit_grants = state.expected_pcredit_grants
             expected_snoop_deliveries = (
                 state.expected_snoop_deliveries
             )
@@ -2402,25 +2613,94 @@ class ChiCoherenceSession(
             ):
                 if (
                     len(transition.emissions) != 1
-                    or not isinstance(
-                        transition.emissions[0].message,
-                        ChiCompMessage,
-                    )
                 ):
                     return self._fault(
                         state,
                         "evict_completion_shape",
-                        "Home Evict acceptance must emit exactly one Comp",
+                        "Home Evict acceptance must emit exactly one "
+                        "RetryAck or Comp",
                     )
-                expected = dict(state.expected_evict_completions)
-                expected[
-                    (packet.source_id, message.transaction_id)
-                ] = transition.emissions[0]
-                expected_evict_completions = expected
+                evict_response = transition.emissions[0]
+                if isinstance(evict_response.message, ChiCompMessage):
+                    expected = dict(state.expected_evict_completions)
+                    expected[
+                        (packet.source_id, message.transaction_id)
+                    ] = evict_response
+                    expected_evict_completions = expected
+                elif isinstance(
+                    evict_response.message,
+                    ChiRetryAckMessage,
+                ):
+                    if (
+                        CHI_FEATURE_CLEAN_EVICT_RETRY
+                        not in self.enabled_features
+                        or not message.allow_retry
+                    ):
+                        return self._fault(
+                            state,
+                            "evict_retry_feature",
+                            "Home cannot retry Evict without the "
+                            "opcode-specific modifier on an initial request",
+                        )
+                else:
+                    return self._fault(
+                        state,
+                        "evict_completion_shape",
+                        "Home Evict acceptance must emit exactly one "
+                        "RetryAck or Comp",
+                    )
             if (
                 transition.fault is None
                 and transition.blocked is None
             ):
+                retry_ack_emissions = tuple(
+                    emission
+                    for emission in transition.emissions
+                    if isinstance(
+                        emission.message,
+                        ChiRetryAckMessage,
+                    )
+                )
+                if len(retry_ack_emissions) > 1:
+                    return self._fault(
+                        state,
+                        "retry_ack_shape",
+                        "one Home transition emitted multiple RetryAck "
+                        "packets",
+                    )
+                if retry_ack_emissions:
+                    retry_ack_packet = retry_ack_emissions[0]
+                    retry_ack = retry_ack_packet.message
+                    retained_request = state.request_nodes[
+                        retry_ack_packet.target_id
+                    ].pending_transactions.get(
+                        retry_ack.transaction_id
+                    ) if (
+                        retry_ack_packet.target_id
+                        in state.request_nodes
+                    ) else None
+                    retry_feature = self._retry_feature(retained_request)
+                    key = (
+                        retry_ack_packet.target_id,
+                        retry_ack.transaction_id,
+                    )
+                    if (
+                        retry_ack_packet.source_id != self.home.node_id
+                        or retry_ack_packet.target_id
+                        not in self.requester_node_ids
+                        or retry_feature is None
+                        or retry_feature not in self.enabled_features
+                        or key in state.expected_retry_acks
+                    ):
+                        return self._fault(
+                            state,
+                            "retry_ack_evidence",
+                            "Home RetryAck does not select one new retained "
+                            "request with its opcode-specific modifier",
+                        )
+                    retry_acks = dict(state.expected_retry_acks)
+                    retry_acks[key] = retry_ack_packet
+                    expected_retry_acks = retry_acks
                 if consumed_snoop_response_key is not None:
                     responses = dict(state.expected_snoop_responses)
                     del responses[consumed_snoop_response_key]
@@ -2644,6 +2924,8 @@ class ChiCoherenceSession(
                 expected_coherent_read_completions=(
                     expected_coherent_read_completions
                 ),
+                expected_retry_acks=expected_retry_acks,
+                expected_pcredit_grants=expected_pcredit_grants,
                 expected_snoop_deliveries=(
                     expected_snoop_deliveries
                 ),
@@ -2775,6 +3057,10 @@ class ChiCoherenceSession(
                 expected_coherent_read_completions=(
                     state.expected_coherent_read_completions
                 ),
+                expected_retry_acks=state.expected_retry_acks,
+                expected_pcredit_grants=(
+                    state.expected_pcredit_grants
+                ),
                 expected_snoop_deliveries=deliveries,
                 expected_snoop_responses=responses,
             )
@@ -2787,20 +3073,37 @@ class ChiCoherenceSession(
                     f"NodeID {packet.target_id} cannot receive RetryAck "
                     "in this construction",
                 )
+            retained_request = state.request_nodes[
+                packet.target_id
+            ].pending_transactions.get(message.transaction_id)
+            retry_feature = self._retry_feature(retained_request)
             if (
-                CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
-                not in self.enabled_features
+                retry_feature is None
+                or retry_feature not in self.enabled_features
             ):
                 return self._fault(
                     state,
                     "retry_feature",
-                    "RetryAck is not enabled by the feature contract",
+                    "RetryAck does not match a retained request whose "
+                    "opcode-specific Retry modifier is enabled",
                 )
             if packet.source_id != self.home.node_id:
                 return self._fault(
                     state,
                     "retry_home",
                     "RetryAck does not come from the selected Home",
+                )
+            if (
+                state.expected_retry_acks.get(
+                    (packet.target_id, message.transaction_id)
+                )
+                != packet
+            ):
+                return self._fault(
+                    state,
+                    "retry_ack_correlation",
+                    "RetryAck does not exactly match a Home-produced "
+                    "response",
                 )
             action = ChiRnAcceptRetryAck(packet)
         elif isinstance(message, ChiPCrdGrantMessage):
@@ -2812,19 +3115,25 @@ class ChiCoherenceSession(
                     "in this construction",
                 )
             if (
-                CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
-                not in self.enabled_features
+                not self.enabled_features & _COHERENCE_RETRY_FEATURES
             ):
                 return self._fault(
                     state,
                     "retry_feature",
-                    "PCrdGrant is not enabled by the feature contract",
+                    "PCrdGrant is not enabled by an opcode-specific "
+                    "Request-Retry modifier",
                 )
             if packet.source_id != self.home.node_id:
                 return self._fault(
                     state,
                     "retry_home",
                     "PCrdGrant does not come from the selected Home",
+                )
+            if packet not in state.expected_pcredit_grants:
+                return self._fault(
+                    state,
+                    "pcredit_grant_correlation",
+                    "PCrdGrant does not exactly match a Home-produced grant",
                 )
             action = ChiRnAcceptPCrdGrant(packet)
         elif isinstance(message, ChiCompMessage):
@@ -2886,6 +3195,10 @@ class ChiCoherenceSession(
                     expected_coherent_read_completions=(
                         state.expected_coherent_read_completions
                     ),
+                    expected_retry_acks=state.expected_retry_acks,
+                    expected_pcredit_grants=(
+                        state.expected_pcredit_grants
+                    ),
                     expected_snoop_deliveries=(
                         state.expected_snoop_deliveries
                     ),
@@ -2943,6 +3256,10 @@ class ChiCoherenceSession(
                     expected_make_unique_completions=completions,
                     expected_coherent_read_completions=(
                         state.expected_coherent_read_completions
+                    ),
+                    expected_retry_acks=state.expected_retry_acks,
+                    expected_pcredit_grants=(
+                        state.expected_pcredit_grants
                     ),
                     expected_snoop_deliveries=(
                         state.expected_snoop_deliveries
@@ -3008,6 +3325,10 @@ class ChiCoherenceSession(
                 ),
                 expected_coherent_read_completions=(
                     state.expected_coherent_read_completions
+                ),
+                expected_retry_acks=state.expected_retry_acks,
+                expected_pcredit_grants=(
+                    state.expected_pcredit_grants
                 ),
                 expected_snoop_deliveries=(
                     state.expected_snoop_deliveries
@@ -3091,6 +3412,10 @@ class ChiCoherenceSession(
                     state.expected_make_unique_completions
                 ),
                 expected_coherent_read_completions=completions,
+                expected_retry_acks=state.expected_retry_acks,
+                expected_pcredit_grants=(
+                    state.expected_pcredit_grants
+                ),
                 expected_snoop_deliveries=(
                     state.expected_snoop_deliveries
                 ),
@@ -3122,6 +3447,55 @@ class ChiCoherenceSession(
                 f"Request Node cannot consume {type(message).__name__}",
             )
         transition = node.step(state.request_nodes[packet.target_id], action)
+        expected_retry_acks = state.expected_retry_acks
+        expected_pcredit_grants = state.expected_pcredit_grants
+        if (
+            transition.fault is None
+            and transition.blocked is None
+            and isinstance(message, ChiRetryAckMessage)
+        ):
+            retry_acks = dict(state.expected_retry_acks)
+            del retry_acks[(packet.target_id, message.transaction_id)]
+            expected_retry_acks = retry_acks
+        elif (
+            transition.fault is None
+            and transition.blocked is None
+            and isinstance(message, ChiPCrdGrantMessage)
+        ):
+            grants = list(state.expected_pcredit_grants)
+            grants.remove(packet)
+            expected_pcredit_grants = tuple(grants)
+        if isinstance(
+            message,
+            (ChiRetryAckMessage, ChiPCrdGrantMessage),
+        ):
+            states = dict(state.request_nodes)
+            states[packet.target_id] = transition.state
+            candidate = ChiCoherenceState(
+                home=state.home,
+                request_nodes=states,
+                expected_evict_completions=(
+                    state.expected_evict_completions
+                ),
+                expected_clean_unique_completions=(
+                    state.expected_clean_unique_completions
+                ),
+                expected_make_unique_completions=(
+                    state.expected_make_unique_completions
+                ),
+                expected_coherent_read_completions=(
+                    state.expected_coherent_read_completions
+                ),
+                expected_retry_acks=expected_retry_acks,
+                expected_pcredit_grants=expected_pcredit_grants,
+                expected_snoop_deliveries=(
+                    state.expected_snoop_deliveries
+                ),
+                expected_snoop_responses=(
+                    state.expected_snoop_responses
+                ),
+            )
+            return self._finish(candidate, transition)
         return self._replace_request_node(state, packet.target_id, transition)
 
     def _address_authority_fault(
@@ -3162,6 +3536,63 @@ class ChiCoherenceSession(
         if isinstance(request, ChiReadNotSharedDirtyMessage):
             return CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY
         return CHI_FEATURE_CLEAN_READ_SHARED
+
+    @staticmethod
+    def _retry_feature(request: object) -> ChiFeatureKey | None:
+        if isinstance(request, ChiReadUniqueMessage):
+            return CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+        if isinstance(request, ChiEvictMessage):
+            return CHI_FEATURE_CLEAN_EVICT_RETRY
+        return None
+
+    def _retry_request_delivery_fault(
+        self,
+        state: ChiCoherenceState,
+        packet: ChiNetworkPacket,
+        request: ChiReadUniqueMessage | ChiEvictMessage,
+    ) -> SemanticFault | None:
+        requester_state = state.request_nodes[packet.source_id]
+        entry = requester_state.request_retry.entries.get(
+            request.transaction_id
+        )
+        expected_phase = (
+            ChiRequestRetryPhase.INITIAL_IN_FLIGHT
+            if request.allow_retry
+            else ChiRequestRetryPhase.RETRIED_IN_FLIGHT
+        )
+        if (
+            entry is None
+            or entry.home_node_id != self.home.node_id
+            or entry.current_request != request
+            or entry.phase is not expected_phase
+        ):
+            return SemanticFault(
+                f"{self.name}.retry_request_delivery",
+                (
+                    f"{type(request).__name__} does not match the retained "
+                    f"Requester form in {expected_phase.value}"
+                ),
+                ConstraintScope.SYSTEM,
+                self.name,
+            )
+        if (
+            request.allow_retry
+            and (
+                packet.source_id,
+                request.transaction_id,
+            )
+            in state.expected_retry_acks
+        ):
+            return SemanticFault(
+                f"{self.name}.retry_request_replay",
+                (
+                    f"initial {type(request).__name__} already produced an "
+                    "undelivered RetryAck"
+                ),
+                ConstraintScope.SYSTEM,
+                self.name,
+            )
+        return None
 
     @staticmethod
     def _snoop_feature(
@@ -3206,6 +3637,8 @@ class ChiCoherenceSession(
             expected_coherent_read_completions=(
                 state.expected_coherent_read_completions
             ),
+            expected_retry_acks=state.expected_retry_acks,
+            expected_pcredit_grants=state.expected_pcredit_grants,
             expected_snoop_deliveries=(
                 state.expected_snoop_deliveries
             ),

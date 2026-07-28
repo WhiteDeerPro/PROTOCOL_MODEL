@@ -74,7 +74,7 @@ coherence network session
 
 1. `ResolvedChiSystem.require_closed()` 成功；
 2. feature intent 选择 requester，以及 clean ReadShared、clean ReadUnique、其 NDERR/Retry modifier、
-   clean Evict、clean-peer CleanUnique、独立 MakeUnique、
+   clean Evict 及其 Retry modifier、clean-peer CleanUnique、独立 MakeUnique、
    `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER`、dirty unique-transfer、
    dirty writeback，或 `CHI_MESI_NO_SD_REQUIRED_FEATURES` policy preset；ReadUnique NDERR 不增加 flow，
    shared-dirty CleanUnique 依赖 clean-peer CleanUnique 并增加 Snoopee→Home DAT flow，
@@ -291,15 +291,23 @@ coherence decision
 - delivery connection、receiver port 和 channel 命中唯一 delivery index；
 - packet target NodeID 等于接收 participant 的 NodeID；
 - Read/CompAck 只能进入本构造的 requester/Home 关系；
+- retryable initial/credited REQ 必须匹配 Requester retained entry 的 current form 与 phase；已经产生
+  RetryAck 的 initial REQ replay 在 Home mutation 前作为 system correlation fault 拒绝；
 - SNP 只进入声明的 Snoopee；
 - SNP 必须命中并一次性消费 Home-produced exact delivery evidence；transaction identity 相同但
   opcode/message 被替换，或 completion 后重放的 SNP，都会在进入 RN participant 前被拒绝；
 - SnpResp/SnpRespData 只由声明的 Snoopee 返回相应 Home；
+- `RetryAck`/`PCrdGrant` 必须命中并一次性消费 Home 实际产生的完整 packet evidence；credit type、
+  source/target、channel 或 packet metadata 被替换以及 replay 都不能驱动 Requester retry ledger；
 - RSP/DAT completion 只进入已授权 requester，并命中、一次性消费 Home 实际产生的完整 packet
   evidence；data、Resp、DBID、RespErr 或 packet metadata 任一被替换以及 completion replay 都被拒绝。
 
 这些 evidence 是 system correlation，不增加 wire 字段；它们把“身份相似的输入”收窄为“本 session
 实际发出的 packet”，同时保持 participant state 为 cache permission 与 transaction lifecycle 的权威。
+Home 的 P-Credit reservation 仍按 `(Requester, PCrdType)` 池化；`PCrdGrant/PCrdReturn` 不携带 TxnID，
+因此 standalone Home participant 不制造 transaction-credit 绑定，也不能在 grant 后单独判断某个 initial
+REQ 是否为旧副本。需要防伪/重放闭包的调用方使用 composition session，由 RN retained phase/current form
+与 packet provenance 共同判定。
 
 router 不解释 coherence opcode，也不修改 protocol message。它消费 packet route identity 和 transport
 resource；participant 才解释 Read、SNP、response 和 completion。
@@ -342,6 +350,10 @@ copy 可以陈旧，最新数据及其最终写回责任由相应 holder 持有�
   source 的 clean owner/sharer；stale/non-holder 或明确的 shared-dirty holder hint no-op。`Comp_I`
   通过原 TxnID 退休 RN pending，
   DBID 字段不形成 lease，不产生 DAT/CompAck，backing payload/version 与 Home allocator 不变；
+- 选择 clean Evict Retry modifier 时，初始 `Evict` 可由独立 Home policy 返回 `RetryAck`。拒绝阶段只建立
+  retry debt，不删除 holder、不修改 backing，也不分配 DBID/Snoop；`PCrdGrant` 预留真实容量，
+  `AllowRetry=0` 且 `PCrdType` 匹配的 reissue 原子消费 reservation 后才进入上一条 Evict lifecycle。
+  Grant 与 Ack 可按任一顺序到达，pending Evict 在等待期间仍是无 payload `I` 并可响应独立同址 Snoop；
 - 启用 `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 时，Home 可以对目录中唯一的
   `shared_dirty_owner` 发同一个 `SnpCleanInvalid(DoNotGoToSD=1, RetToSrc=0)`；该受限 `SD` peer
   以 `SnpRespData_I_PD` 返回最新数据并原子失效。Home 将数据保存在
@@ -361,7 +373,7 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
   CHI SN-F physical commit；
 - MakeUnique Retry、DERR/NDERR、MTE Update、partial write、multi-Home 等扩展；当前 MakeUnique
   executable profile 为 tagless、OK-only；
-- 从 victim policy 自动触发 eviction/writeback、Evict Retry、deliberate dirty invalidate 与
+- 从 victim policy 自动触发 eviction/writeback、deliberate dirty invalidate 与
   WriteEvict family；显式 clean Evict 以及选择一条 `UD` line 后的
   `WriteBackFull → CompDBIDResp → CopyBackWrData_UD_PD`、同址 invalidating-Snoop 后的
   `CopyBackWrData_I` cancel 已经闭合；
@@ -383,8 +395,9 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
 以及 owner eviction/recovery。
 
 当前 feature closure 可以分别选择 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
-MakeUnique、clean Evict、clean ReadUnique NDERR/Retry modifier、shared-dirty-peer CleanUnique、
-dirty-unique、dirty-writeback 和独立的 MESI ReadNotSharedDirty 十一个 feature。NDERR modifier 依赖
+MakeUnique、clean Evict、clean Evict Retry、clean ReadUnique NDERR/Retry modifier、
+shared-dirty-peer CleanUnique、dirty-unique、dirty-writeback 和独立的 MESI ReadNotSharedDirty
+十二个 feature。NDERR modifier 依赖
 clean ReadUnique，只增加
 Requester/Home NDERR 原子能力和显式 system lifecycle fact，不增加 flow；Retry modifier 同样依赖 base，
 但增加 Requester/Home Retry 原子能力、Home→Requester RSP flow 和另一项 system lifecycle fact。
@@ -403,6 +416,11 @@ Requester→Home REQ、Home→Requester RSP、四个 participant 原子能力与
 通用 packet-delivery completion evidence 防止未经过 Home 或字段被替换的 `Comp_I` 退休 request。
 pending Evict 遇到由另一笔 transaction 产生的同址 Snoop 时返回 `SnpResp_I`，并保留原 Evict
 correlation。
+
+`CHI_FEATURE_CLEAN_EVICT_RETRY` 依赖 clean Evict base，增加 Requester/Home 的通用 Retry 原子能力、
+具名 Home→Requester `retry_response` RSP flow 和独立 system lifecycle fact。它采用独立
+`evict_retry_policy`，不会因启用 ReadUnique Retry 而放开 Evict，反向也一样；base Evict 的 completion
+flow 与 Retry response 可以落在同一 resolved RSP route，但仍是两个可审计的 flow schema。
 
 `CHI_FEATURE_MAKE_UNIQUE` 也独立于 CleanUnique，dependency set 为空；它显式要求
 Requester/Home 和可为空的 Snoopee finite-set role 及一项 system lifecycle，并闭合五类 flow：Requester→Home REQ、
@@ -801,7 +819,7 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 
 下列能力仍在当前切片之外：
 
-- 自动 victim selection/writeback scheduling、Evict Retry/deliberate dirty invalidate、
+- 自动 victim selection/writeback scheduling、deliberate dirty invalidate、
   WriteEvict family、CMO/DVM、等待者合并和一般 transient phase；
 - MakeUnique Retry、DERR/NDERR、MTE Update、partial write 与 multi-Home 扩展；
 - dirty writeback 与 RetryAck/P-Credit 或错误响应的组合，以及超出已闭合 invalidating-Snoop cancel 的
@@ -838,7 +856,9 @@ feature/capability/flow closure、packet-delivery coherence session 和 topology
 调用方构造的单 XP 与 2×2 XP mesh 仍属于场景 recipe。2×2 showcase 是可执行的 clean ReadUnique 证据，
 并由一个不发布 artifact 的 smoke test 调用；MESI no-SD 与受限 shared-dirty CleanUnique 路径当前保存在
 定向 network witness 中。clean Evict 另有只含 REQ/RSP direct route 的两 packet resolved witness，
-检查零 SNP/DAT/CompAck、Home 条件 holder removal、backing 不变与共同静止。MakeUnique 另有
+检查零 SNP/DAT/CompAck、Home 条件 holder removal、backing 不变与共同静止；其 Retry modifier 另有
+初始 Evict、`RetryAck`、`PCrdGrant`、credited Evict、`Comp_I` 的五 packet resolved witness，检查
+exact Retry response evidence、独立 feature/policy gate、零 SNP/DAT/CompAck 与共同静止。MakeUnique 另有
 dirty-peer 五 packet resolved witness，检查独立 feature/capability/flow closure、
 `SnpMakeInvalid` 的 dirty discard、零 DAT、`Comp_UC` 原子安装 RN-local intent 为 `UD`、Ack 前
 DBID/line reservation、Ack 后 unique owner，以及 backing payload/version 不变。direct participant session

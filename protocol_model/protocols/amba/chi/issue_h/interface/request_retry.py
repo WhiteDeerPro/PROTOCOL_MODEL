@@ -3,7 +3,11 @@
 This module owns the protocol-local correlation and credit conservation shared
 by opcode-specific requester and Home participants.  It deliberately knows
 nothing about cache state, directory state, backing storage, packets, routes,
-or scheduler policy.
+or scheduler policy.  Home P-Credits are pooled by ``(Requester, PCrdType)``:
+after a grant, the Home state intentionally does not bind that reservation to
+one TxnID.  Exact delivered-request generation and replay checks therefore
+belong to a composition that can also see Requester retained state and packet
+provenance.
 """
 
 from __future__ import annotations

@@ -175,7 +175,7 @@ lane 或 channel 内重排，lineage 仍需进一步绑定 packet-copy identity�
 
 feature catalog 把 direct `ReadNoSnp`、direct NDERR/Request Retry modifier、clean `ReadShared`、clean
 `ReadUnique`、clean `ReadUnique` NDERR/Request Retry modifier、clean/shared-dirty peer
-`CleanUnique`、`MakeUnique`、clean `Evict`、
+`CleanUnique`、`MakeUnique`、clean `Evict` 及其 Request Retry modifier、
 dirty unique transfer、dirty writeback 和 MESI `ReadNotSharedDirty` profile 展开为 participant
 capability、channel flow 与 system lifecycle requirement。flow projector 只处理合同所需 feature 及其依赖，
 并只从已成功构造的 `ChiTransportNetworkSession` 产生证据：一条 topology edge 的存在本身不足以证明
@@ -211,6 +211,11 @@ canonical declaration；它们没有建立 topology-visible Memory/SN 或 HN→S
 reservation 与 credit conservation。direct-read facade 和 coherent participant 都委派这份合同，再把
 状态投影回各自的公开 participant state。
 
+P-Credit 池不把 Grant/Return 反向绑定到某个 TxnID；standalone Home participant 因而只判断本地
+debt/reservation 能证明的事实。grant 后的旧 initial REQ、伪造或 exact replay 由 composition session
+结合 RN retained phase/current form 与 packet provenance 拒绝，不在 Home 中增加协议并不存在的
+transaction-credit association。
+
 `ChiReadNoSnpRetrySystemSession` 在 direct-read profile 上增加：
 
 ```text
@@ -244,6 +249,23 @@ initial ReadUnique
 消耗 Home reservation 后才进入原有 clean `ReadUnique` lifecycle；Grant 可以先于 Ack 到达。当前 coherent
 slice 以一次 Retry 后成功为基线；Retry 与 pre-Snoop NDERR 及独立同址 Snoop 的窄组合见下文。
 取消、同 Home/type 多 waiter 公平性和 Retry/writeback 组合仍未实现。
+
+`CHI_FEATURE_CLEAN_EVICT_RETRY` 独立修饰 clean `Evict`，不借用 ReadUnique 的 policy gate：
+
+```text
+initial Evict
+  → RetryAck
+  → matching PCrdGrant
+  → AllowRetry=0 credited Evict
+  → Comp_I
+```
+
+RN 在初始 Evict 之前已经从 `UC/UCE/SC` 转为无 payload 的 `I`。Home 首次拒绝只建立 retry debt，不删除
+directory membership、不修改 backing，也不分配 DBID/Snoop；匹配 P-Credit 预留容量，credited reissue
+原子消费 reservation 后才进入原有 Evict hint lifecycle。packet-delivery composition 对 Home 实际产生的
+`RetryAck` 和 `PCrdGrant` 保存并一次性消费 exact packet evidence，因此字段或 metadata 被替换以及 replay
+都在进入 RN participant 前被拒绝；retryable REQ 也必须匹配 retained entry 的 current form/phase，旧
+initial REQ replay 不会再次驱动 Home。Grant 与 Ack 仍可按任一顺序到达。
 
 ### Coherent reads 与受限 dirty ownership transfer
 
@@ -428,7 +450,8 @@ shared-dirty responsibility 时保持 directory 不变并照常完成。所有�
 的 `Comp_I` 直接退休 RN pending。
 outstanding Evict 遇同址 Snoop 时 RN 返回 `SnpResp_I` 并保留 Evict correlation。当前 clean profile
 拒绝从 `I/UD/SD` 主动发起，不包含自动 victim/LRU、普通 dirty replacement、deliberate dirty
-invalidate、WriteEvict family 或 Evict Retry。
+invalidate 或 WriteEvict family。选择 `CHI_FEATURE_CLEAN_EVICT_RETRY` 时，上述 hint lifecycle 前可增加
+一次 Request-Retry；它仍不引入 DAT、SNP 或 CompAck。
 
 `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 依赖上述 clean feature，并增加一个受限分支：
 
@@ -557,7 +580,8 @@ domain 是构造期声明的 eligible peer 集合，并非一笔事务已经选�
 directory 从中选择实际 holder 并生成 per-target packet copy；session opening 会拒绝 directory holder
 越出 domain。`ChiCoherenceSession.from_resolved()` 从同一份 closed authority/feature construction 建立
 恰好由 `requester ∪ snoopees` 构成的 RN registry；它同时保留 requester-only issue、Snoopee-only SNP/RSP 和
-Shared/Unique/clean-ReadUnique-NDERR/Retry/clean/shared-dirty CleanUnique、MakeUnique、
+Shared/Unique/clean-ReadUnique-NDERR/Retry/clean Evict/clean-Evict-Retry、
+clean/shared-dirty CleanUnique、MakeUnique、
 dirty-unique/dirty-writeback/MESI no-SD feature enablement。直接调用 packet-delivery API 也会重复检查
 这些 role authority，不能绕过
 构造期边界。当前窄
@@ -566,7 +590,9 @@ profile 要求每个绑定只提供其 component 的单一 NodeID；
 
 packet-delivery session 继续作为较小的 participant runtime；topology-driven 组合 session 已闭合
 clean Evict 经最小 REQ/RSP topology 的两 packet witness，并检查零 SNP/DAT/CompAck、directory 条件删除、
-backing payload/version 不变与最终 quiescence；
+backing payload/version 不变与最终 quiescence；其 Retry modifier 另有五 packet witness，endpoint
+顺序恰为初始 `Evict`、`RetryAck`、`PCrdGrant`、credited `Evict`、`Comp_I`，并检查两个 retry response
+的 exact evidence、零 SNP/DAT/CompAck 和最终 ledger/transport quiescence；
 MakeUnique 也已有 dirty-peer resolved topology witness：endpoint 顺序恰为
 `MakeUnique` REQ、`SnpMakeInvalid` SNP、`SnpResp_I` RSP、`Comp_UC` RSP、`CompAck` RSP 五个 packet，
 全程没有 DAT；它检查 peer dirty payload 被丢弃、requester 原子安装 RN-local store intent 为 `UD`、
@@ -605,8 +631,8 @@ snapshot/backing version 拒绝 stale mutation，只退休 DBID。该见证同�
 ## 场景与功能边界
 
 direct topology、调用方组装的一个或多个 router topology 和具体 FIFO 深度属于测试/showcase 的参考装配，
-不属于 CHI 核心 API。coherent `ReadUnique` Retry 已保存单 XP router witness；direct `ReadNoSnp`
-Retry/Cancel 仍保留为独立、较窄的 profile。
+不属于 CHI 核心 API。coherent `ReadUnique` Retry 已保存单 XP router witness，clean Evict Retry 已保存
+direct resolved topology witness；direct `ReadNoSnp` Retry/Cancel 仍保留为独立、较窄的 profile。
 
 pending `ReadUnique` 已可处理同址 `SnpUnique`：RN 的 `I` 保持 absent，或把 `SC` copy 失效为 `I`，
 `RetToSrc=0` 或原状态为 `I` 时返回 `SnpResp_I`，原状态为 `SC` 且 `RetToSrc=1` 时返回

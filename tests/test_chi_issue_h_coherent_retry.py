@@ -587,6 +587,83 @@ class ChiIssueHCoherentRetryParticipantTest(unittest.TestCase):
             retired.state.home.backing.line_at(self.ADDRESS).data,
         )
 
+    def test_replayed_initial_read_unique_is_an_atomic_system_fault(
+        self,
+    ) -> None:
+        session = ChiCoherenceSession(
+            "coherent_retry",
+            self.build_home(),
+            {
+                self.REQUESTER: self.build_requester(),
+                self.PEER: self.build_peer(),
+            },
+            enabled_features=frozenset(
+                (
+                    CHI_FEATURE_CLEAN_READ_UNIQUE,
+                    CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
+                )
+            ),
+            requester_node_ids=frozenset((self.REQUESTER,)),
+            snoopee_node_ids=frozenset((self.PEER,)),
+        )
+        issued = self.apply(
+            session,
+            session.initial_state(),
+            ChiSubmitCoherentRead(self.REQUESTER, self.request()),
+        )
+        initial_request = issued.emissions[0]
+        rejected = self.apply(
+            session,
+            issued.state,
+            ChiDeliverCoherencePacket(initial_request),
+        )
+
+        before_ack = session.step(
+            rejected.state,
+            ChiDeliverCoherencePacket(initial_request),
+        )
+        self.assertIsNotNone(before_ack.fault)
+        self.assertEqual(
+            "retry_request_replay",
+            before_ack.fault.rule.rsplit(".", 1)[-1],
+        )
+        self.assertIs(rejected.state, before_ack.state)
+        self.assertFalse(before_ack.emissions)
+
+        ack_seen = self.apply(
+            session,
+            rejected.state,
+            ChiDeliverCoherencePacket(rejected.emissions[0]),
+        )
+        granted = self.apply(
+            session,
+            ack_seen.state,
+            ChiGrantCoherentHomePCredit(),
+        )
+        credit_seen = self.apply(
+            session,
+            granted.state,
+            ChiDeliverCoherencePacket(granted.emissions[0]),
+        )
+        self.assertIs(
+            ChiRequestRetryPhase.WAIT_RETRY_CREDIT,
+            credit_seen.state.request_nodes[
+                self.REQUESTER
+            ].request_retry.entries[self.TRANSACTION_ID].phase,
+        )
+
+        after_credit = session.step(
+            credit_seen.state,
+            ChiDeliverCoherencePacket(initial_request),
+        )
+        self.assertIsNotNone(after_credit.fault)
+        self.assertEqual(
+            "retry_request_delivery",
+            after_credit.fault.rule.rsplit(".", 1)[-1],
+        )
+        self.assertIs(credit_seen.state, after_credit.state)
+        self.assertFalse(after_credit.emissions)
+
     def test_retry_wait_survives_independent_same_line_snoop_then_nderr(
         self,
     ) -> None:

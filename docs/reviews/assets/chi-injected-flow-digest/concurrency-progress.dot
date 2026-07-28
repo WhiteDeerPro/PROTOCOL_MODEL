@@ -1,0 +1,135 @@
+digraph chi_concurrency_progress {
+  graph [
+    rankdir=TB,
+    bgcolor="#f7f9fc",
+    pad=0.25,
+    nodesep=0.32,
+    ranksep=0.52,
+    compound=true,
+    fontname="Noto Sans CJK SC",
+    label="CHI same-line lifecycle、ordering point 与 progress 输入",
+    labelloc=t,
+    fontsize=20
+  ];
+  node [
+    shape=box,
+    style="rounded,filled",
+    color="#486581",
+    fillcolor="#ffffff",
+    fontname="Noto Sans CJK SC",
+    fontsize=10,
+    margin="0.12,0.07"
+  ];
+  edge [
+    color="#627d98",
+    fontcolor="#334e68",
+    fontname="Noto Sans CJK SC",
+    fontsize=9,
+    arrowsize=0.7
+  ];
+
+  subgraph cluster_hazard {
+    label="A · 已闭合的 invalidating-Snoop CopyBack outcome（45–47 的抽象）";
+    color="#9fb3c8";
+    style="rounded";
+
+    wb_req [
+      fillcolor="#fff3c4",
+      label="WriteBack REQ sent\nRN: LIVE_UD\nholds TxnID + line/payload"
+    ];
+    inv_snp [
+      fillcolor="#e3f8ff",
+      label="same-line invalidating Snoop\nUD → I\nSnpRespData_I_PD"
+    ];
+    canceled [
+      fillcolor="#ffe3e3",
+      label="RN: CANCELED_I\nkeeps request/TxnID\nno resident payload"
+    ];
+    dirty_commit [
+      fillcolor="#e3fcec",
+      label="Home consumes Snoop dirty data\nnew directory/backing authority commits"
+    ];
+    dbid [
+      label="CompDBIDResp\noriginal TxnID + Home DBID"
+    ];
+    copy_i [
+      fillcolor="#f3e8ff",
+      label="CopyBackWrData_I\nTxnID=DBID · Data=0 · BE=0"
+    ];
+    retire [
+      fillcolor="#e3fcec",
+      label="retire old WB only\npreserve current owner + backing"
+    ];
+    invariant [
+      shape=note,
+      fillcolor="#fff5f5",
+      color="#d64545",
+      fontcolor="#8a1c1c",
+      label="Invariant\npayload responsibility transfers once;\nlate completion cannot revive stale authority"
+    ];
+
+    wb_req -> inv_snp -> canceled -> dbid -> copy_i -> retire;
+    inv_snp -> dirty_commit;
+    dirty_commit -> retire [style=dashed, label="snapshot/version"];
+    retire -> invariant [style=dotted, arrowhead=none, color="#d64545"];
+  }
+
+  subgraph cluster_order {
+    label="B · typed ordering/observation points（48–53 的抽象）";
+    color="#9fb3c8";
+    style="rounded";
+
+    accepted [label="REQ accepted / ReadReceipt"];
+    lease [label="DBID / resource lease"];
+    data [label="Data transferred"];
+    comp [label="Comp / response complete"];
+    ack [label="CompAck or implicit WriteData ack"];
+    observe [label="downstream / persistence observation"];
+    next_same [label="subsequent same-line Snoop/transaction"];
+
+    accepted -> data [label="read path"];
+    accepted -> lease [label="write path"];
+    lease -> data;
+    data -> comp [label="profile-specific"];
+    comp -> ack;
+    data -> observe [label="write visibility"];
+    ack -> next_same [label="required same-line edge"];
+    observe -> next_same [style=dashed, label="when property requires"];
+  }
+
+  subgraph cluster_wait {
+    label="C · wait-for/deadlock 分析输入（54–55 的抽象，不是 proof）";
+    color="#9fb3c8";
+    style="rounded";
+
+    holder [
+      fillcolor="#fff3c4",
+      label="Held resource\nline · DBID · response slot · credit"
+    ];
+    demand [
+      fillcolor="#ffe3e3",
+      label="Waiting demand\nsame-line request · DAT · CompAck · Retry"
+    ];
+    obligation [
+      fillcolor="#f3e8ff",
+      label="Release obligation\nexact completion/ack/data event"
+    ];
+    escape [
+      fillcolor="#e3fcec",
+      label="Executable escape\ncredit grant/return · replay · cancel\nor independent response path"
+    ];
+    monitor [
+      shape=note,
+      fillcolor="#ffffff",
+      label="SystemProtocol analysis\nproject held/waiting/release edges;\nfind cycle + verify an escape"
+    ];
+
+    holder -> demand [label="blocks"];
+    demand -> obligation [label="waits for"];
+    obligation -> holder [label="must release", color="#d64545"];
+    escape -> obligation [label="breaks dependency", color="#2f855a"];
+    holder -> monitor [style=dotted, arrowhead=none];
+    demand -> monitor [style=dotted, arrowhead=none];
+    obligation -> monitor [style=dotted, arrowhead=none];
+  }
+}

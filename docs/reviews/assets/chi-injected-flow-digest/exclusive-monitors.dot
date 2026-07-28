@@ -1,0 +1,127 @@
+digraph chi_exclusive_monitors {
+  graph [
+    rankdir=TB,
+    bgcolor="#f7f9fc",
+    pad=0.25,
+    nodesep=0.42,
+    ranksep=0.62,
+    compound=true,
+    fontname="Noto Sans CJK SC",
+    label="Exclusive reservation：概念作用域与成功条件（候选模型，尚未实现）",
+    labelloc=t,
+    fontsize=20
+  ];
+  node [
+    shape=box,
+    style="rounded,filled",
+    color="#486581",
+    fillcolor="#ffffff",
+    fontname="Noto Sans CJK SC",
+    fontsize=10,
+    margin="0.12,0.07"
+  ];
+  edge [
+    color="#627d98",
+    fontcolor="#334e68",
+    fontname="Noto Sans CJK SC",
+    fontsize=9,
+    arrowsize=0.7
+  ];
+
+  app [
+    fillcolor="#f3e8ff",
+    label="LDREX / STREX intent\nlock-free or spin-lock critical section"
+  ];
+
+  subgraph cluster_local {
+    label="RN-local reservation（LP monitor 概念）";
+    color="#9fb3c8";
+    style="rounded";
+
+    load_table [
+      shape=plain,
+      label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+          <TR><TD BGCOLOR="#E3F8FF"><B>Load state</B></TD><TD BGCOLOR="#E3F8FF"><B>Network action</B></TD></TR>
+          <TR><TD>U</TD><TD>set local reservation; no ExLoad required</TD></TR>
+          <TR><TD>S</TD><TD>ExLoad preferred/profile-dependent</TD></TR>
+          <TR><TD>I</TD><TD>ExLoad required to obtain data/authority</TD></TR>
+        </TABLE>
+      >
+    ];
+    local_res [fillcolor="#e3f8ff", label="local reservation = set"];
+    snp_reset [
+      fillcolor="#ffe3e3",
+      label="invalidating Snoop\nclears local reservation"
+    ];
+    store_table [
+      shape=plain,
+      label=<
+        <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6">
+          <TR><TD BGCOLOR="#FFF3C4"><B>Store evidence</B></TD><TD BGCOLOR="#FFF3C4"><B>Result</B></TD></TR>
+          <TR><TD>local match + U</TD><TD>local atomic commit; pass</TD></TR>
+          <TR><TD>local match + S</TD><TD>send ExStore; use system response</TD></TR>
+          <TR><TD>mismatch / snoop-reset</TD><TD>no commit; fail</TD></TR>
+        </TABLE>
+      >
+    ];
+
+    load_table -> local_res;
+    local_res -> snp_reset [label="coherence invalidation"];
+    local_res -> store_table [label="STREX"];
+    snp_reset -> store_table [label="late STREX"];
+  }
+
+  subgraph cluster_poc {
+    label="PoC / coherence-domain reservation";
+    color="#9fb3c8";
+    style="rounded";
+
+    poc_load [
+      fillcolor="#e3fcec",
+      label="ExLoad records requester/reservation\nmultiple loads may compete"
+    ];
+    poc_store [
+      fillcolor="#e3fcec",
+      label="ExStore compares evidence\nmatch → one atomic success\nmismatch → fail"
+    ];
+    invalidate_others [
+      fillcolor="#fff3c4",
+      label="successful store invalidates\nother holders/reservations"
+    ];
+
+    poc_load -> poc_store;
+    poc_store -> invalidate_others [label="match"];
+  }
+
+  subgraph cluster_system {
+    label="Non-snoopable system reservation";
+    color="#9fb3c8";
+    style="rounded";
+
+    sys_load [label="Exclusive ReadNoSnp\nrecord requester at system scope"];
+    sys_store [label="Exclusive WriteNoSnp\nmatch → commit; mismatch → fail"];
+    sys_load -> sys_store;
+  }
+
+  outcome [
+    shape=note,
+    fillcolor="#fff5f5",
+    color="#d64545",
+    fontcolor="#8a1c1c",
+    label="Scoped invariant\nfor one address/reservation granule and overlapping window,\nonly one competing store commits;\nSnoop invalidation is visible to local success logic"
+  ];
+  boundary [
+    shape=note,
+    fillcolor="#ffffff",
+    label="Model boundary\nLP / PoC / System are responsibility scopes,\nnot a mandated hardware block diagram"
+  ];
+
+  app -> load_table;
+  local_res -> poc_load [label="when ExLoad is sent"];
+  store_table -> poc_store [label="when ExStore is required"];
+  invalidate_others -> snp_reset [label="Snoop/authority update", lhead=cluster_local];
+  poc_store -> outcome [style=dashed];
+  sys_store -> outcome [style=dashed];
+  outcome -> boundary [style=dotted, arrowhead=none];
+}

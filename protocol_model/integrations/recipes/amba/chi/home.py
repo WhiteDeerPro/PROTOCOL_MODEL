@@ -25,7 +25,9 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiHomeDirectoryEntry,
     ChiParticipantBinding,
     ChiParticipantPortBinding,
+    ChiReadUniqueCopyAtHomePolicy,
     ChiReadUniqueNderrPolicy,
+    ChiWriteEvictFullCurrentCopyPolicy,
     ChiWriteEvictOrEvictPolicy,
     ChiVirtualDutFacets,
 )
@@ -133,6 +135,12 @@ def bind_chi_issue_h_home_vdut(
     retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
     evict_retry_policy: ChiEvictRetryAdmissionPolicy | None = None,
     read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
+    read_unique_copy_at_home_policy: (
+        ChiReadUniqueCopyAtHomePolicy | None
+    ) = None,
+    write_evict_full_current_copy_policy: (
+        ChiWriteEvictFullCurrentCopyPolicy | None
+    ) = None,
     write_evict_or_evict_policy: (
         ChiWriteEvictOrEvictPolicy | None
     ) = None,
@@ -248,6 +256,12 @@ def bind_chi_issue_h_home_vdut(
         retry_policy=retry_policy,
         evict_retry_policy=evict_retry_policy,
         read_unique_nderr_policy=read_unique_nderr_policy,
+        read_unique_copy_at_home_policy=(
+            read_unique_copy_at_home_policy
+        ),
+        write_evict_full_current_copy_policy=(
+            write_evict_full_current_copy_policy
+        ),
         write_evict_or_evict_policy=write_evict_or_evict_policy,
     )
     binding = ChiParticipantBinding(
@@ -289,6 +303,12 @@ def attach_chi_issue_h_home(
     retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
     evict_retry_policy: ChiEvictRetryAdmissionPolicy | None = None,
     read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
+    read_unique_copy_at_home_policy: (
+        ChiReadUniqueCopyAtHomePolicy | None
+    ) = None,
+    write_evict_full_current_copy_policy: (
+        ChiWriteEvictFullCurrentCopyPolicy | None
+    ) = None,
     write_evict_or_evict_policy: (
         ChiWriteEvictOrEvictPolicy | None
     ) = None,
@@ -379,6 +399,12 @@ def attach_chi_issue_h_home(
         retry_policy=retry_policy,
         evict_retry_policy=evict_retry_policy,
         read_unique_nderr_policy=read_unique_nderr_policy,
+        read_unique_copy_at_home_policy=(
+            read_unique_copy_at_home_policy
+        ),
+        write_evict_full_current_copy_policy=(
+            write_evict_full_current_copy_policy
+        ),
         write_evict_or_evict_policy=write_evict_or_evict_policy,
     )
 

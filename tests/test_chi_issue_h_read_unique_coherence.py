@@ -776,6 +776,7 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
         self.assertIsNotNone(contended.blocked)
         assert contended.blocked is not None
         self.assertIn("same-line", contended.blocked.reason)
+        self.assertIs(contender_issued.state, contended.state)
         self.assertEqual(accepted.state.home, contended.state.home)
 
         completed = self.apply(

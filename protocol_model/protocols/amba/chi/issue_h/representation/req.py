@@ -266,10 +266,9 @@ class _ChiCopyBackRequestMessage:
     the containing Network packet.
 
     ``copy_at_home`` is the Issue H CAH field shared by CopyBack requests.
-    The current executable WriteBackFull, WriteEvictFull, and
-    WriteEvictOrEvict lifecycles fix it to zero; CAH=1 adds alternative
-    completion behavior and hidden Home-copy provenance, so it remains a
-    separate modifier.
+    The represented WriteEvictFull form permits either value so its CAH
+    modifier can select an alternative completion.  The current
+    WriteBackFull and WriteEvictOrEvict profiles keep it at zero.
     """
 
     chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.REQ
@@ -343,10 +342,12 @@ class ChiWriteBackFullMessage(_ChiCopyBackRequestMessage):
 class ChiWriteEvictFullMessage(_ChiCopyBackRequestMessage):
     """Offer one evicted ``UC`` line to a next-level coherent cache.
 
-    ``MemAttr=1101`` asserts the required Allocate hint.  The executable base
-    profile uses ``CAH=0``, always transfers ``CopyBackWrData_UC``, and keeps
-    the data inside the Snoop domain; participant code must not turn it into a
-    reference-backing or physical-memory write.
+    ``MemAttr=1101`` asserts the required Allocate hint.  ``CAH=0`` selects
+    the data-bearing base flow, while ``CAH=1`` reports valid Requester-side
+    CopyAtHome provenance and permits the Home to choose either the
+    data-bearing or dataless completion flow.  Provenance and lifecycle
+    eligibility remain participant and system contracts above this
+    representation.
     """
 
     memory_attributes: int = 0b1101
@@ -578,10 +579,6 @@ class ChiIssueHReqProfile:
                 if message.tag_operation != 0:
                     reasons.append(
                         "the first WriteEvictFull profile requires TagOp=0"
-                    )
-                if message.copy_at_home:
-                    reasons.append(
-                        "the first WriteEvictFull profile requires CAH=0"
                     )
             elif isinstance(message, ChiWriteEvictOrEvictMessage):
                 if message.size != 6:

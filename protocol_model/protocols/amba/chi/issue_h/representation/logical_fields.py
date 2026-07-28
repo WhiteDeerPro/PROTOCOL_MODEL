@@ -639,6 +639,7 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
             _integer("DBID", "data_buffer_id", 12),
             _integer("CCID", "critical_chunk_id", 2),
             _boolean("TraceTag", "trace_tag"),
+            _boolean("CAH", "copy_at_home"),
         ),
     ),
     _schema(

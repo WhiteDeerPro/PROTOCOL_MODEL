@@ -56,8 +56,9 @@ class ChiCopyBackWrDataMessage:
     ``I`` is the canceled CopyBack indication, whose cache-state information
     is imprecise and ignored.  The current participant lifecycles accept
     full-line ``UD_PD`` for live dirty WriteBack, full-line ``UC`` for
-    ``WriteEvictFull(CAH=0)``, or full-line ``UC``/``SC`` for the data
-    outcome of ``WriteEvictOrEvict(CAH=0)``.  Their supported pre-response
+    the data outcome of ``WriteEvictFull(CAH=0/1)``, or full-line
+    ``UC``/``SC`` for the data outcome of
+    ``WriteEvictOrEvict(CAH=0)``.  Their supported pre-response
     invalidating-Snoop cancellation paths use ``I`` with zero data and byte
     enables.
     """
@@ -166,6 +167,7 @@ class ChiCompDataMessage:
     data_buffer_id: int = 0
     critical_chunk_id: int = 0
     trace_tag: bool = False
+    copy_at_home: bool = False
 
     def __post_init__(self) -> None:
         for name, value, width in (
@@ -186,6 +188,7 @@ class ChiCompDataMessage:
         ):
             _require_non_negative(name, value)
         _require_bool("trace_tag", self.trace_tag)
+        _require_bool("copy_at_home", self.copy_at_home)
         object.__setattr__(
             self,
             "response_error",

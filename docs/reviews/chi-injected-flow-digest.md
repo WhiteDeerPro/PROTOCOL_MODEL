@@ -54,7 +54,7 @@ family 经过全部原语；不同 opcode 仍需声明自己的 eligibility、di
 后续对 `WriteEvictFull` 的规范裁决暴露了一个原图没有清楚分开的建模轴：Snoop-domain 内是否保留 clean
 resident copy，与 reference backing 是否发生 prepare/commit 不是同一件事。因此图中只保留
 clean-residency 与 reference-backing 两条通用方法轴，不放置该 opcode 的具体流程或完成状态；
-`CAH=0` 生命周期及其当前实现边界仍查 canonical status 和 Issue H package 文档。
+`CAH=0/1` 生命周期及其当前实现边界仍查 canonical status 和 Issue H package 文档。
 
 ### 2. 同址并发、ordering point 与 progress
 
@@ -109,7 +109,8 @@ eligibility/final-state、Home holder removal、feature/flow closure 以及负�
   本工程的 cancel 结论来自 Issue H 独立核对，不来自该图。
 - 输入 #26 只提供 data-bearing clean eviction 的发现线索；`CAH=0` 字段合同、精确
   `REQ → CompDBIDResp → CopyBackWrData_UC` 序列、RN `UC→I` 和 backing unchanged 都来自后续 Issue H
-  裁决，不能反向归因给原图。该裁决也不证明自动 replacement、`CAH=1` 或 same-line Snoop 已实现。
+  裁决，不能反向归因给原图。该次 CAH=0 裁决也不证明自动 replacement、CAH=1 路径或 same-line Snoop
+  的实现状态；后续状态仍查 canonical 文档。
 - 输入 #29 把 dirty data 进一步写到 SN；当前工程只承诺协议无关 reference backing commit，
   不宣称已有 topology-visible HN→SN physical write。
 - 输入 #30 的无数据 permission upgrade 与标注的 `I→UD` 不自洽；只保留
@@ -140,7 +141,14 @@ eligibility/final-state、Home holder removal、feature/flow closure 以及负�
    Home DBID 关联；该裁决只定义建模边界，能力是否闭合仍查实时实现状态。
 4. 自动 victim/replacement policy、`CAH=1`、`WriteEvictOrEvict` 与 same-line Snoop 组合不由上述窄映射覆盖；
    三张摘要图也不表达这些 modifier 的实现状态。
-5. same-line、OWO 与 deadlock 继续采用“phase + authority/payload + held/wait/release”三类事实，避免把一张
+5. 后续对 `WriteEvictFull(CAH=1)` 的独立规范核对明确：CAH=1 是 RN 缓存的 unchanged-line
+   provenance，不是 Home 当前仍持有 copy 的证明。当前模型采用更窄的 `CHECK_CURRENT_COPY` profile：
+   只从 clean `ReadUnique→CompData_UC(CAH=1)` 获取 provenance，Home 的
+   `write_evict_full_current_copy_policy` 可在 matching Snoop-domain clean residency 仍存在时选择
+   `Comp→CompAck_UC`，也可继续选择 `CompDBIDResp→CopyBackWrData_UC`；不存在时只走 data。hidden
+   clean copy 不是 physical memory/HN→SN commit。该裁决没有改变三张摘要图的通用方法轴，因此不重建图像；
+   same-line Snoop、Retry/error 组合也未由此开放。
+6. same-line、OWO 与 deadlock 继续采用“phase + authority/payload + held/wait/release”三类事实，避免把一张
    具体 MSC 硬编码成通用 scheduler。
 
 ## 逐项语义索引（压缩）

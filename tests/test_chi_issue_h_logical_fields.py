@@ -32,6 +32,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
     ChiWriteBackFullMessage,
+    ChiWriteEvictFullMessage,
     ChiWriteEvictOrEvictMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.req import (
@@ -199,6 +200,89 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
             (0b00, 0b01, 0b10, 0b11),
             tuple(int(item) for item in ChiRespErr),
         )
+
+    def test_write_evict_full_cah_one_round_trips(self) -> None:
+        request = ChiWriteEvictFullMessage(
+            transaction_id=0x123,
+            address=0x8000,
+            copy_at_home=True,
+        )
+
+        self.assertTrue(ChiIssueHReqProfile().contains(request))
+        record = self.codec.encode(request)
+
+        self.assertIs(True, record.fields["CAH"])
+        self.assertEqual(request, self.codec.decode(record))
+
+    def test_other_current_copyback_profiles_still_require_cah_zero(
+        self,
+    ) -> None:
+        requests = (
+            ChiWriteBackFullMessage(
+                transaction_id=0x123,
+                address=0x8000,
+                copy_at_home=True,
+            ),
+            ChiWriteEvictOrEvictMessage(
+                transaction_id=0x124,
+                address=0x8040,
+                copy_at_home=True,
+            ),
+        )
+
+        for request in requests:
+            with self.subTest(request=type(request).__name__):
+                reasons = ChiIssueHReqProfile().explain(request)
+
+                self.assertTrue(
+                    any("CAH=0" in reason for reason in reasons),
+                    reasons,
+                )
+                with self.assertRaises(ChiLogicalCodecError):
+                    self.codec.encode(request)
+
+    def test_comp_data_cah_one_round_trips_as_a_boolean_field(self) -> None:
+        message = ChiCompDataMessage(
+            transaction_id=0x123,
+            data=(1 << 400) | 0xCA11,
+            home_node_id=0x21,
+            response=ChiRespCode.UC,
+            data_buffer_id=0x234,
+            copy_at_home=True,
+        )
+        profile = ChiIssueHDatProfile(data_width=512)
+
+        record = self.codec.encode(message, profile)
+        restored = self.codec.decode(record, profile)
+
+        self.assertIs(True, record.fields["CAH"])
+        self.assertEqual(message, restored)
+        self.assertIs(True, restored.copy_at_home)
+
+    def test_comp_data_requires_typed_and_logical_cah_booleans(self) -> None:
+        with self.assertRaisesRegex(TypeError, "copy_at_home must be bool"):
+            ChiCompDataMessage(
+                transaction_id=0x123,
+                data=0,
+                copy_at_home=1,  # type: ignore[arg-type]
+            )
+
+        valid = ChiCompDataMessage(
+            transaction_id=0x123,
+            data=0,
+            copy_at_home=True,
+        )
+        fields = dict(self.codec.encode(valid).fields)
+        fields["CAH"] = 1
+        malformed = ChiLogicalFieldRecord(ChiChannelKind.DAT, fields)
+
+        reasons = self.codec.explain_decode(malformed)
+        self.assertTrue(
+            any("CAH must be bool" in reason for reason in reasons),
+            reasons,
+        )
+        with self.assertRaises(ChiLogicalCodecError):
+            self.codec.decode(malformed)
 
     def test_clean_unique_forms_have_spec_opcodes_and_exact_fields(
         self,

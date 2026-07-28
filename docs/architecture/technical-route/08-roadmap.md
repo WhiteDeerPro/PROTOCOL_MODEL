@@ -166,8 +166,8 @@ full-line/full-BE 的 `CopyBackWrData_UC` 并原子进入 `I`。Home admission �
 reference-backing version，精确 DAT 到达后才清除 unique owner，并把 clean payload 安装到单独的
 Snoop-domain residency；backing 对象、payload 与 version 全程不变。该 feature 独立声明 REQ/RSP/DAT
 三条 flow，resolved witness 恰好运输三包且没有 SNP 或显式 `CompAck`。canonical Home binder 可透传同一
-协议无关 `CacheCore`，但当前 retain policy 仍是无容量/替换行为的 sparse state。`CAH=1`、
-Retry/error 和级联 eviction 是后续 lifecycle/profile；下游读取命中与 victim/LRU 是可选 Cache/Home
+协议无关 `CacheCore`，但当前 retain policy 仍是无容量/替换行为的 sparse state。`CAH=1` 由下文独立
+modifier 闭合；Retry/error 和级联 eviction 是后续 lifecycle/profile，下游读取命中与 victim/LRU 是可选 Cache/Home
 VirtualDut policy。它们没有并入该 WEF base slice，但不撤销显式选中 resident line 的三包 closure。
 随后完成的 robustness slice 只开放 REQ 已发出、`CompDBIDResp` 前的 invalidating Snoop：RN 由
 `LIVE_UC` 转为无 payload 的 `CANCELED_I`，保留 request/TxnID，并在晚到 DBID 后发送
@@ -189,6 +189,19 @@ outcome 记为 `CANCELED_I`；迟到 `CompDBIDResp`/`Comp` 分别以零载荷
 `CopyBackWrData_I`/`CompAck_I` 退休。`UC/SC × data/no-data` direct 双 Requester witness 证明旧
 correlation 不会覆盖 CleanUnique 建立的新 owner、backing 或 clean residency。
 
+第一条 `WriteEvictFull(CAH=1)` modifier 现已闭合。它依赖 clean ReadUnique 与
+`WriteEvictFull(CAH=0)` base：Home 只能在 clean `CompData_UC` 上返回 `CAH=1`，RN 将其缓存为
+“自 Home 给出该标记后未修改此行”的 provenance；本地写或 line removal 会清除证据，RN 不能凭 resident
+`UC` 自行伪造 CAH=1。CAH=1 不证明 Home 在后续 WEF 到达时仍有 copy。为得到首个确定、可审计的子集，
+当前 Home 要求显式 `write_evict_full_current_copy_policy`，并采用 `CHECK_CURRENT_COPY` profile：只在
+Snoop-domain `clean_residency` 仍有匹配 clean line 时允许
+`Comp→CompAck_UC` no-data outcome；即使 copy 存在，policy 仍可选择
+`CompDBIDResp→CopyBackWrData_UC` data outcome。两者都使 requester 进入 `I`、删除其 directory
+authority，并保持 reference backing payload/version 不变。hidden clean copy 是 Home 的 Snoop-domain
+state，不是 physical memory 或 topology-visible HN→SN commit。该 modifier 当前只闭合正常终态，不组合
+same-line Snoop、Retry 或 error。参数化 resolved witness 已通过公开 Home recipe、真实
+resolver/capability/flow closure 与 `ChiCoherenceNetworkSession` 分别执行 data/no-data 分支。
+
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
 | 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
@@ -204,6 +217,7 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 8 · `WriteEvictFull` pre-DBID Snoop cancel | pending `WriteEvictFull`、`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`、`CopyBackWrData_I` | 共用 `ChiRnCopyBackOutcome`、stale-owner admission、Home snapshot/version guard 与 exact RSP/DAT evidence | WEF `LIVE_UC/CANCELED_I`；cancel 只退休 DBID，不改 directory/backing/clean residency | 本切片已闭合 |
 | 9 · `WriteEvictOrEvict(CAH=0)` 双 outcome | `WriteEvictOrEvict`、`CompDBIDResp`/`Comp`、`CopyBackWrData_{UC,SC}`/`CompAck`；无 SNP | 复用 CopyBack TxnID/DBID split、clean residency、Evict-style holder removal、CompAck 与 exact evidence | `LikelyShared` 对应 `UC/SC`；显式 Home outcome；四 flow、每 outcome 三 packet | 本切片已闭合 |
 | 10 · `WriteEvictOrEvict` response 前 Snoop cancel | pending WEOE、`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`、迟到 `CompDBIDResp`/`Comp`、`CopyBackWrData_I`/`CompAck_I` | 复用 invalidating-Snoop、`CANCELED_I`、system-derived stale-holder admission、Home snapshot/version guard 与既有 WEOE RSP/DAT/Ack evidence | 原 REQ/`LikelyShared` 与 post-Snoop outcome 分离；`UC/SC × data/no-data` direct 双 Requester witness | 本切片已闭合 |
+| 11 · `WriteEvictFull(CAH=1)` | clean `ReadUnique→CompData_UC(CAH=1)` acquisition；`WriteEvictFull` 后由 Home 选择 `CompDBIDResp→CopyBackWrData_UC` 或 `Comp→CompAck_UC` | 复用 WEF base、clean residency、CompAck、feature/capability/flow closure 与统一 CopyBack phase evidence | RN unchanged-line provenance；显式 current-copy policy；WEF dual terminal | 本切片已闭合 |
 
 对 [Arm IHI 0050 Issue H](https://developer.arm.com/documentation/ihi0050/h/) 的 CopyBack transaction、
 CAH 与 requester state 规则进行切片级核对后，后续候选的证据成熟度并不相同：
@@ -211,21 +225,22 @@ CAH 与 requester state 规则进行切片级核对后，后续候选的证据�
 | 候选 | 协议依据与当前依赖 | 路线判断 |
 |---|---|---|
 | `WriteEvictOrEvict` response 前 same-line invalidating Snoop | RN 以 `CANCELED_I` 保留原 REQ/TxnID，迟到 data/no-data Home outcome 分别产生零载荷 `CopyBackWrData_I`/`CompAck_I`；system exact evidence 只退休旧 correlation | 已闭合；不据此声称 post-response/非失效 Snoop、Retry/error 或动态 allocation policy |
-| `WriteEvictFull(CAH=1)` | 规范把是否可省略 data 与 CAH provenance、Home 是否仍有 copy 关联；当前 RN line 没有 cached-CAH 状态，Home residency 也未成为通用 read/copy predicate | 后置于 CAH state/provenance 工作，不能只开放字段 |
+| `WriteEvictFull(CAH=1)` | CAH=1 是 RN 未修改该行的 cached provenance，不证明 Home 当前仍有 copy；首个 profile 从 clean `CompData_UC(CAH=1)` 获取，并用显式 current-copy policy 将 no-data 结果收窄到 matching clean residency 仍存在的情形 | 已闭合正常 data/no-data 终态；不据此声称 same-line Snoop、Retry/error、容量替换策略或通用 CAH=1 policy 已实现 |
 | WriteEvict error | 需要分别定义错误来源、形成 phase 与 clean payload disposition；当前没有支持该路径的 ECC/Poison/DataCheck 来源 | 与 Snoop modifier 分离并后置，不用普通 decode/access failure 冒充 |
 | deliberate dirty invalidate 后的 `Evict` | 规范允许由 deliberate action 触发 dirty→I，并可用 Evict 使其可见；当前没有 caller-visible invalidate/discard intent | 等具体 invalidate 场景提出，不把普通 replacement 当成 deliberate action |
 | 同 Home/type 多 waiter、公平性与 deadlock | 来自 runtime/scenario 的 progress 验证需求，不是某个 CHI opcode 的规范前置条件 | 当前不升为 opcode 主线；保留 held/wait/release seam，待真实资源场景阻塞后形成 waiter-selection/fairness property 与 wait-for/deadlock verdict |
 
-本轮也暴露出一条实现可扩展性边界：WriteBackFull、WriteEvictFull 与 WriteEvictOrEvict 已复用
-TxnID→DBID phase split 和 terminal DAT/ack 概念，但 system exact-evidence 仍按 operation 保存平行映射。
-下一 robustness 切片若需要再增加一组 evidence branch，应先把共同 response/terminal phase 收敛为 typed
-CopyBack ledger；各 opcode 的 permission、directory、backing 与 residency effect 继续分开。该收敛不新增
-协议行为，验收条件是现有三类 CopyBack 正负向 witness 语义不变。
+本轮也完成了 CopyBack exact-evidence 的实现收敛。WriteBackFull、WriteEvictFull 与
+WriteEvictOrEvict 现在由 typed `ChiCopyBackPhaseLedger` 保存 operation、Requester/original TxnID、
+Home DBID 与 `HOME_RESPONSE/REQUESTER_DATA/REQUESTER_ACK` 下一阶段；旧 operation-specific mapping
+只保留为构造兼容输入和只读 projection，不再与 canonical ledger 并列持有状态。各 opcode 的 permission、
+directory、backing 与 residency effect 继续分开；该收敛不新增 wire 行为，既有三类 CopyBack 正负向
+witness 保持原语义，并让 WEF(CAH=1) 的 DAT/ack 双终态不再增加一组平行 evidence authority。
 
-1. pending `WriteEvictOrEvict` 在 Home response 前遇到同址 invalidating Snoop 的窄组合已经闭合，
-   并保持 data/no-data outcome 的 exact terminal correlation。下一 lifecycle 决策点比较
-   `WriteEvictFull(CAH=1)` 所需 cached-CAH/hidden-copy provenance、post-response Snoop、
-   Retry/error 与 deliberate dirty invalidate；它们继续作为独立 modifier。若下一真实场景首先受并发资源阻塞，
+1. pending `WriteEvictOrEvict` response 前 invalidating Snoop 和 `WriteEvictFull(CAH=1)` 正常双终态已经
+   闭合，并保持 exact terminal correlation。下一 lifecycle 决策点比较 WEF CAH modifier 的 same-line/
+   post-response Snoop、Retry/error 与 deliberate dirty invalidate；它们继续作为独立 modifier，不从
+   已闭合的正常 CAH 分支外推。若下一真实场景首先受并发资源阻塞，
    则先做同 Home/type 多 waiter 的具名选择、释放和公平性 witness。DERR 继续等待
    ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
 2. 只有验证目标需要观察 Home 之外的 downstream commit 时，才增加独立 SN participant 与

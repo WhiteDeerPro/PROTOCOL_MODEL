@@ -56,6 +56,9 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     ChiCoherenceNetworkEventKind,
     ChiCoherenceNetworkSession,
     ChiCoherenceSession,
+    ChiCoherenceState,
+    ChiCopyBackDeliveryPhase,
+    ChiCopyBackOperation,
     ChiDeliverCoherencePacket,
     ChiFeatureContract,
     ChiHomeAuthority,
@@ -670,6 +673,22 @@ class ChiIssueHWriteEvictFullTest(unittest.TestCase):
             dict(accepted.state.expected_write_evict_dbid_responses),
         )
         self.assertFalse(accepted.state.expected_copyback_data)
+        response_expectation = (
+            accepted.state.copyback_phase_ledger.for_request(
+                self.RN,
+                self.TXN_ID,
+            )
+        )
+        self.assertIsNotNone(response_expectation)
+        self.assertIs(
+            ChiCopyBackOperation.WRITE_EVICT_FULL,
+            response_expectation.operation,
+        )
+        self.assertIs(
+            ChiCopyBackDeliveryPhase.HOME_RESPONSE,
+            response_expectation.phase,
+        )
+        self.assertEqual(response_packet, response_expectation.packet)
 
         copied = self.apply(
             session,
@@ -686,6 +705,22 @@ class ChiIssueHWriteEvictFullTest(unittest.TestCase):
             {(self.RN, copyback.transaction_id): copyback_packet},
             dict(copied.state.expected_copyback_data),
         )
+        data_expectation = (
+            copied.state.copyback_phase_ledger.for_data_buffer(
+                self.RN,
+                copyback.transaction_id,
+            )
+        )
+        self.assertIsNotNone(data_expectation)
+        self.assertEqual(
+            response_expectation.identity,
+            data_expectation.identity,
+        )
+        self.assertIs(
+            ChiCopyBackDeliveryPhase.REQUESTER_DATA,
+            data_expectation.phase,
+        )
+        self.assertEqual(copyback_packet, data_expectation.packet)
 
         committed = self.apply(
             session,
@@ -698,6 +733,7 @@ class ChiIssueHWriteEvictFullTest(unittest.TestCase):
             committed.state.expected_write_evict_dbid_responses
         )
         self.assertFalse(committed.state.expected_copyback_data)
+        self.assertFalse(committed.state.copyback_phase_ledger.entries)
         resident = committed.state.home.clean_residency.line_at(
             self.ADDRESS
         )
@@ -707,6 +743,109 @@ class ChiIssueHWriteEvictFullTest(unittest.TestCase):
         backing_after = committed.state.home.backing.line_at(self.ADDRESS)
         self.assertEqual(backing_before, backing_after)
         self.assertEqual(backing_before.version, backing_after.version)
+
+    def test_legacy_state_constructors_rebuild_typed_copyback_ledger(
+        self,
+    ) -> None:
+        session = self.build_session()
+        initial = session.initial_state()
+        issued = self.apply(
+            session,
+            initial,
+            ChiSubmitWriteEvictFull(
+                self.RN,
+                ChiWriteEvictFullMessage(
+                    self.TXN_ID,
+                    self.ADDRESS,
+                ),
+            ),
+        )
+        accepted = self.apply(
+            session,
+            issued.state,
+            ChiDeliverCoherencePacket(issued.emissions[0]),
+        )
+        copied = self.apply(
+            session,
+            accepted.state,
+            ChiDeliverCoherencePacket(accepted.emissions[0]),
+        )
+
+        def legacy_positional(state):
+            return ChiCoherenceState(
+                state.home,
+                state.request_nodes,
+                state.expected_evict_completions,
+                state.expected_clean_unique_completions,
+                state.expected_make_unique_completions,
+                state.expected_coherent_read_completions,
+                state.expected_writeback_dbid_responses,
+                state.expected_write_evict_dbid_responses,
+                state.expected_write_evict_or_evict_responses,
+                state.expected_copyback_data,
+                state.expected_write_evict_or_evict_acks,
+                state.expected_retry_acks,
+                state.expected_pcredit_grants,
+                state.expected_snoop_deliveries,
+                state.expected_snoop_responses,
+            )
+
+        cases = (
+            (
+                "home_response",
+                accepted.state,
+                {
+                    "expected_write_evict_dbid_responses": (
+                        accepted.state
+                        .expected_write_evict_dbid_responses
+                    )
+                },
+            ),
+            (
+                "requester_data",
+                copied.state,
+                {
+                    "expected_copyback_data": (
+                        copied.state.expected_copyback_data
+                    )
+                },
+            ),
+        )
+        projection_names = (
+            "expected_writeback_dbid_responses",
+            "expected_write_evict_dbid_responses",
+            "expected_write_evict_or_evict_responses",
+            "expected_copyback_data",
+            "expected_write_evict_or_evict_acks",
+        )
+        for phase, state, legacy_keyword in cases:
+            with self.subTest(phase=phase, constructor="positional"):
+                rebuilt = legacy_positional(state)
+                self.assertEqual(
+                    state.copyback_phase_ledger.entries,
+                    rebuilt.copyback_phase_ledger.entries,
+                )
+                for name in projection_names:
+                    self.assertEqual(
+                        dict(getattr(state, name)),
+                        dict(getattr(rebuilt, name)),
+                    )
+
+            with self.subTest(phase=phase, constructor="keyword"):
+                rebuilt = ChiCoherenceState(
+                    home=state.home,
+                    request_nodes=state.request_nodes,
+                    **legacy_keyword,
+                )
+                self.assertEqual(
+                    state.copyback_phase_ledger.entries,
+                    rebuilt.copyback_phase_ledger.entries,
+                )
+                for name in projection_names:
+                    self.assertEqual(
+                        dict(getattr(state, name)),
+                        dict(getattr(rebuilt, name)),
+                    )
 
     def test_system_keeps_original_txnid_and_home_dbid_namespaces(
         self,
@@ -1449,11 +1588,6 @@ class ChiIssueHWriteEvictFullTest(unittest.TestCase):
             (
                 "MemAttr",
                 replace(valid, memory_attributes=0b0101),
-                "write_evict_request_attributes",
-            ),
-            (
-                "CAH",
-                replace(valid, copy_at_home=True),
                 "write_evict_request_attributes",
             ),
             (

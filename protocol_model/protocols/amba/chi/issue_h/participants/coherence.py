@@ -123,10 +123,13 @@ class ChiCacheLine:
     address: int
     state: ChiCacheState
     data: int | None = None
+    copy_at_home: bool = False
 
     def __post_init__(self) -> None:
         _require_line_address(self.address)
         object.__setattr__(self, "state", ChiCacheState(self.state))
+        if type(self.copy_at_home) is not bool:
+            raise TypeError("cache-line copy_at_home must be bool")
         if self.data is not None and (
             not isinstance(self.data, int)
             or isinstance(self.data, bool)
@@ -140,6 +143,11 @@ class ChiCacheLine:
                 )
         elif self.data is None:
             raise ValueError("a full valid cache line requires data")
+        if self.copy_at_home and self.state is not ChiCacheState.UC:
+            raise ValueError(
+                "the first cached CopyAtHome profile requires a resident "
+                "clean Unique line"
+            )
 
 
 class ChiRnCopyBackOutcome(str, Enum):
@@ -554,6 +562,7 @@ class ChiCoherentRnState:
     make_unique_store_intents: Mapping[int, int] = field(
         default_factory=dict
     )
+    copy_at_home_lines: frozenset[int] = frozenset()
 
     def __post_init__(self) -> None:
         if not isinstance(self.cache, CacheLineStoreState):
@@ -773,6 +782,29 @@ class ChiCoherentRnState:
                 "RN pending MakeUnique requires represented initial "
                 "I, SC, SD, UC, or UCE line state"
             )
+        copy_at_home_lines = frozenset(self.copy_at_home_lines)
+        for address in copy_at_home_lines:
+            _require_line_address(address)
+            if (
+                address not in resident
+                or permissions.get(address) is not ChiCacheState.UC
+            ):
+                raise ValueError(
+                    "cached CopyAtHome provenance requires a resident UC "
+                    "line"
+                )
+        for pending_write_evict in (
+            item
+            for item in writebacks.values()
+            if isinstance(item, ChiRnWriteEvictPending)
+            and item.request.copy_at_home
+            and item.outcome is ChiRnCopyBackOutcome.LIVE_UC
+        ):
+            if pending_write_evict.address not in copy_at_home_lines:
+                raise ValueError(
+                    "live WriteEvictFull(CAH=1) must retain its cached "
+                    "CopyAtHome provenance until the terminal response"
+                )
         if not isinstance(
             self.request_retry,
             ChiRequestRetryRequesterState,
@@ -811,6 +843,11 @@ class ChiCoherentRnState:
             "make_unique_store_intents",
             MappingProxyType(make_unique_store_intents),
         )
+        object.__setattr__(
+            self,
+            "copy_at_home_lines",
+            copy_at_home_lines,
+        )
 
     @property
     def lines(self) -> Mapping[int, ChiCacheLine]:
@@ -829,6 +866,7 @@ class ChiCoherentRnState:
                         )
                         else self.cache.lines[address].data
                     ),
+                    address in self.copy_at_home_lines,
                 )
                 for address, permission in self.permissions.items()
             }
@@ -884,6 +922,7 @@ class ChiCoherentRnNode(
         *,
         cache_core: CacheCore[CacheLinePayload],
         initial_permissions: Mapping[int, ChiCacheState],
+        initial_copy_at_home: frozenset[int] = frozenset(),
         outstanding_capacity: int = 4,
     ) -> None:
         if not isinstance(name, str) or not name:
@@ -927,18 +966,28 @@ class ChiCoherentRnNode(
                 "initial full-data CHI permissions must cover exactly the "
                 "resident cache payloads; I and UCE carry no payload"
             )
+        initial_copy_at_home_lines = frozenset(initial_copy_at_home)
+        for address in initial_copy_at_home_lines:
+            _require_line_address(address)
+            if permissions.get(address) is not ChiCacheState.UC:
+                raise ValueError(
+                    "initial CopyAtHome provenance requires a resident UC "
+                    "line"
+                )
         self.name = name
         self.node_id = node_id
         self.home_node_id = home_node_id
         self.cache_core = cache_core
         self.cache_store = cache_store
         self.initial_permissions = MappingProxyType(permissions)
+        self.initial_copy_at_home = initial_copy_at_home_lines
         self.outstanding_capacity = outstanding_capacity
 
     def initial_state(self) -> ChiCoherentRnState:
         return ChiCoherentRnState(
-            self.cache_store.initial_state(),
-            self.initial_permissions,
+            cache=self.cache_store.initial_state(),
+            permissions=self.initial_permissions,
+            copy_at_home_lines=self.initial_copy_at_home,
         )
 
     def is_quiescent(self, state: ChiCoherentRnState) -> bool:
@@ -1038,6 +1087,8 @@ class ChiCoherentRnNode(
         ).state
         permissions = dict(state.permissions)
         permissions[address] = ChiCacheState.UD
+        copy_at_home_lines = set(state.copy_at_home_lines)
+        copy_at_home_lines.discard(address)
         return SemanticStep(
             ChiCoherentRnState(
                 cache,
@@ -1046,6 +1097,7 @@ class ChiCoherentRnNode(
                 state.pending_copybacks,
                 state.request_retry,
                 state.make_unique_store_intents,
+                frozenset(copy_at_home_lines),
             )
         )
 
@@ -1169,6 +1221,7 @@ class ChiCoherentRnNode(
             state.pending_copybacks,
             request_retry,
             state.make_unique_store_intents,
+            state.copy_at_home_lines,
         )
         packet = ChiNetworkPacket.request(
             request,
@@ -1285,6 +1338,7 @@ class ChiCoherentRnNode(
             state.pending_copybacks,
             state.request_retry,
             state.make_unique_store_intents,
+            state.copy_at_home_lines,
         )
         return SemanticStep(
             candidate,
@@ -1399,6 +1453,8 @@ class ChiCoherentRnNode(
         permissions[request.address] = ChiCacheState.I
         pending = dict(state.pending_transactions)
         pending[request.transaction_id] = request
+        copy_at_home_lines = set(state.copy_at_home_lines)
+        copy_at_home_lines.discard(request.address)
         try:
             request_retry = ChiRequestRetryContract.retain_initial(
                 state.request_retry,
@@ -1414,6 +1470,7 @@ class ChiCoherentRnNode(
             state.pending_copybacks,
             request_retry,
             state.make_unique_store_intents,
+            frozenset(copy_at_home_lines),
         )
         return SemanticStep(
             candidate,
@@ -1535,6 +1592,7 @@ class ChiCoherentRnNode(
             state.pending_copybacks,
             state.request_retry,
             intents,
+            state.copy_at_home_lines,
         )
         return SemanticStep(
             candidate,
@@ -1592,6 +1650,7 @@ class ChiCoherentRnNode(
                 state.pending_copybacks,
                 request_retry,
                 state.make_unique_store_intents,
+                state.copy_at_home_lines,
             )
         )
 
@@ -1627,6 +1686,7 @@ class ChiCoherentRnNode(
                 state.pending_copybacks,
                 request_retry,
                 state.make_unique_store_intents,
+                state.copy_at_home_lines,
             )
         )
 
@@ -1671,6 +1731,7 @@ class ChiCoherentRnNode(
             state.pending_copybacks,
             request_retry,
             state.make_unique_store_intents,
+            state.copy_at_home_lines,
         )
         return SemanticStep(
             candidate,
@@ -1793,6 +1854,7 @@ class ChiCoherentRnNode(
             and same_line
             and all(
                 isinstance(request, ChiWriteEvictFullMessage)
+                and not request.copy_at_home
                 for request in same_line
             )
         )
@@ -2040,6 +2102,8 @@ class ChiCoherentRnNode(
                             )
                         )
             pending_copybacks = updated_writebacks
+        copy_at_home_lines = set(state.copy_at_home_lines)
+        copy_at_home_lines.discard(snoop.address)
         return SemanticStep(
             ChiCoherentRnState(
                 cache,
@@ -2048,6 +2112,7 @@ class ChiCoherentRnNode(
                 pending_copybacks,
                 state.request_retry,
                 state.make_unique_store_intents,
+                frozenset(copy_at_home_lines),
             ),
             (response_packet,),
         )
@@ -2078,8 +2143,24 @@ class ChiCoherentRnNode(
         )
         if isinstance(
             pending_copyback,
-            ChiRnWriteEvictOrEvictPending,
+            (
+                ChiRnWriteEvictPending,
+                ChiRnWriteEvictOrEvictPending,
+            ),
         ):
+            is_write_evict_copy_at_home = (
+                isinstance(pending_copyback, ChiRnWriteEvictPending)
+                and pending_copyback.request.copy_at_home
+            )
+            if (
+                isinstance(pending_copyback, ChiRnWriteEvictPending)
+                and not is_write_evict_copy_at_home
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_terminal",
+                    "WriteEvictFull(CAH=0) cannot consume a no-data Comp",
+                )
             if (
                 response.response_error is not ChiRespErr.OK
                 or response.response is not ChiRespCode.I
@@ -2088,8 +2169,8 @@ class ChiCoherentRnNode(
             ):
                 return self._fault(
                     state,
-                    "write_evict_or_evict_completion_state",
-                    "WriteEvictOrEvict no-data completion requires "
+                    "copyback_no_data_completion_state",
+                    "CopyBack no-data completion requires "
                     "Comp Resp=000 without error, tag operation, or "
                     "TraceTag",
                 )
@@ -2097,13 +2178,26 @@ class ChiCoherentRnNode(
                 pending_copyback.outcome
                 is ChiRnCopyBackOutcome.CANCELED_I
             )
+            if is_write_evict_copy_at_home and canceled:
+                return self._fault(
+                    state,
+                    "write_evict_copy_at_home_snoop",
+                    "the first WriteEvictFull(CAH=1) slice does not combine "
+                    "the no-data branch with a same-line invalidating Snoop",
+                )
             expected_state = (
                 ChiCacheState.I
                 if canceled
                 else (
                     ChiCacheState.SC
-                    if pending_copyback.outcome
-                    is ChiRnCopyBackOutcome.LIVE_SC
+                    if (
+                        isinstance(
+                            pending_copyback,
+                            ChiRnWriteEvictOrEvictPending,
+                        )
+                        and pending_copyback.outcome
+                        is ChiRnCopyBackOutcome.LIVE_SC
+                    )
                     else ChiCacheState.UC
                 )
             )
@@ -2125,8 +2219,8 @@ class ChiCoherentRnNode(
             ):
                 return self._fault(
                     state,
-                    "write_evict_or_evict_reserved_line",
-                    "WriteEvictOrEvict no-data completion lost its "
+                    "copyback_no_data_reserved_line",
+                    "CopyBack no-data completion lost its "
                     f"reserved {expected_state.value} line",
                 )
             cache = (
@@ -2141,6 +2235,8 @@ class ChiCoherentRnNode(
             permissions[pending_copyback.address] = ChiCacheState.I
             copybacks = dict(state.pending_copybacks)
             del copybacks[pending_copyback.transaction_id]
+            copy_at_home_lines = set(state.copy_at_home_lines)
+            copy_at_home_lines.discard(pending_copyback.address)
             ack = ChiNetworkPacket.response(
                 ChiCompAckMessage(
                     transaction_id=response.data_buffer_id,
@@ -2157,6 +2253,7 @@ class ChiCoherentRnNode(
                     copybacks,
                     state.request_retry,
                     state.make_unique_store_intents,
+                    frozenset(copy_at_home_lines),
                 ),
                 (ack,),
             )
@@ -2214,6 +2311,7 @@ class ChiCoherentRnNode(
                     state.pending_copybacks,
                     request_retry,
                     state.make_unique_store_intents,
+                    state.copy_at_home_lines,
                 )
             )
         if isinstance(request, ChiMakeUniqueMessage):
@@ -2248,6 +2346,8 @@ class ChiCoherentRnNode(
             del pending[request.transaction_id]
             intents = dict(state.make_unique_store_intents)
             del intents[request.transaction_id]
+            copy_at_home_lines = set(state.copy_at_home_lines)
+            copy_at_home_lines.discard(request.address)
             ack = ChiNetworkPacket.response(
                 ChiCompAckMessage(
                     transaction_id=response.data_buffer_id,
@@ -2263,6 +2363,7 @@ class ChiCoherentRnNode(
                     state.pending_copybacks,
                     state.request_retry,
                     intents,
+                    frozenset(copy_at_home_lines),
                 ),
                 (ack,),
             )
@@ -2308,6 +2409,7 @@ class ChiCoherentRnNode(
                 state.pending_copybacks,
                 state.request_retry,
                 state.make_unique_store_intents,
+                state.copy_at_home_lines,
             ),
             (ack,),
         )
@@ -2354,12 +2456,13 @@ class ChiCoherentRnNode(
                 or response.response != ChiRespCode.I
                 or response.data_id != 0
                 or response.trace_tag
+                or response.copy_at_home
             ):
                 return self._fault(
                     state,
                     "read_unique_nderr_completion",
                     "ReadUnique NDERR requires CompData_I with DataID=0 "
-                    "and TraceTag=0",
+                    "and CAH=0/TraceTag=0",
                 )
             try:
                 request_retry = ChiRequestRetryContract.retire(
@@ -2385,6 +2488,7 @@ class ChiCoherentRnNode(
                     state.pending_copybacks,
                     request_retry,
                     state.make_unique_store_intents,
+                    state.copy_at_home_lines,
                 ),
                 (ack,),
             )
@@ -2404,6 +2508,17 @@ class ChiCoherentRnNode(
                 state,
                 "completion_state",
                 "coherent-read completion has an unsupported cache state",
+            )
+        if response.copy_at_home and (
+            not isinstance(request, ChiReadUniqueMessage)
+            or response.response is not ChiRespCode.UC
+            or response.passes_dirty
+        ):
+            return self._fault(
+                state,
+                "completion_copy_at_home",
+                "the first CopyAtHome completion profile requires a clean "
+                "ReadUnique CompData_UC",
             )
         installed_state = (
             ChiCacheState.UD
@@ -2438,6 +2553,10 @@ class ChiCoherentRnNode(
             source_id=self.node_id,
             target_id=response.home_node_id,
         )
+        copy_at_home_lines = set(state.copy_at_home_lines)
+        copy_at_home_lines.discard(request.address)
+        if response.copy_at_home:
+            copy_at_home_lines.add(request.address)
         return SemanticStep(
             ChiCoherentRnState(
                 cache,
@@ -2446,6 +2565,7 @@ class ChiCoherentRnNode(
                 state.pending_copybacks,
                 request_retry,
                 state.make_unique_store_intents,
+                frozenset(copy_at_home_lines),
             ),
             (ack,),
         )
@@ -2550,6 +2670,7 @@ class ChiCoherentRnNode(
             pending,
             state.request_retry,
             state.make_unique_store_intents,
+            state.copy_at_home_lines,
         )
         return SemanticStep(
             candidate,
@@ -2567,7 +2688,7 @@ class ChiCoherentRnNode(
         state: ChiCoherentRnState,
         request: ChiWriteEvictFullMessage,
     ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
-        """Reserve one explicit ``UC`` victim until Home requests its data."""
+        """Reserve one explicit ``UC`` victim until Home selects its terminal."""
 
         if request.size != 6 or request.address % _CACHE_LINE_BYTES:
             return self._fault(
@@ -2580,14 +2701,12 @@ class ChiCoherentRnNode(
             or request.protocol_credit_type != 0
             or request.expect_completion_ack
             or request.memory_attributes != 0b1101
-            or request.copy_at_home
         ):
             return self._fault(
                 state,
                 "write_evict_request_attributes",
                 "the first WriteEvictFull profile requires Allocate "
-                "MemAttr=1101, CAH=0, AllowRetry=1, PCrdType=0, and "
-                "ExpCompAck=0",
+                "MemAttr=1101, AllowRetry=1, PCrdType=0, and ExpCompAck=0",
             )
         unsupported = tuple(
             name
@@ -2658,6 +2777,16 @@ class ChiCoherentRnNode(
                 "write_evict_permission",
                 "WriteEvictFull requires a resident UC line",
             )
+        if (
+            request.copy_at_home
+            and request.address not in state.copy_at_home_lines
+        ):
+            return self._fault(
+                state,
+                "write_evict_copy_at_home_provenance",
+                "WriteEvictFull(CAH=1) requires cached Home provenance for "
+                "the unchanged resident UC line",
+            )
         pending = dict(state.pending_copybacks)
         pending[request.transaction_id] = ChiRnWriteEvictPending(request)
         candidate = ChiCoherentRnState(
@@ -2667,6 +2796,7 @@ class ChiCoherentRnNode(
             pending,
             state.request_retry,
             state.make_unique_store_intents,
+            state.copy_at_home_lines,
         )
         return SemanticStep(
             candidate,
@@ -2798,6 +2928,7 @@ class ChiCoherentRnNode(
             pending,
             state.request_retry,
             state.make_unique_store_intents,
+            state.copy_at_home_lines,
         )
         return SemanticStep(
             candidate,
@@ -2962,6 +3093,8 @@ class ChiCoherentRnNode(
             raise AssertionError("unreachable CopyBack outcome")
         pending = dict(state.pending_copybacks)
         del pending[request.transaction_id]
+        copy_at_home_lines = set(state.copy_at_home_lines)
+        copy_at_home_lines.discard(request.address)
         return SemanticStep(
             ChiCoherentRnState(
                 cache,
@@ -2970,6 +3103,7 @@ class ChiCoherentRnNode(
                 pending,
                 state.request_retry,
                 state.make_unique_store_intents,
+                frozenset(copy_at_home_lines),
             ),
             (
                 ChiNetworkPacket.data(
@@ -3080,6 +3214,7 @@ class ChiCoherentTransactionPending:
     completion_sent: bool = False
     prepared_backing_write: PreparedBackingWrite | None = None
     completion_response_error: ChiRespErr | int = ChiRespErr.OK
+    copy_at_home: bool = False
 
     def __post_init__(self) -> None:
         _require_node_id("pending requester", self.requester_id)
@@ -3152,6 +3287,20 @@ class ChiCoherentTransactionPending:
             )
         if type(self.completion_sent) is not bool:
             raise TypeError("completion_sent must be bool")
+        if type(self.copy_at_home) is not bool:
+            raise TypeError("pending copy_at_home must be bool")
+        if self.copy_at_home and (
+            not isinstance(self.request, ChiReadUniqueMessage)
+            or completion_response_error is not ChiRespErr.OK
+            or targets
+            or results
+            or self.prepared_backing_write is not None
+        ):
+            raise ValueError(
+                "the first Home CopyAtHome completion must be a successful "
+                "clean ReadUnique with no peer Snoop or prepared backing "
+                "write"
+            )
         prepared = self.prepared_backing_write
         if completion_response_error is ChiRespErr.NDERR:
             if (
@@ -3251,11 +3400,15 @@ class ChiHomeCopyBackAdmission(str, Enum):
     SNOOP_CANCELED = "snoop_canceled"
 
 
-class ChiWriteEvictOrEvictDecision(str, Enum):
-    """Home-owned outcome for one WriteEvictOrEvict request."""
+class ChiCopyBackDecision(str, Enum):
+    """Home-owned data/no-data outcome for a conditional CopyBack."""
 
     REQUEST_DATA = "request_data"
     COMPLETE_WITHOUT_DATA = "complete_without_data"
+
+
+# Compatibility name retained for the older opcode-specific public API.
+ChiWriteEvictOrEvictDecision = ChiCopyBackDecision
 
 
 @dataclass(frozen=True)
@@ -3320,6 +3473,7 @@ class ChiHomeWriteEvictPending:
     admission: ChiHomeCopyBackAdmission = (
         ChiHomeCopyBackAdmission.CURRENT_OWNER
     )
+    decision: ChiCopyBackDecision = ChiCopyBackDecision.REQUEST_DATA
 
     def __post_init__(self) -> None:
         _require_node_id("WriteEvict requester", self.requester_id)
@@ -3356,6 +3510,26 @@ class ChiHomeWriteEvictPending:
             "admission",
             ChiHomeCopyBackAdmission(self.admission),
         )
+        decision = ChiCopyBackDecision(self.decision)
+        if (
+            not self.request.copy_at_home
+            and decision is not ChiCopyBackDecision.REQUEST_DATA
+        ):
+            raise ValueError(
+                "WriteEvictFull(CAH=0) must request CopyBack data"
+            )
+        if (
+            self.admission is ChiHomeCopyBackAdmission.SNOOP_CANCELED
+            and (
+                self.request.copy_at_home
+                or decision is not ChiCopyBackDecision.REQUEST_DATA
+            )
+        ):
+            raise ValueError(
+                "the first Snoop-canceled WriteEvictFull profile supports "
+                "only CAH=0 data completion"
+            )
+        object.__setattr__(self, "decision", decision)
 
 
 @dataclass(frozen=True)
@@ -3639,6 +3813,22 @@ class ChiCoherentHomeState:
             raise TypeError(
                 "coherent Home backing requires LineBackingState"
             )
+        if not isinstance(self.clean_residency, CacheLineStoreState):
+            raise TypeError(
+                "Home clean residency requires CacheLineStoreState"
+            )
+        for address, line in self.clean_residency.lines.items():
+            backing_line = self.backing.line_at(address)
+            if (
+                not isinstance(line, CacheLinePayload)
+                or line.address != address
+                or backing_line is None
+                or line.data != backing_line.data
+            ):
+                raise ValueError(
+                    "Home clean residency must contain full clean copies of "
+                    "existing reference-backing lines"
+                )
         directory = dict(self.directory)
         if any(
             not isinstance(entry, ChiHomeDirectoryEntry)
@@ -3661,6 +3851,15 @@ class ChiCoherentHomeState:
             for data_buffer_id, item in pending.items()
         ):
             raise ValueError("Home pending mapping key must match DBID")
+        if any(
+            item.copy_at_home
+            and self.clean_residency.line_at(item.request.address) is None
+            for item in pending.values()
+        ):
+            raise ValueError(
+                "a pending Home CopyAtHome completion requires its matching "
+                "protected clean residency"
+            )
         for name, value in (
             ("next_snoop_transaction_id", self.next_snoop_transaction_id),
             ("next_data_buffer_id", self.next_data_buffer_id),
@@ -3714,6 +3913,20 @@ class ChiCoherentHomeState:
             )
         for item in writebacks.values():
             entry = directory[item.request.address]
+            if isinstance(item, ChiHomeWriteEvictPending):
+                if (
+                    item.decision
+                    is ChiCopyBackDecision.COMPLETE_WITHOUT_DATA
+                    and self.clean_residency.line_at(
+                        item.request.address
+                    )
+                    is None
+                ):
+                    raise ValueError(
+                        "the executable CHECK_CURRENT_COPY WriteEvictFull "
+                        "profile requires a protected Home clean copy for "
+                        "its no-data outcome"
+                    )
             if isinstance(
                 item,
                 ChiHomeWriteEvictOrEvictPending,
@@ -3788,24 +4001,6 @@ class ChiCoherentHomeState:
             raise TypeError(
                 "Home Request-Retry facet requires Home retry state"
             )
-        if not isinstance(self.clean_residency, CacheLineStoreState):
-            raise TypeError(
-                "Home clean residency requires CacheLineStoreState"
-            )
-        for address, line in self.clean_residency.lines.items():
-            backing_line = self.backing.line_at(address)
-            if (
-                not isinstance(line, CacheLinePayload)
-                or line.address != address
-                or backing_line is None
-                or line.data != backing_line.data
-            ):
-                raise ValueError(
-                    "Home clean residency must contain full clean copies of "
-                    "existing reference-backing lines"
-                )
-
-
 ChiCoherentRetryAdmissionPolicy = Callable[
     [ChiReadUniqueMessage, ChiCoherentHomeState],
     int | None,
@@ -3817,6 +4012,18 @@ ChiEvictRetryAdmissionPolicy = Callable[
 ChiReadUniqueNderrPolicy = Callable[
     [ChiReadUniqueMessage, ChiCoherentHomeState],
     bool,
+]
+ChiReadUniqueCopyAtHomePolicy = Callable[
+    [ChiReadUniqueMessage, ChiCoherentHomeState],
+    bool,
+]
+# This callback selects the data/no-data branch of the executable
+# CHECK_CURRENT_COPY profile.  Unlike the full CHI permission, this profile
+# permits COMPLETE_WITHOUT_DATA only while Home still has a matching clean
+# residency entry.
+ChiWriteEvictFullCurrentCopyPolicy = Callable[
+    [ChiWriteEvictFullMessage, ChiCoherentHomeState],
+    ChiCopyBackDecision,
 ]
 ChiWriteEvictOrEvictPolicy = Callable[
     [ChiWriteEvictOrEvictMessage, ChiCoherentHomeState],
@@ -3858,6 +4065,12 @@ class ChiCoherentHomeNode(
         retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
         evict_retry_policy: ChiEvictRetryAdmissionPolicy | None = None,
         read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
+        read_unique_copy_at_home_policy: (
+            ChiReadUniqueCopyAtHomePolicy | None
+        ) = None,
+        write_evict_full_current_copy_policy: (
+            ChiWriteEvictFullCurrentCopyPolicy | None
+        ) = None,
         write_evict_or_evict_policy: (
             ChiWriteEvictOrEvictPolicy | None
         ) = None,
@@ -3960,6 +4173,22 @@ class ChiCoherentHomeNode(
                 "coherent Home read_unique_nderr_policy must be callable"
             )
         if (
+            read_unique_copy_at_home_policy is not None
+            and not callable(read_unique_copy_at_home_policy)
+        ):
+            raise TypeError(
+                "coherent Home read_unique_copy_at_home_policy must be "
+                "callable"
+            )
+        if (
+            write_evict_full_current_copy_policy is not None
+            and not callable(write_evict_full_current_copy_policy)
+        ):
+            raise TypeError(
+                "coherent Home WriteEvictFull current-copy-check policy "
+                "must be callable"
+            )
+        if (
             write_evict_or_evict_policy is not None
             and not callable(write_evict_or_evict_policy)
         ):
@@ -3980,6 +4209,12 @@ class ChiCoherentHomeNode(
         self.retry_policy = retry_policy
         self.evict_retry_policy = evict_retry_policy
         self.read_unique_nderr_policy = read_unique_nderr_policy
+        self.read_unique_copy_at_home_policy = (
+            read_unique_copy_at_home_policy
+        )
+        self.write_evict_full_current_copy_policy = (
+            write_evict_full_current_copy_policy
+        )
         self.write_evict_or_evict_policy = (
             write_evict_or_evict_policy
         )
@@ -4537,6 +4772,44 @@ class ChiCoherentHomeNode(
                     "read_unique_nderr_policy",
                     "ReadUnique NDERR policy must return bool",
                 )
+        copy_at_home = False
+        if (
+            isinstance(request, ChiReadUniqueMessage)
+            and self.read_unique_copy_at_home_policy is not None
+        ):
+            copy_at_home = self.read_unique_copy_at_home_policy(
+                request,
+                state,
+            )
+            if type(copy_at_home) is not bool:
+                return self._fault(
+                    state,
+                    "read_unique_copy_at_home_policy",
+                    "ReadUnique CopyAtHome policy must return bool",
+                )
+            if copy_at_home:
+                clean_line = state.clean_residency.line_at(
+                    request.address
+                )
+                backing_line = state.backing.line_at(request.address)
+                other_holders = set(entry.sharers)
+                if entry.unique_owner is not None:
+                    other_holders.add(entry.unique_owner)
+                other_holders.discard(packet.source_id)
+                if (
+                    complete_with_nderr
+                    or clean_line is None
+                    or backing_line is None
+                    or clean_line.data != backing_line.data
+                    or other_holders
+                ):
+                    return self._fault(
+                        state,
+                        "read_unique_copy_at_home_policy",
+                        "the first CopyAtHome producer requires a matching "
+                        "Home clean copy, a successful clean completion, "
+                        "and no peer Snoop targets",
+                    )
         data_buffer_id = self._allocate_identifier(
             state.next_data_buffer_id,
             set(state.pending) | set(state.pending_copybacks),
@@ -4591,6 +4864,7 @@ class ChiCoherentHomeNode(
             data_buffer_id,
             frozenset(targets),
             completion_sent=not targets,
+            copy_at_home=copy_at_home,
         )
         pending = dict(state.pending)
         pending[data_buffer_id] = pending_item
@@ -4915,6 +5189,7 @@ class ChiCoherentHomeNode(
                 pending_item.completion_response_error
             ),
             prepared_backing_write=prepared_backing_write,
+            copy_at_home=pending_item.copy_at_home,
         )
         pending = dict(state.pending)
         pending[updated.data_buffer_id] = updated
@@ -4953,6 +5228,73 @@ class ChiCoherentHomeNode(
         copyback_pending = state.pending_copybacks.get(
             ack.transaction_id
         )
+        if isinstance(copyback_pending, ChiHomeWriteEvictPending):
+            if packet.source_id != copyback_pending.requester_id:
+                return self._fault(
+                    state,
+                    "write_evict_completion_ack_identity",
+                    "WriteEvictFull CompAck does not match the Home "
+                    "DBID/requester pair",
+                )
+            if (
+                copyback_pending.decision
+                is not ChiCopyBackDecision.COMPLETE_WITHOUT_DATA
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_terminal",
+                    "WriteEvictFull data reservation cannot consume CompAck",
+                )
+            if (
+                ack.response != int(ChiRespCode.UC)
+                or ack.trace_tag
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_completion_ack_state",
+                    "WriteEvictFull no-data outcome requires CompAck_UC "
+                    "without TraceTag",
+                )
+            entry = state.directory[
+                copyback_pending.request.address
+            ]
+            backing_line = state.backing.line_at(
+                copyback_pending.request.address
+            )
+            if (
+                entry != copyback_pending.directory_snapshot
+                or backing_line is None
+                or backing_line.version
+                != copyback_pending.backing_version
+                or state.clean_residency.line_at(entry.address) is None
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_reservation_changed",
+                    "directory, backing, or protected Home clean-copy "
+                    "authority changed before WriteEvictFull CompAck",
+                )
+            copybacks = dict(state.pending_copybacks)
+            del copybacks[copyback_pending.data_buffer_id]
+            directory = dict(state.directory)
+            directory[entry.address] = self._remove_clean_holder(
+                entry,
+                copyback_pending.requester_id,
+            )
+            return SemanticStep(
+                ChiCoherentHomeState(
+                    directory=directory,
+                    backing=state.backing,
+                    pending=state.pending,
+                    next_snoop_transaction_id=(
+                        state.next_snoop_transaction_id
+                    ),
+                    next_data_buffer_id=state.next_data_buffer_id,
+                    pending_copybacks=copybacks,
+                    request_retry=state.request_retry,
+                    clean_residency=state.clean_residency,
+                )
+            )
         if isinstance(
             copyback_pending,
             ChiHomeWriteEvictOrEvictPending,
@@ -5347,7 +5689,7 @@ class ChiCoherentHomeNode(
         packet: ChiNetworkPacket,
         admission: ChiHomeCopyBackAdmission,
     ) -> SemanticStep[ChiCoherentHomeState, ChiNetworkPacket]:
-        """Grant a DBID for one ``CAH=0`` clean allocation transaction."""
+        """Reserve a clean victim and choose the CAH-qualified terminal."""
 
         if packet.target_id != self.node_id:
             return self._fault(
@@ -5370,7 +5712,6 @@ class ChiCoherentHomeNode(
             or request.protocol_credit_type != 0
             or request.memory_attributes != 0b1101
             or request.expect_completion_ack
-            or request.copy_at_home
             or not request.snoop_attribute
             or request.likely_shared
             or request.exclusive
@@ -5383,8 +5724,18 @@ class ChiCoherentHomeNode(
                 state,
                 "write_evict_profile",
                 "the first WriteEvictFull profile requires an aligned "
-                "64-byte UC CopyBack with Allocate MemAttr=1101, CAH=0, "
+                "64-byte UC CopyBack with Allocate MemAttr=1101, "
                 "AllowRetry=1, PCrdType=0, and ExpCompAck=0",
+            )
+        if (
+            request.copy_at_home
+            and admission is ChiHomeCopyBackAdmission.SNOOP_CANCELED
+        ):
+            return self._fault(
+                state,
+                "write_evict_copy_at_home_snoop",
+                "the first WriteEvictFull(CAH=1) slice does not combine "
+                "with same-line Snoop cancellation",
             )
         entry = state.directory.get(request.address)
         backing_line = state.backing.line_at(request.address)
@@ -5463,6 +5814,41 @@ class ChiCoherentHomeNode(
                     location=self.name,
                 ),
             )
+        decision = ChiCopyBackDecision.REQUEST_DATA
+        if request.copy_at_home:
+            if self.write_evict_full_current_copy_policy is None:
+                return self._fault(
+                    state,
+                    "write_evict_copy_at_home_policy",
+                    "WriteEvictFull(CAH=1) requires an explicit Home "
+                    "CHECK_CURRENT_COPY outcome policy",
+                )
+            try:
+                decision = ChiCopyBackDecision(
+                    self.write_evict_full_current_copy_policy(
+                        request,
+                        state,
+                    )
+                )
+            except (TypeError, ValueError) as error:
+                return self._fault(
+                    state,
+                    "write_evict_copy_at_home_policy",
+                    "Home WriteEvictFull CHECK_CURRENT_COPY policy returned "
+                    "an "
+                    f"unknown decision: {error}",
+                )
+            if (
+                decision is ChiCopyBackDecision.COMPLETE_WITHOUT_DATA
+                and state.clean_residency.line_at(request.address) is None
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_copy_at_home_current_copy",
+                    "the executable CHECK_CURRENT_COPY profile can complete "
+                    "without data only while a matching Home clean copy is "
+                    "present",
+                )
         data_buffer_id = self._allocate_identifier(
             state.next_data_buffer_id,
             set(state.pending) | set(state.pending_copybacks),
@@ -5474,13 +5860,23 @@ class ChiCoherentHomeNode(
             data_buffer_id,
             entry,
             backing_line.version,
-            admission,
+            admission=admission,
+            decision=decision,
         )
-        response = ChiNetworkPacket.response(
-            ChiCompDBIDRespMessage(
+        response_message: ChiCompMessage | ChiCompDBIDRespMessage
+        if decision is ChiCopyBackDecision.REQUEST_DATA:
+            response_message = ChiCompDBIDRespMessage(
                 transaction_id=request.transaction_id,
                 data_buffer_id=data_buffer_id,
-            ),
+            )
+        else:
+            response_message = ChiCompMessage(
+                transaction_id=request.transaction_id,
+                data_buffer_id=data_buffer_id,
+                response=ChiRespCode.I,
+            )
+        response = ChiNetworkPacket.response(
+            response_message,
             source_id=self.node_id,
             target_id=packet.source_id,
         )
@@ -5872,6 +6268,17 @@ class ChiCoherentHomeNode(
                 )
             )
         if (
+            isinstance(pending, ChiHomeWriteEvictPending)
+            and pending.decision
+            is not ChiCopyBackDecision.REQUEST_DATA
+        ):
+            return self._fault(
+                state,
+                "write_evict_terminal",
+                "WriteEvictFull no-data reservation cannot consume "
+                "CopyBackWrData",
+            )
+        if (
             pending.admission
             is ChiHomeCopyBackAdmission.SNOOP_CANCELED
         ):
@@ -6123,6 +6530,7 @@ class ChiCoherentHomeNode(
                     else ChiRespCode.SC
                 ),
                 data_buffer_id=pending.data_buffer_id,
+                copy_at_home=pending.copy_at_home,
             ),
             source_id=self.node_id,
             target_id=pending.requester_id,
@@ -6191,8 +6599,11 @@ __all__ = [
     "ChiCoherentRnState",
     "ChiCoherentRetryAdmissionPolicy",
     "ChiCoherentRetryRequestMessage",
+    "ChiCopyBackDecision",
     "ChiEvictRetryAdmissionPolicy",
+    "ChiReadUniqueCopyAtHomePolicy",
     "ChiReadUniqueNderrPolicy",
+    "ChiWriteEvictFullCurrentCopyPolicy",
     "ChiWriteEvictOrEvictDecision",
     "ChiWriteEvictOrEvictPolicy",
     "ChiHomeAcceptCompAck",

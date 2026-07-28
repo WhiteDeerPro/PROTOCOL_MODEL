@@ -45,6 +45,9 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     ChiCoherenceNetworkEventKind,
     ChiCoherenceNetworkSession,
     ChiCoherenceSession,
+    ChiCoherenceState,
+    ChiCopyBackDeliveryPhase,
+    ChiCopyBackOperation,
     ChiDeliverCoherencePacket,
     ChiFeatureContract,
     ChiHomeAuthority,
@@ -574,6 +577,22 @@ class ChiIssueHWriteEvictOrEvictNetworkTest(unittest.TestCase):
                 (self.REQUESTER, self.TXN_ID)
             ],
         )
+        response_expectation = (
+            canceled_at_home.state.copyback_phase_ledger.for_request(
+                self.REQUESTER,
+                self.TXN_ID,
+            )
+        )
+        self.assertIsNotNone(response_expectation)
+        self.assertIs(
+            ChiCopyBackOperation.WRITE_EVICT_OR_EVICT,
+            response_expectation.operation,
+        )
+        self.assertIs(
+            ChiCopyBackDeliveryPhase.HOME_RESPONSE,
+            response_expectation.phase,
+        )
+        self.assertEqual(exact_response, response_expectation.packet)
 
         canceled_at_rn = self.apply(
             session,
@@ -641,6 +660,26 @@ class ChiIssueHWriteEvictOrEvictNetworkTest(unittest.TestCase):
                     },
                 )
         self.assertEqual(exact_terminal, expected_terminal)
+        terminal_expectation = (
+            canceled_at_rn.state.copyback_phase_ledger.for_data_buffer(
+                self.REQUESTER,
+                terminal.transaction_id,
+            )
+        )
+        self.assertIsNotNone(terminal_expectation)
+        self.assertEqual(
+            response_expectation.identity,
+            terminal_expectation.identity,
+        )
+        self.assertIs(
+            (
+                ChiCopyBackDeliveryPhase.REQUESTER_DATA
+                if isinstance(terminal, ChiCopyBackWrDataMessage)
+                else ChiCopyBackDeliveryPhase.REQUESTER_ACK
+            ),
+            terminal_expectation.phase,
+        )
+        self.assertEqual(exact_terminal, terminal_expectation.packet)
         rejected_terminal = session.step(
             canceled_at_rn.state,
             ChiDeliverCoherencePacket(forged_terminal),
@@ -673,6 +712,7 @@ class ChiIssueHWriteEvictOrEvictNetworkTest(unittest.TestCase):
         self.assertFalse(
             retired.state.expected_write_evict_or_evict_acks
         )
+        self.assertFalse(retired.state.copyback_phase_ledger.entries)
         self.assertTrue(session.is_quiescent(retired.state))
 
         replayed = session.step(
@@ -839,6 +879,44 @@ class ChiIssueHWriteEvictOrEvictNetworkTest(unittest.TestCase):
                     terminal_rule,
                 )
                 self.assertTrue(session.is_quiescent(retired.state))
+
+    def test_legacy_ack_keyword_rebuilds_typed_copyback_ledger(
+        self,
+    ) -> None:
+        session, accepted = self.start_system_outcome(
+            ChiWriteEvictOrEvictDecision.COMPLETE_WITHOUT_DATA
+        )
+        acknowledged = self.apply(
+            session,
+            accepted.state,
+            ChiDeliverCoherencePacket(accepted.emissions[0]),
+        )
+
+        rebuilt = ChiCoherenceState(
+            home=acknowledged.state.home,
+            request_nodes=acknowledged.state.request_nodes,
+            expected_write_evict_or_evict_acks=(
+                acknowledged.state.expected_write_evict_or_evict_acks
+            ),
+        )
+
+        self.assertEqual(
+            acknowledged.state.copyback_phase_ledger.entries,
+            rebuilt.copyback_phase_ledger.entries,
+        )
+        expectation = rebuilt.copyback_phase_ledger.for_data_buffer(
+            self.REQUESTER,
+            acknowledged.emissions[0].message.transaction_id,
+        )
+        self.assertIsNotNone(expectation)
+        self.assertIs(
+            ChiCopyBackDeliveryPhase.REQUESTER_ACK,
+            expectation.phase,
+        )
+        self.assertEqual(
+            acknowledged.emissions[0],
+            expectation.packet,
+        )
 
     def test_resolved_network_runs_both_three_packet_outcomes(
         self,

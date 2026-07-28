@@ -115,6 +115,7 @@ def bind_chi_issue_h_cache_vdut(
     *,
     port_channels: Mapping[str, frozenset[ChiChannelKind]],
     initial_permissions: Mapping[int, ChiCacheState],
+    initial_copy_at_home: frozenset[int] = frozenset(),
     participant_name: str | None = None,
     binding_name: str | None = None,
     coherence_transaction_capacity: int = 4,
@@ -216,6 +217,7 @@ def bind_chi_issue_h_cache_vdut(
         home_node_id,
         cache_core=cache_core,
         initial_permissions=initial_permissions,
+        initial_copy_at_home=initial_copy_at_home,
         outstanding_capacity=coherence_transaction_capacity,
     )
     binding = ChiParticipantBinding(
@@ -248,6 +250,7 @@ def attach_chi_issue_h_coherence(
     home_node_id: int,
     *,
     initial_permissions: Mapping[int, ChiCacheState],
+    initial_copy_at_home: frozenset[int] = frozenset(),
     coherence_transaction_capacity: int = 4,
     transmit_port_name: str = "chi_tx",
     receive_port_name: str = "chi_rx",
@@ -322,6 +325,7 @@ def attach_chi_issue_h_coherence(
             ),
         },
         initial_permissions=initial_permissions,
+        initial_copy_at_home=initial_copy_at_home,
         coherence_transaction_capacity=coherence_transaction_capacity,
     )
 
@@ -347,7 +351,7 @@ def bind_chi_issue_h_cache_lines(
         raise TypeError(
             "CHI cache-line binding requires an existing VirtualDut"
         )
-    cache_core, permissions = _build_cache_core(
+    cache_core, permissions, copy_at_home = _build_cache_core(
         virtual_dut.name,
         initial_lines,
     )
@@ -358,6 +362,7 @@ def bind_chi_issue_h_cache_lines(
         home_node_id,
         port_channels=port_channels,
         initial_permissions=permissions,
+        initial_copy_at_home=copy_at_home,
         participant_name=participant_name,
         binding_name=binding_name,
         coherence_transaction_capacity=coherence_transaction_capacity,
@@ -382,13 +387,17 @@ def build_chi_issue_h_cache_vdut(
     created elsewhere or needs a custom capacity/replacement refinement.
     """
 
-    cache_core, permissions = _build_cache_core(name, initial_lines)
+    cache_core, permissions, copy_at_home = _build_cache_core(
+        name,
+        initial_lines,
+    )
     return attach_chi_issue_h_coherence(
         name,
         cache_core,
         node_id,
         home_node_id,
         initial_permissions=permissions,
+        initial_copy_at_home=copy_at_home,
         coherence_transaction_capacity=coherence_transaction_capacity,
         transmit_port_name=transmit_port_name,
         receive_port_name=receive_port_name,
@@ -425,7 +434,11 @@ def build_chi_cache_participant_fixture(
 def _build_cache_core(
     name: str,
     initial_lines: tuple[ChiCacheLine, ...],
-) -> tuple[CacheCore[CacheLinePayload], Mapping[int, ChiCacheState]]:
+) -> tuple[
+    CacheCore[CacheLinePayload],
+    Mapping[int, ChiCacheState],
+    frozenset[int],
+]:
     lines = tuple(initial_lines)
     if any(not isinstance(item, ChiCacheLine) for item in lines):
         raise TypeError("CHI cache initial lines require ChiCacheLine")
@@ -445,6 +458,9 @@ def _build_cache_core(
     return (
         CacheCore(f"{name}.cache", cache_store),
         {item.address: item.state for item in lines},
+        frozenset(
+            item.address for item in lines if item.copy_at_home
+        ),
     )
 
 

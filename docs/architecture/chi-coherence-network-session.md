@@ -26,7 +26,7 @@
 |---|---|---|
 | 协议要求 | CHI lifecycle、消息相关性和 channel 使用所要求的事实 | Read、SNP、SnpResp、CompData 和 CompAck 必须按相应 identity 关联 |
 | 架构选择 | Protocol Model 为保存职责边界而采用的组织方式 | participant 状态与 transport 状态分别由两个子 session 持有 |
-| 阶段选择 | 为形成首个可执行纵向切片而采用的受限 profile | 一个 requester、一个 Home、显式有限 Snoopee 集合、基线 `I/SC/UC/UD` 加只供 dirty-peer CleanUnique 消费的 `SD`、512-bit full-line DAT |
+| 阶段选择 | 为形成首个可执行纵向切片而采用的受限 profile | 一个 resolved requester、一个 Home、显式有限 Snoopee 集合、`I/SC/UC/UCE/UD` 加只供 dirty-peer CleanUnique 消费的 `SD`；`UCE` 是无 payload 的 unique authority，其余数据传输固定 512-bit full-line DAT |
 
 阶段选择可以在后续 profile 中扩展。扩展时仍需通过 feature、capability、identity 和 route closure
 显式声明，不由 topology 外形推断协议能力。
@@ -296,7 +296,9 @@ resource；participant 才解释 Read、SNP、response 和 completion。
 
 ## 9. MESI/MOESI 与当前 profile 的边界
 
-基线 RN 稳态为 `I/SC/UC/UD`。`CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 额外允许调用方为一条
+基线 RN 稳态为 `I/SC/UC/UCE/UD`。其中 `UCE` 只保存 unique authority，不在 `CacheLineStore` 中保存
+payload；它由 `CleanUnique` 的无数据 completion 在 requester payload 已不存在时形成，第一次 full-line
+local write 安装 payload 并进入 `UD`。`CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 额外允许调用方为一条
 CleanUnique witness 预置一个受限 `SD` holder；当前没有任何普通 read、write 或 replacement action 生成
 `SD`。Home participant 保存 directory/pending，注入的协议中立 `FullLineBackingCore` 操作
 `LineBackingState`；当唯一 holder 处于 `UD`，或 `shared_dirty_owner` 指向一个 `SD` sharer 时，backing
@@ -306,7 +308,7 @@ copy 可以陈旧，最新数据及其最终写回责任由相应 holder 持有�
 - clean `ReadUnique` 失效其他 holder，使 requester 获得 `UC`；
 - pre-snoop `ReadUnique` NDERR 只保留 DBID/同址 reservation 到 `CompAck`，Requester 的原 `I`/`SC`
   与 payload、其他 holder、directory 和 backing 都不变化；
-- `UC` holder 的本地 full-line write 将其推进到 `UD`；
+- `UC` 或 `UCE` holder 的本地 full-line write 将其推进到 `UD`；`UCE→UD` 同时安装此前不存在的 payload；
 - 另一个 requester 的 `ReadUnique` 通过 `SnpRespData_I_PD → CompData_UD_PD` 接管最新数据和 dirty
   responsibility；
 - requester 的 `ReadNotSharedDirty` 通过
@@ -315,9 +317,10 @@ copy 可以陈旧，最新数据及其最终写回责任由相应 holder 持有�
   都不再承担 dirty responsibility；
 - `SC` holder 可通过 `ReadUnique` 重新取得 full-line、失效其他 holder 并进入 `UC`，随后 local write
   进入 `UD`；
-- `SC` holder 可改用 clean-peer `CleanUnique` 保留已有 full-line；Home 发
-  `SnpCleanInvalid` 收齐 clean `SnpResp_I` 后返回无数据 `Comp_UC`，requester 进入 `UC` 并以 Home
-  分配的 DBID 返回 `CompAck`；
+- `I` 或 `SC` requester 可发 clean-peer `CleanUnique`。若 requester 的 full-line payload 一直保留，
+  Home 发 `SnpCleanInvalid` 收齐 clean `SnpResp_I` 后返回无数据 `Comp_UC`，requester 进入 `UC`；
+  若从 `I` 发起，或 pending CleanUnique 期间被同址 `SnpUnique`/`SnpCleanInvalid` 失效，则
+  `Comp_UC` 形成无 payload 的 `UCE`。两条路径都以 Home 分配的 DBID 返回 `CompAck`；
 - 启用 `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 时，Home 可以对目录中唯一的
   `shared_dirty_owner` 发同一个 `SnpCleanInvalid(DoNotGoToSD=1, RetToSrc=0)`；该受限 `SD` peer
   以 `SnpRespData_I_PD` 返回最新数据并原子失效。Home 将数据保存在
@@ -325,8 +328,9 @@ copy 可以陈旧，最新数据及其最终写回责任由相应 holder 持有�
   `prepared_backing_write`，再返回 `Comp_UC`；同地址 Home reservation 保持到 requester 的 `CompAck`，
   届时按该行 version 提交 backing，并在同一个 Home-state transition 中清除
   `shared_dirty_owner`、提交 requester 为唯一 `UC` holder；
-- stable monitor 检查 directory permission；clean copy 必须匹配 backing data，`UD` copy 必须是唯一
-  owner；受限 `SD` copy 必须与 directory 的唯一 `shared_dirty_owner` 对应。
+- stable monitor 检查 directory permission；有 payload 的 clean copy 必须匹配 backing data，`UCE` 不得有
+  payload 且必须是 directory unique owner，`UD` copy 必须是唯一 owner；受限 `SD` copy 必须与
+  directory 的唯一 `shared_dirty_owner` 对应。
 
 这已经覆盖 MESI 中“unique clean 经过写入成为 modified、modified owner 被另一请求者接管，以及
 modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向路径，但还没有形成完整 MESI 状态机。
@@ -337,10 +341,12 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
 - clean eviction，以及从 victim policy 自动触发 eviction/writeback；显式选择一条 `UD` line 后的
   `WriteBackFull → CompDBIDResp → CopyBackWrData` 已经闭合；
 - 普通 `ReadShared` 命中 `UD` 时的 policy；当前 no-SD 行为由显式 `ReadNotSharedDirty` 路径承担；
-- 同 line 并发已闭合一条 `ReadUnique/SnpUnique` RN transient：pending ReadUnique 期间收到同址
-  `SnpUnique`，RN 可从 `I` 或 `SC` 返回 `SnpResp_I`，保留 pending/Retry correlation，再由自己的
-  `CompData` 安装 `UC`。第二笔 Home 请求仍由 line reservation 串行化。CleanUnique/WriteBack 同址
-  Snoop、等待者合并、显式 transient phase、Snoop 优先级，以及 Retry/error/Snoop 组合与取消尚未闭合；
+- 同 line 并发已闭合两条 RN transient：pending ReadUnique 接收同址 `SnpUnique`，保留 pending/Retry
+  correlation 后由 `CompData` 重新安装 `UC`；pending CleanUnique 接收同址 `SnpUnique` 或
+  `SnpCleanInvalid`，先失效为 `I`，再由 `Comp_UC` 形成 `UCE`。direct `ChiCoherenceSession` 的双
+  Requester witness 证明两笔 CleanUnique 可由 Home line reservation 串行、第二笔最终取得 `UCE`；
+  WriteBack 同址 Snoop/cancel、等待者合并、显式 transient phase、Snoop 优先级，以及
+  Retry/error/Snoop 组合与取消尚未闭合；
 - runtime 按地址动态选择多个 Home、SAM remap 和跨 domain 执行。
 
 当前 `SD` 只是一条受限 CleanUnique 前置状态及其失效出口，不是完整 MOESI/Owned profile。后者还需要
@@ -357,7 +363,10 @@ CompData 的 ReadUnique 保持独立。`CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PE
 Snoopee→Home DAT、Home PassDirty data accept/reference memory update 与 peer dirty-data produce
 要求，并产生 `CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE` 证据；runtime 复用 Home 的
 `allow_dirty_data_transfer=True`，不增加另一枚 feature-specific flag。它不会把 DAT 要求反向加到
-clean-only construction。
+clean-only construction。该 modifier 的名称来自最先闭合的 `SD/shared_dirty_owner` witness；当前 runtime
+把它解释为“CleanUnique snoop 可以返回 PassDirty DAT”，因此同样约束已有 `UD unique_owner` 被
+CleanUnique 失效并由 Home 吸收最新数据的路径。公开 feature 命名稳定前应将它泛化为 dirty-peer modifier
+或拆成两个更窄的 profile，不应把这一复用误解为 `UD` 与 `SD` 是同一 cache state。
 
 `CHI_MESI_NO_SD_REQUIRED_FEATURES` 是 system 侧 policy preset：
 它组合 dirty-unique 与 ReadNotSharedDirty，前者的 dependency closure 再带入 clean ReadUnique；
@@ -407,8 +416,8 @@ VirtualDut、FIFO 或普通寄存器添加 `dirty` 字段。它没有定义 `SC/
 Cache 的构造从协议中立的 resident-line storage 开始，再附加 CHI coherence behavior。当前
 `CacheLineStore` 只保存 line presence 与 payload，薄层 `CacheCore` 在选择协议之前为这些状态提供设备本地
 core 身份；它本身还不是 topology 中的 `VirtualDut` module boundary。`ChiCoherentRnNode` 保存
-基线 `I/SC/UC/UD` permission、受限 `SD` CleanUnique 前置态、local dirtying、TxnID 和 pending coherent
-transaction。`ChiCoherentRnState.lines` 是由这两份不同职责的
+基线 `I/SC/UC/UCE/UD` permission、受限 `SD` CleanUnique 前置态、local dirtying、TxnID 和 pending
+coherent transaction。`UCE` 不占用 resident-line payload。`ChiCoherentRnState.lines` 是由这两份不同职责的
 事实合成的只读投影，不是第二份 line data。
 
 `attach_chi_issue_h_coherence()` 接受已经建立的 core，再装配具名 `VirtualDut` transport boundary、
@@ -499,15 +508,19 @@ coherence lifecycle”的验证语义，但不宣称等于一种 RTL MSHR 组织
 合并、背压或进度时才应把这些字段加入 participant。dirty victim 的写回队列同理，应作为独立有限资源，
 不与 read-miss slot 被动合并成一个含义模糊的容量。
 
-当前每个 RN cache line 同时只允许一个本地 coherent lifecycle；同地址第二笔本地请求被 block。唯一放宽的
-重叠是 pending `ReadUnique` 收到同址 `SnpUnique`：`I` 保持 absent，`SC` copy 被失效，两者都返回
-`SnpResp_I`，且 pending transaction 与 Request-Retry ledger 原样保留；后续 `CompData_UC` 再安装完整
-payload 和 `UC` permission。CleanUnique 或 WriteBackFull pending 遇到同址 Snoop 仍返回可重试的
+当前每个 RN cache line 同时只允许一个本地 coherent lifecycle；同地址第二笔本地请求被 block。允许的
+Snoop 重叠有两种：pending `ReadUnique` 收到同址 `SnpUnique` 时，`I` 保持 absent、`SC` copy 被失效，
+`I` 或 `RetToSrc=0` 返回 `SnpResp_I`，`SC` 且 `RetToSrc=1` 返回携带原 payload 的
+`SnpRespData_I`；pending transaction 与 Request-Retry ledger 原样保留，后续 `CompData_UC` 再安装完整
+payload 和 `UC` permission。pending `CleanUnique` 收到同址 `SnpUnique` 时采用相同响应区分，收到
+`SnpCleanInvalid` 时返回 `SnpResp_I`；两者都先失效为 `I` 并保留 CleanUnique pending，后续 `Comp_UC`
+形成无 payload 的 `UCE`。`UCE` 遇到 invalidating Snoop 即返回无数据 `SnpResp_I` 并进入 `I`，即使
+`RetToSrc=1` 也不伪造 DAT。WriteBackFull pending 遇到同址 Snoop 仍返回可重试的
 `ResourceDemand`；topology-backed session 会保留该 endpoint packet，待 reservation 释放后重新尝试。
 `WriteBackFull` 从发 REQ 到收到 `CompDBIDResp` 期间保留 resident `UD` payload；收到 DBID 后，RN 在一个
 transition 中读取最新数据、产生 `CopyBackWrData_UD_PD`、删除 payload 并转为 `I`。Home 直到收到 DAT 才
-更新 backing、清除 unique owner 和释放 DBID。这个切片明确了 ReadUnique/SnpUnique 重叠及 UD→I 的责任
-转移时点，但还没有把 I→S、S→U 等全部等待阶段编码成完整 transient 状态机。
+更新 backing、清除 unique owner 和释放 DBID。当前尚未实现 WriteBack 被同址失效后的 post-Snoop
+`CopyBack_I`/零数据 retirement，也没有把 I→S、S→U 等全部等待阶段编码成完整 transient 状态机。
 
 Home 的 coherent pending、Home writeback pending、RN coherent pending 与 RN writeback pending 分别可由
 `project_progress()` 投影为 held line，其 release event 记录为 `CompAck`、`CopyBackWrData`、
@@ -663,7 +676,7 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 下列能力仍在当前切片之外：
 
 - `MakeUnique`、clean `Evict`、自动 victim selection/writeback scheduling、CMO/DVM，以及
-  CleanUnique/WriteBack 同址 Snoop、等待者合并和一般 transient phase；
+  WriteBack 同址 Snoop/cancel、等待者合并和一般 transient phase；
 - dirty writeback 与 RetryAck/P-Credit、错误响应或同地址 Snoop 的并发组合；
 - 让 Home participant 与独立 Memory/SN VirtualDut 通过 topology-visible protocol transaction 共同执行，
   以及相应 HN→SN physical write lifecycle；
@@ -695,13 +708,17 @@ feature/capability/flow closure、packet-delivery coherence session 和 topology
 
 调用方构造的单 XP 与 2×2 XP mesh 仍属于场景 recipe。2×2 showcase 是可执行的 clean ReadUnique 证据，
 并由一个不发布 artifact 的 smoke test 调用；MESI no-SD 与受限 shared-dirty CleanUnique 路径当前保存在
-定向 network witness 中。前者不是通用 `MeshBuilder`，这些 witness 也尚未替代全部测试夹具。
+定向 network witness 中。direct participant session 另有双 Requester CleanUnique 串行见证：第一笔
+CleanUnique 失效第二个 requester 的 pending line，第二笔随后经 `Comp_UC` 获得 `UCE`，再以 full-line write
+进入 `UD`。它不经过 resolved construction，因而不证明一般多 Requester topology。
+前者不是通用 `MeshBuilder`，这些 witness 也尚未替代全部测试夹具。
 下列内容仍需要保留在定向测试中：
 
 - malformed identity、route、capability 与 feature dependency 负例；
 - fanout 在有限容量下的原子保存；
-- orphan/重复 Snoop response、双 dirty owner、ReadUnique/SnpUnique 同址重叠，以及
-  CleanUnique/WriteBack 同址 Snoop 的保守 block；
+- orphan/重复 Snoop response、双 dirty owner、ReadUnique/SnpUnique 同址重叠、CleanUnique 对
+  `SnpUnique`/`SnpCleanInvalid` 的同址重叠与 `UCE` 无 payload invariant，以及 WriteBack 同址 Snoop 的
+  保守 block；
 - clean 与 dirty participant 状态转换的局部诊断；
 - `SD`/`shared_dirty_owner` 对齐、DAT route/capability 和 reference backing 提交时点；
 - coherent pre-snoop NDERR 的零 SNP、状态不变与 DBID/CompAck 定向生命周期；

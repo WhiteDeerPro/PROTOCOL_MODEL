@@ -558,7 +558,7 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
             )
         )
 
-    def test_clean_unique_transient_defers_same_line_snp_unique(
+    def test_clean_unique_transient_accepts_same_line_snp_unique(
         self,
     ) -> None:
         requester = self.build_requester(ChiCacheState.SC)
@@ -570,17 +570,25 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
             ),
         )
 
-        blocked = requester.step(
+        snooped = self.apply(
+            requester,
             issued.state,
             ChiRnAcceptSnoop(self.snoop_unique_packet()),
         )
 
-        self.assertIsNone(blocked.fault)
-        self.assertIsNotNone(blocked.blocked)
-        assert blocked.blocked is not None
-        self.assertIn("defers the Snoop", blocked.blocked.reason)
-        self.assertIs(issued.state, blocked.state)
-        self.assertFalse(blocked.emissions)
+        line = snooped.state.line_at(self.ADDRESS)
+        assert line is not None
+        self.assertIs(ChiCacheState.I, line.state)
+        self.assertIn(0x14, snooped.state.pending_transactions)
+        self.assertEqual(1, len(snooped.emissions))
+        self.assertIsInstance(
+            snooped.emissions[0].message,
+            ChiSnpRespMessage,
+        )
+        self.assertIs(
+            ChiRespCode.I,
+            snooped.emissions[0].message.response,
+        )
 
     def test_writeback_full_transient_defers_same_line_snp_unique(
         self,

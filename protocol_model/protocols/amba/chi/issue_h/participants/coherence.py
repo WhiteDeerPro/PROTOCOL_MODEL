@@ -5,9 +5,10 @@ uses an injected protocol-neutral cache core and owns CHI permission and
 transaction state.  Home behavior uses an injected protocol-neutral full-line
 backing core and separately owns directory and transaction state.  ``SD`` is
 present only as the minimum shared-dirty authority needed by dirty-peer
-CleanUnique; it is not a general MOESI profile.  Neither participant decides
-how a packet crosses a topology; output is another explicit
-``ChiNetworkPacket`` that a transport runtime can enqueue.
+CleanUnique, while ``UCE`` records data-less Unique permission after an
+invalid/absent-line CleanUnique completion.  This is not a general MOESI
+profile.  Neither participant decides how a packet crosses a topology; output
+is another explicit ``ChiNetworkPacket`` that a transport runtime can enqueue.
 """
 
 from __future__ import annotations
@@ -101,6 +102,7 @@ class ChiCacheState(str, Enum):
     SC = "SC"
     SD = "SD"
     UC = "UC"
+    UCE = "UCE"
     UD = "UD"
 
 
@@ -121,8 +123,13 @@ class ChiCacheLine:
             or not 0 <= self.data < _CACHE_LINE_DATA_LIMIT
         ):
             raise ValueError("cache-line data must fit one 512-bit line")
-        if self.state is not ChiCacheState.I and self.data is None:
-            raise ValueError("a valid clean cache line requires data")
+        if self.state in (ChiCacheState.I, ChiCacheState.UCE):
+            if self.data is not None:
+                raise ValueError(
+                    "I and UCE cache states must not carry valid line data"
+                )
+        elif self.data is None:
+            raise ValueError("a full valid cache line requires data")
 
 
 ChiCoherentReadMessage = (
@@ -163,7 +170,7 @@ class ChiRnIssueCoherentRead:
 
 @dataclass(frozen=True)
 class ChiRnIssueCleanUnique:
-    """Request a data-less ``SC`` to ``UC`` permission upgrade."""
+    """Request Unique permission without transferring cache-line data."""
 
     request: ChiCleanUniqueMessage
 
@@ -325,9 +332,10 @@ class ChiCoherentRnState:
     """Cache storage state plus CHI-specific permissions and transactions.
 
     ``cache`` is the only owner of resident line data.  ``permissions`` is a
-    CHI facet projection and can retain an ``I`` tombstone after invalidation.
-    The ``lines`` property is a compatibility/readout view assembled from
-    those two facts; it is not another mutable store.
+    CHI facet projection and can retain an ``I`` tombstone after invalidation
+    or a data-less ``UCE`` permission.  The ``lines`` property is a
+    compatibility/readout view assembled from those two facts; it is not
+    another mutable store.
     """
 
     cache: CacheLineStoreState[CacheLinePayload] = field(
@@ -360,15 +368,15 @@ class ChiCoherentRnState:
             _require_line_address(address)
             permissions[address] = ChiCacheState(permission)
         resident = set(self.cache.lines)
-        valid_permissions = {
+        payload_permissions = {
             address
             for address, permission in permissions.items()
-            if permission is not ChiCacheState.I
+            if permission not in (ChiCacheState.I, ChiCacheState.UCE)
         }
-        if resident != valid_permissions:
+        if resident != payload_permissions:
             raise ValueError(
-                "resident cache data must have exactly one non-I CHI "
-                "permission"
+                "resident cache data must have exactly one full-data CHI "
+                "permission; I and UCE do not own payload"
             )
         pending = dict(self.pending_transactions)
         if any(
@@ -430,13 +438,13 @@ class ChiCoherentRnState:
                 "RN pending WriteBackFull requires a resident UD line"
             )
         if any(
-            request.address not in resident
-            or permissions.get(request.address) is not ChiCacheState.SC
+            permissions.get(request.address, ChiCacheState.I)
+            not in (ChiCacheState.I, ChiCacheState.SC)
             for request in pending.values()
             if isinstance(request, ChiCleanUniqueMessage)
         ):
             raise ValueError(
-                "RN pending CleanUnique requires a resident SC line"
+                "RN pending CleanUnique requires an I or SC line state"
             )
         if not isinstance(
             self.request_retry,
@@ -477,7 +485,10 @@ class ChiCoherentRnState:
                     permission,
                     (
                         None
-                        if permission is ChiCacheState.I
+                        if permission in (
+                            ChiCacheState.I,
+                            ChiCacheState.UCE,
+                        )
                         else self.cache.lines[address].data
                     ),
                 )
@@ -565,15 +576,15 @@ class ChiCoherentRnNode(
             address: ChiCacheState(permission)
             for address, permission in dict(initial_permissions).items()
         }
-        valid_permissions = {
+        payload_permissions = {
             address
             for address, permission in permissions.items()
-            if permission is not ChiCacheState.I
+            if permission not in (ChiCacheState.I, ChiCacheState.UCE)
         }
-        if set(initial_cache.lines) != valid_permissions:
+        if set(initial_cache.lines) != payload_permissions:
             raise ValueError(
-                "initial CHI permissions must cover exactly the resident "
-                "cache payloads"
+                "initial full-data CHI permissions must cover exactly the "
+                "resident cache payloads; I and UCE carry no payload"
             )
         self.name = name
         self.node_id = node_id
@@ -655,7 +666,11 @@ class ChiCoherentRnNode(
                 "local_write_permission",
                 "local write requires an installed Unique cache line",
             )
-        if line.state not in (ChiCacheState.UC, ChiCacheState.UD):
+        if line.state not in (
+            ChiCacheState.UC,
+            ChiCacheState.UCE,
+            ChiCacheState.UD,
+        ):
             return self._fault(
                 state,
                 "local_write_upgrade",
@@ -809,7 +824,7 @@ class ChiCoherentRnNode(
         state: ChiCoherentRnState,
         request: ChiCleanUniqueMessage,
     ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
-        """Reserve one resident Shared line while permission is upgraded."""
+        """Reserve an invalid/absent or Shared line for a Unique upgrade."""
 
         if request.size != 6 or request.address % _CACHE_LINE_BYTES:
             return self._fault(
@@ -894,11 +909,14 @@ class ChiCoherentRnNode(
                 "clean_unique_dirty_requester",
                 "the clean-only CleanUnique slice rejects a dirty requester",
             )
-        if line is None or line.state is not ChiCacheState.SC:
+        if (
+            line is not None
+            and line.state not in (ChiCacheState.I, ChiCacheState.SC)
+        ):
             return self._fault(
                 state,
                 "clean_unique_permission",
-                "CleanUnique requires a resident SC line at the requester",
+                "CleanUnique requires I or a resident SC line at the requester",
             )
         pending = dict(state.pending_transactions)
         pending[request.transaction_id] = request
@@ -1089,7 +1107,20 @@ class ChiCoherentRnNode(
                 for request in same_line
             )
         )
-        if same_line and not read_unique_overlap:
+        clean_unique_overlap = (
+            isinstance(
+                snoop,
+                (ChiSnpCleanInvalidMessage, ChiSnpUniqueMessage),
+            )
+            and same_line
+            and all(
+                isinstance(request, ChiCleanUniqueMessage)
+                for request in same_line
+            )
+        )
+        if same_line and not (
+            read_unique_overlap or clean_unique_overlap
+        ):
             return SemanticStep(
                 state,
                 blocked=ResourceDemand(
@@ -1100,8 +1131,8 @@ class ChiCoherentRnNode(
                     reason=(
                         "the staged transient policy defers the Snoop because "
                         "an RN-local transaction reserves this cache line; "
-                        "only the ReadUnique/SnpUnique same-line transient "
-                        "is implemented"
+                        "only ReadUnique/SnpUnique and CleanUnique/"
+                        "invalidating-Snoop same-line transients are implemented"
                     ),
                     location=self.name,
                 ),
@@ -1137,7 +1168,12 @@ class ChiCoherentRnNode(
         ):
             response = ChiRespCode.I
             if line is not None and line.state is not ChiCacheState.I:
-                if line.state in (ChiCacheState.SD, ChiCacheState.UD):
+                if line.state is ChiCacheState.UCE:
+                    response_message = ChiSnpRespMessage(
+                        transaction_id=snoop.transaction_id,
+                        response=response,
+                    )
+                elif line.state in (ChiCacheState.SD, ChiCacheState.UD):
                     if (
                         line.state is ChiCacheState.SD
                         and not isinstance(snoop, ChiSnpCleanInvalidMessage)
@@ -1170,10 +1206,11 @@ class ChiCoherentRnNode(
                             transaction_id=snoop.transaction_id,
                             response=response,
                         )
-                cache = self.cache_store.remove(
-                    cache,
-                    snoop.address,
-                ).state
+                if line.state is not ChiCacheState.UCE:
+                    cache = self.cache_store.remove(
+                        cache,
+                        snoop.address,
+                    ).state
                 permissions[snoop.address] = ChiCacheState.I
             else:
                 response_message = ChiSnpRespMessage(
@@ -1195,6 +1232,9 @@ class ChiCoherentRnNode(
                     )
             elif line.state is ChiCacheState.SC:
                 response = ChiRespCode.SC
+            elif line.state is ChiCacheState.UCE:
+                response = ChiRespCode.I
+                permissions[snoop.address] = ChiCacheState.I
             elif line.state is ChiCacheState.SD:
                 return self._fault(
                     state,
@@ -1254,7 +1294,7 @@ class ChiCoherentRnNode(
         state: ChiCoherentRnState,
         packet: ChiNetworkPacket,
     ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
-        """Install Unique permission and acknowledge the Home-owned DBID."""
+        """Install ``UC``/``UCE`` and acknowledge the Home-owned DBID."""
 
         if packet.target_id != self.node_id:
             return self._fault(
@@ -1289,14 +1329,21 @@ class ChiCoherentRnNode(
                 "or tag operation",
             )
         line = state.line_at(request.address)
-        if line is None or line.state is not ChiCacheState.SC:
+        if line is not None and line.state not in (
+            ChiCacheState.I,
+            ChiCacheState.SC,
+        ):
             return self._fault(
                 state,
                 "clean_unique_reserved_line",
-                "the reserved CleanUnique line is no longer resident in SC",
+                "the reserved CleanUnique line is neither I nor resident SC",
             )
         permissions = dict(state.permissions)
-        permissions[request.address] = ChiCacheState.UC
+        permissions[request.address] = (
+            ChiCacheState.UCE
+            if line is None or line.state is ChiCacheState.I
+            else ChiCacheState.UC
+        )
         pending = dict(state.pending_transactions)
         del pending[request.transaction_id]
         ack = ChiNetworkPacket.response(
@@ -2384,29 +2431,17 @@ class ChiCoherentHomeNode(
                 "address_home",
                 "Home has no backing entry for this address",
             )
-        if isinstance(request, ChiCleanUniqueMessage):
-            if entry.unique_owner is not None:
-                return self._fault(
-                    state,
-                    "clean_unique_directory_state",
-                    "CleanUnique cannot consume an existing Unique owner",
-                )
-            if packet.source_id not in entry.sharers:
-                return self._fault(
-                    state,
-                    "clean_unique_requester_state",
-                    "CleanUnique requester must already be a directory sharer",
-                )
-            if (
-                entry.shared_dirty_owner is not None
-                and not self.allow_dirty_data_transfer
-            ):
-                return self._fault(
-                    state,
-                    "clean_unique_shared_dirty_disabled",
-                    "shared-dirty CleanUnique requires a Home configured "
-                    "to accept PassDirty snoop data",
-                )
+        if (
+            isinstance(request, ChiCleanUniqueMessage)
+            and entry.shared_dirty_owner is not None
+            and not self.allow_dirty_data_transfer
+        ):
+            return self._fault(
+                state,
+                "clean_unique_shared_dirty_disabled",
+                "shared-dirty CleanUnique requires a Home configured "
+                "to accept PassDirty snoop data",
+            )
         if any(
             item.request.address == request.address
             for item in state.pending.values()
@@ -2793,20 +2828,26 @@ class ChiCoherentHomeNode(
             )
         if isinstance(pending_item.request, ChiCleanUniqueMessage):
             entry = state.directory[pending_item.request.address]
-            expects_dirty_data = (
+            requires_dirty_data = (
                 packet.source_id == entry.shared_dirty_owner
             )
-            if expects_dirty_data != is_data:
+            permits_dirty_data = (
+                requires_dirty_data
+                or packet.source_id == entry.unique_owner
+            )
+            if requires_dirty_data and not is_data:
                 return self._fault(
                     state,
                     "clean_unique_shared_dirty_response",
-                    (
-                        "the directory shared-dirty owner must return "
-                        "SnpRespData_I_PD"
-                        if expects_dirty_data
-                        else "a clean CleanUnique peer must not return dirty "
-                        "SnpRespData; it must return SnpResp_I"
-                    ),
+                    "the directory shared-dirty owner must return "
+                    "SnpRespData_I_PD",
+                )
+            if is_data and not permits_dirty_data:
+                return self._fault(
+                    state,
+                    "clean_unique_dirty_response_source",
+                    "only the directory dirty owner can return "
+                    "SnpRespData_I_PD for CleanUnique",
                 )
             allowed_responses = (
                 (ChiRespCode.I_PD,)

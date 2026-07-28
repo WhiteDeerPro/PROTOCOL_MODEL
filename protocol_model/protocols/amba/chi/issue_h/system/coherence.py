@@ -328,6 +328,10 @@ class ChiCoherenceInvariantMonitor:
                 line = state.lines.get(address)
                 if line is not None and line.state is not ChiCacheState.I:
                     holders[node_id] = line
+            holder_states = tuple(
+                (node_id, line.state.value)
+                for node_id, line in sorted(holders.items())
+            )
 
             if entry.unique_owner is not None:
                 expected = {entry.unique_owner}
@@ -335,17 +339,21 @@ class ChiCoherenceInvariantMonitor:
                     reasons.append(
                         f"line {address:#x} directory unique owner "
                         f"{entry.unique_owner} disagrees with RN holders "
-                        f"{sorted(holders)!r}"
+                        f"{holder_states!r}"
                     )
                 owner_line = holders.get(entry.unique_owner)
                 if (
                     owner_line is not None
                     and owner_line.state
-                    not in (ChiCacheState.UC, ChiCacheState.UD)
+                    not in (
+                        ChiCacheState.UC,
+                        ChiCacheState.UCE,
+                        ChiCacheState.UD,
+                    )
                 ):
                     reasons.append(
                         f"line {address:#x} unique owner is not in "
-                        "UC or UD state"
+                        "UC, UCE, or UD state"
                     )
             else:
                 expected = set(entry.sharers)
@@ -380,7 +388,8 @@ class ChiCoherenceInvariantMonitor:
             else:
                 for node_id, line in holders.items():
                     if (
-                        line.state is not ChiCacheState.UD
+                        line.state
+                        not in (ChiCacheState.UCE, ChiCacheState.UD)
                         and line.data != backing_line.data
                     ):
                         reasons.append(
@@ -860,6 +869,7 @@ class ChiCoherenceSession(
     ) -> SemanticFault | None:
         allows_unique_dirty = bool(
             {
+                CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
                 CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
                 CHI_FEATURE_DIRTY_WRITEBACK,
                 CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
@@ -868,6 +878,10 @@ class ChiCoherenceSession(
         )
         allows_shared_dirty = (
             CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            in self.enabled_features
+        )
+        allows_empty_unique = (
+            CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
             in self.enabled_features
         )
         for node_id, node_state in state.request_nodes.items():
@@ -895,6 +909,20 @@ class ChiCoherenceSession(
                         (
                             f"RN {node_id} line {address:#x} is SD but the "
                             "shared-dirty CleanUnique feature is not enabled"
+                        ),
+                        ConstraintScope.SYSTEM,
+                        self.name,
+                    )
+                if (
+                    line.state is ChiCacheState.UCE
+                    and not allows_empty_unique
+                ):
+                    return SemanticFault(
+                        f"{self.name}.empty_unique_state_profile",
+                        (
+                            f"RN {node_id} line {address:#x} is UCE but the "
+                            "selected coherence features cannot create or "
+                            "consume empty Unique ownership"
                         ),
                         ConstraintScope.SYSTEM,
                         self.name,
@@ -981,6 +1009,7 @@ class ChiCoherenceSession(
                 f"NodeID {action.request_node_id} is not a registered RN",
             )
         if not {
+            CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
             CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
             CHI_FEATURE_DIRTY_WRITEBACK,
         } & self.enabled_features:
@@ -1119,12 +1148,22 @@ class ChiCoherenceSession(
         entry = state.home.directory.get(action.request.address)
         if entry is not None:
             if entry.unique_owner is not None:
-                return self._fault(
-                    state,
-                    "clean_unique_dirty_peer",
-                    "CleanUnique requires shared directory state without a "
-                    "Unique owner",
+                owner = state.request_nodes.get(entry.unique_owner)
+                owner_line = None if owner is None else owner.line_at(
+                    action.request.address
                 )
+                if (
+                    owner_line is not None
+                    and owner_line.state is ChiCacheState.UD
+                    and CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+                    not in self.enabled_features
+                ):
+                    return self._fault(
+                        state,
+                        "clean_unique_dirty_peer",
+                        "CleanUnique against a dirty Unique owner requires "
+                        "the Snoopee-to-Home DAT feature",
+                    )
             if (
                 entry.shared_dirty_owner is not None
                 and CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER

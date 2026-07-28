@@ -17,6 +17,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants.coherence import (
     ChiRnAcceptComp,
     ChiRnAcceptSnoop,
     ChiRnIssueCleanUnique,
+    ChiRnWriteCacheLine,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.dat import (
     ChiSnpRespDataMessage,
@@ -37,6 +38,17 @@ from protocol_model.protocols.amba.chi.issue_h.representation.rsp import (
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.snp import (
     ChiSnpCleanInvalidMessage,
+    ChiSnpUniqueMessage,
+)
+from protocol_model.protocols.amba.chi.issue_h.system.capability import (
+    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+)
+from protocol_model.protocols.amba.chi.issue_h.system.coherence import (
+    ChiCoherenceInvariantMonitor,
+    ChiCoherenceSession,
+    ChiDeliverCoherencePacket,
+    ChiSubmitCleanUnique,
+    ChiWriteUniqueCacheLine,
 )
 from protocol_model.virtual_dut.backend import (
     BackingLine,
@@ -85,7 +97,11 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
                 ChiCacheLine(
                     self.ADDRESS,
                     state,
-                    self.DATA if data is None else data,
+                    (
+                        None
+                        if state in (ChiCacheState.I, ChiCacheState.UCE)
+                        else self.DATA if data is None else data
+                    ),
                 ),
             ),
         )
@@ -279,6 +295,359 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         self.assertTrue(requester.is_quiescent(installed.state))
         self.assertTrue(home.is_quiescent(retired.state))
 
+    def test_pending_clean_unique_accepts_invalidating_snoops_and_completes_uce(
+        self,
+    ) -> None:
+        for snoop_message, returns_data in (
+            (
+                ChiSnpUniqueMessage(
+                    self.SNOOP_ID,
+                    self.ADDRESS,
+                    return_to_source=False,
+                ),
+                False,
+            ),
+            (
+                ChiSnpUniqueMessage(
+                    self.SNOOP_ID,
+                    self.ADDRESS,
+                    return_to_source=True,
+                ),
+                True,
+            ),
+            (
+                ChiSnpCleanInvalidMessage(
+                    self.SNOOP_ID,
+                    self.ADDRESS,
+                ),
+                False,
+            ),
+        ):
+            with self.subTest(
+                snoop=type(snoop_message).__name__,
+                returns_data=returns_data,
+            ):
+                requester = self.build_rn(
+                    "requester",
+                    self.REQUESTER,
+                    ChiCacheState.SC,
+                )
+                issued = self.apply(
+                    requester,
+                    requester.initial_state(),
+                    ChiRnIssueCleanUnique(self.request()),
+                )
+                snooped = self.apply(
+                    requester,
+                    issued.state,
+                    ChiRnAcceptSnoop(
+                        ChiNetworkPacket.snoop(
+                            snoop_message,
+                            source_id=self.HOME,
+                            target_id=self.REQUESTER,
+                        )
+                    ),
+                )
+
+                line = snooped.state.line_at(self.ADDRESS)
+                assert line is not None
+                self.assertIs(ChiCacheState.I, line.state)
+                self.assertIsNone(line.data)
+                self.assertNotIn(self.ADDRESS, snooped.state.cache.lines)
+                self.assertIn(
+                    self.TXN_ID,
+                    snooped.state.pending_transactions,
+                )
+                response = snooped.emissions[0]
+                self.assertIsInstance(
+                    response.message,
+                    (
+                        ChiSnpRespDataMessage
+                        if returns_data
+                        else ChiSnpRespMessage
+                    ),
+                )
+                self.assertIs(ChiRespCode.I, response.message.response)
+                if returns_data:
+                    self.assertEqual(self.DATA, response.message.data)
+
+                completed = self.apply(
+                    requester,
+                    snooped.state,
+                    ChiRnAcceptComp(
+                        ChiNetworkPacket.response(
+                            ChiCompMessage(
+                                transaction_id=self.TXN_ID,
+                                data_buffer_id=self.DBID,
+                                response=ChiRespCode.UC,
+                            ),
+                            source_id=self.HOME,
+                            target_id=self.REQUESTER,
+                        )
+                    ),
+                )
+                line = completed.state.line_at(self.ADDRESS)
+                assert line is not None
+                self.assertIs(ChiCacheState.UCE, line.state)
+                self.assertIsNone(line.data)
+                self.assertNotIn(self.ADDRESS, completed.state.cache.lines)
+                self.assertFalse(completed.state.pending_transactions)
+                self.assertIsInstance(
+                    completed.emissions[0].message,
+                    ChiCompAckMessage,
+                )
+
+                written = self.apply(
+                    requester,
+                    completed.state,
+                    ChiRnWriteCacheLine(
+                        self.ADDRESS,
+                        self.DIRTY_DATA,
+                    ),
+                )
+                line = written.state.line_at(self.ADDRESS)
+                assert line is not None
+                self.assertIs(ChiCacheState.UD, line.state)
+                self.assertEqual(self.DIRTY_DATA, line.data)
+
+    def test_clean_unique_from_i_completes_uce(self) -> None:
+        requester = self.build_rn(
+            "invalid_requester",
+            self.REQUESTER,
+            ChiCacheState.I,
+        )
+        issued = self.apply(
+            requester,
+            requester.initial_state(),
+            ChiRnIssueCleanUnique(self.request()),
+        )
+
+        initial_line = issued.state.line_at(self.ADDRESS)
+        assert initial_line is not None
+        self.assertIs(ChiCacheState.I, initial_line.state)
+        self.assertIsNone(initial_line.data)
+        self.assertNotIn(self.ADDRESS, issued.state.cache.lines)
+
+        completed = self.apply(
+            requester,
+            issued.state,
+            ChiRnAcceptComp(
+                ChiNetworkPacket.response(
+                    ChiCompMessage(
+                        transaction_id=self.TXN_ID,
+                        data_buffer_id=self.DBID,
+                        response=ChiRespCode.UC,
+                    ),
+                    source_id=self.HOME,
+                    target_id=self.REQUESTER,
+                )
+            ),
+        )
+
+        line = completed.state.line_at(self.ADDRESS)
+        assert line is not None
+        self.assertIs(ChiCacheState.UCE, line.state)
+        self.assertIsNone(line.data)
+        self.assertFalse(completed.state.pending_transactions)
+
+    def test_uce_snp_unique_with_return_to_source_has_no_data(
+        self,
+    ) -> None:
+        requester = self.build_rn(
+            "empty_unique",
+            self.REQUESTER,
+            ChiCacheState.UCE,
+        )
+        initial = requester.initial_state()
+        self.assertNotIn(self.ADDRESS, initial.cache.lines)
+
+        snooped = self.apply(
+            requester,
+            initial,
+            ChiRnAcceptSnoop(
+                ChiNetworkPacket.snoop(
+                    ChiSnpUniqueMessage(
+                        self.SNOOP_ID,
+                        self.ADDRESS,
+                        return_to_source=True,
+                    ),
+                    source_id=self.HOME,
+                    target_id=self.REQUESTER,
+                )
+            ),
+        )
+
+        line = snooped.state.line_at(self.ADDRESS)
+        assert line is not None
+        self.assertIs(ChiCacheState.I, line.state)
+        self.assertIsNone(line.data)
+        self.assertIsInstance(
+            snooped.emissions[0].message,
+            ChiSnpRespMessage,
+        )
+        self.assertIs(
+            ChiRespCode.I,
+            snooped.emissions[0].message.response,
+        )
+
+    def test_uce_rejects_payload_storage(self) -> None:
+        with self.assertRaises(ValueError):
+            ChiCacheLine(
+                self.ADDRESS,
+                ChiCacheState.UCE,
+                self.DATA,
+            )
+
+    def test_two_pending_clean_unique_requests_serialize_through_uce(
+        self,
+    ) -> None:
+        first = self.build_rn(
+            "first",
+            self.REQUESTER,
+            ChiCacheState.SC,
+        )
+        second = self.build_rn(
+            "second",
+            self.PEER,
+            ChiCacheState.SC,
+        )
+        home = self.build_home(
+            sharers=frozenset((self.REQUESTER, self.PEER))
+        )
+        session = ChiCoherenceSession(
+            "two_clean_unique",
+            home,
+            {
+                self.REQUESTER: first,
+                self.PEER: second,
+            },
+            enabled_features=frozenset(
+                (CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,)
+            ),
+        )
+        state = session.initial_state()
+
+        first_issued = self.apply(
+            session,
+            state,
+            ChiSubmitCleanUnique(
+                self.REQUESTER,
+                ChiCleanUniqueMessage(0x31, self.ADDRESS),
+            ),
+        )
+        second_issued = self.apply(
+            session,
+            first_issued.state,
+            ChiSubmitCleanUnique(
+                self.PEER,
+                ChiCleanUniqueMessage(0x32, self.ADDRESS),
+            ),
+        )
+        first_at_home = self.apply(
+            session,
+            second_issued.state,
+            ChiDeliverCoherencePacket(first_issued.emissions[0]),
+        )
+        second_snooped = self.apply(
+            session,
+            first_at_home.state,
+            ChiDeliverCoherencePacket(first_at_home.emissions[0]),
+        )
+        first_completed_at_home = self.apply(
+            session,
+            second_snooped.state,
+            ChiDeliverCoherencePacket(second_snooped.emissions[0]),
+        )
+        first_completed = self.apply(
+            session,
+            first_completed_at_home.state,
+            ChiDeliverCoherencePacket(
+                first_completed_at_home.emissions[0]
+            ),
+        )
+        first_retired = self.apply(
+            session,
+            first_completed.state,
+            ChiDeliverCoherencePacket(first_completed.emissions[0]),
+        )
+
+        second_at_home = self.apply(
+            session,
+            first_retired.state,
+            ChiDeliverCoherencePacket(second_issued.emissions[0]),
+        )
+        first_snooped = self.apply(
+            session,
+            second_at_home.state,
+            ChiDeliverCoherencePacket(second_at_home.emissions[0]),
+        )
+        second_completed_at_home = self.apply(
+            session,
+            first_snooped.state,
+            ChiDeliverCoherencePacket(first_snooped.emissions[0]),
+        )
+        second_completed = self.apply(
+            session,
+            second_completed_at_home.state,
+            ChiDeliverCoherencePacket(
+                second_completed_at_home.emissions[0]
+            ),
+        )
+        retired = self.apply(
+            session,
+            second_completed.state,
+            ChiDeliverCoherencePacket(second_completed.emissions[0]),
+        )
+
+        first_line = retired.state.request_nodes[
+            self.REQUESTER
+        ].line_at(self.ADDRESS)
+        second_line = retired.state.request_nodes[
+            self.PEER
+        ].line_at(self.ADDRESS)
+        assert first_line is not None
+        assert second_line is not None
+        self.assertIs(ChiCacheState.I, first_line.state)
+        self.assertIs(ChiCacheState.UCE, second_line.state)
+        self.assertIsNone(second_line.data)
+        self.assertNotIn(
+            self.ADDRESS,
+            retired.state.request_nodes[self.PEER].cache.lines,
+        )
+        self.assertEqual(
+            self.PEER,
+            retired.state.home.directory[self.ADDRESS].unique_owner,
+        )
+        self.assertTrue(session.is_quiescent(retired.state))
+        self.assertFalse(
+            ChiCoherenceInvariantMonitor().explain(
+                retired.state.home,
+                retired.state.request_nodes,
+            )
+        )
+
+        written = self.apply(
+            session,
+            retired.state,
+            ChiWriteUniqueCacheLine(
+                self.PEER,
+                self.ADDRESS,
+                self.DIRTY_DATA,
+            ),
+        )
+        written_line = written.state.request_nodes[
+            self.PEER
+        ].line_at(self.ADDRESS)
+        assert written_line is not None
+        self.assertIs(ChiCacheState.UD, written_line.state)
+        self.assertEqual(self.DIRTY_DATA, written_line.data)
+        self.assertFalse(
+            ChiCoherenceInvariantMonitor().explain(
+                written.state.home,
+                written.state.request_nodes,
+            )
+        )
+
     def test_clean_unique_rejects_a_dirty_requester_without_mutation(
         self,
     ) -> None:
@@ -417,6 +786,64 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
         self.assertFalse(entry.sharers)
         self.assertIsNone(entry.shared_dirty_owner)
         self.assertFalse(retired.state.pending)
+
+    def test_home_absorbs_dirty_unique_owner_before_clean_unique_grant(
+        self,
+    ) -> None:
+        home = self.build_home(
+            sharers=frozenset(),
+            unique_owner=self.PEER,
+            allow_dirty_data_transfer=True,
+        )
+        accepted = self.apply(
+            home,
+            home.initial_state(),
+            ChiHomeAcceptCleanUnique(self.request_packet()),
+        )
+        snoop = accepted.emissions[0]
+        self.assertEqual(self.PEER, snoop.target_id)
+
+        collected = self.apply(
+            home,
+            accepted.state,
+            ChiHomeAcceptSnoopResponse(
+                ChiNetworkPacket.data(
+                    ChiSnpRespDataMessage(
+                        transaction_id=snoop.message.transaction_id,
+                        data=self.DIRTY_DATA,
+                        response=ChiRespCode.I_PD,
+                    ),
+                    source_id=self.PEER,
+                    target_id=self.HOME,
+                )
+            ),
+        )
+        self.assertIsNotNone(
+            collected.state.pending[self.DBID].prepared_backing_write
+        )
+
+        retired = self.apply(
+            home,
+            collected.state,
+            ChiHomeAcceptCompAck(
+                ChiNetworkPacket.response(
+                    ChiCompAckMessage(transaction_id=self.DBID),
+                    source_id=self.REQUESTER,
+                    target_id=self.HOME,
+                )
+            ),
+        )
+        entry = retired.state.directory[self.ADDRESS]
+        self.assertEqual(self.REQUESTER, entry.unique_owner)
+        self.assertFalse(entry.sharers)
+        self.assertEqual(
+            self.DIRTY_DATA,
+            retired.state.backing.line_at(self.ADDRESS).data,
+        )
+        self.assertEqual(
+            1,
+            retired.state.backing.line_at(self.ADDRESS).version,
+        )
 
     def test_stale_prepared_backing_write_preserves_directory_and_pending(
         self,
@@ -615,32 +1042,36 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
                 shared_dirty_owner=self.PEER,
             )
 
-    def test_home_requires_matching_shared_directory_authority(
+    def test_home_accepts_i_origin_against_current_holders(
         self,
     ) -> None:
-        cases = (
-            (
-                self.build_home(sharers=frozenset((self.PEER,))),
-                "clean_unique_requester_state",
-            ),
-            (
-                self.build_home(
-                    sharers=frozenset(),
-                    unique_owner=self.PEER,
-                ),
-                "clean_unique_directory_state",
+        homes = (
+            self.build_home(sharers=frozenset((self.PEER,))),
+            self.build_home(
+                sharers=frozenset(),
+                unique_owner=self.PEER,
             ),
         )
-        for home, expected_rule in cases:
-            with self.subTest(rule=expected_rule):
-                state = home.initial_state()
-                transition = home.step(
-                    state,
+        for home in homes:
+            with self.subTest(
+                unique_owner=home.initial_state().directory[
+                    self.ADDRESS
+                ].unique_owner
+            ):
+                accepted = self.apply(
+                    home,
+                    home.initial_state(),
                     ChiHomeAcceptCleanUnique(self.request_packet()),
                 )
-                self.assert_fault_rule(transition, expected_rule)
-                self.assertEqual(state, transition.state)
-                self.assertFalse(transition.emissions)
+                self.assertEqual(1, len(accepted.emissions))
+                self.assertEqual(
+                    self.PEER,
+                    accepted.emissions[0].target_id,
+                )
+                self.assertIsInstance(
+                    accepted.emissions[0].message,
+                    ChiSnpCleanInvalidMessage,
+                )
 
     def test_comp_and_comp_ack_preserve_both_correlation_domains(
         self,

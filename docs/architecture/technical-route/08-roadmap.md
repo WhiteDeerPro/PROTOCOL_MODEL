@@ -70,18 +70,35 @@ line reservation 串行化同址请求；被 block 的 endpoint packet 留在网
 family scheduler 自动 replay。`project_progress()` 与 `project_wakeups()` 提供 family-local、只读的
 held/wait/release evidence，不把一次资源释放夸大成 packet 已接纳或 deadlock verdict。
 
-1. 以这条 `ReadUnique/SnpUnique` transient 和 direct/coherent NDERR 为基线，下一步扩展
-   CleanUnique/WriteBack 同址 Snoop、Retry/Snoop/error 组合与显式 transient phase；DERR 等待
-   ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；可选 victim/writeback scheduling 与
-   replacement policy 保持独立 refinement；
-2. 在已闭合 clean/shared-dirty-peer `CleanUnique`、协议中立 Home backing 与 canonical Home binder
-   基础上，按实际场景补 `MakeUnique` 与 clean `Evict`；只有验证目标需要观察 physical commit 时，再增加
+第二条 same-line progress 切片也已闭合：`CleanUnique` 可由 `I` 或 resident `SC` 发起；pending
+`CleanUnique` 收到同址 `SnpUnique` 或 `SnpCleanInvalid` 时先响应并失效为 `I`，但保留原 transaction
+correlation。后续无数据 `Comp_UC` 在 full-line payload 仍在时形成 `UC`，payload 已不存在时形成
+`UCE`；`UCE` 表示“拥有 unique authority、尚无有效 payload”，不能保存 cache-line data，第一次 full-line
+local write 原子安装 payload 并进入 `UD`。direct `ChiCoherenceSession` 的双 Requester witness 已证明两笔
+`CleanUnique` 可由 Home reservation 串行完成；这不等于 resolved construction 已支持一般多 Requester。
+
+CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
+
+| 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
+|---|---|---|---|---|
+| 0 · `ReadUnique` same-line | `ReadUnique`、`SnpUnique`、`SnpResp`、`CompData`、`CompAck` | pending/Retry correlation、Home line reservation、blocked packet replay | 无；复用 `I/SC/UC` | 已闭合 |
+| 1 · `CleanUnique` / `UCE` | `CleanUnique`、`SnpCleanInvalid`/`SnpUnique`、`SnpResp`、`Comp_UC`、`CompAck` | 既有 CleanUnique fanout/聚合、同址 reservation、full-line local write | `UCE` 空数据 unique authority；pending CU 的 post-Snoop line state | 本切片已闭合 |
+| 2 · WriteBack same-line/cancel outcome | `WriteBackFull`、invalidating Snoop、`CompDBIDResp`、post-Snoop `CopyBack_I` | 既有 writeback DBID/correlation、directory/backing commit | writeback 的 post-Snoop outcome 与零数据 CopyBack retirement | **下一条主线** |
+| 3 · Retry/Snoop/error 窄组合 | `RetryAck`、`PCrdGrant`、SNP、`CompData_I(NDERR)`；DERR 原子待来源 | 既有 Retry ledger、coherence pending 与 pre-Snoop NDERR modifier | 组合 phase/cancel 证据；post-Snoop DERR 需 ECC/Poison/DataCheck 来源 | WriteBack 后分段加入 |
+| 4 · clean `Evict` | `Evict` REQ form 尚未登记；通用 `Comp_I` 可复用 | 复用 clean directory removal、TxnID 与 completion retirement | 显式 victim/evict intent；不等于自动 replacement policy | 后续独立 opcode slice |
+| 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid` form 尚未登记，completion/ack 可复用 | 复用 `UCE`、失效 fanout、Home reservation 与 full-line write | 不再引入 payload 稳态；补 operation-specific correlation | `Evict` 后加入 |
+
+1. 下一条主线只闭合 WriteBack 同址 invalidating Snoop 与 post-Snoop `CopyBack_I` retirement；自动
+   victim/writeback scheduling 和 replacement policy 保持独立 refinement；
+2. 随后把既有 Retry、Snoop 与 pre-Snoop NDERR 组合成窄而可执行的 phase；DERR 等待
+   ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
+3. 再按表中依赖加入 clean `Evict` 和 `MakeUnique`；只有验证目标需要观察 physical commit 时，才增加
    topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；
-3. 增加多 waiter 选择/公平性、多个 pending emission batch 和 wait-for cycle witness；只有这些运行投影
+4. 增加多 waiter 选择/公平性、多个 pending emission batch 和 wait-for cycle witness；只有这些运行投影
    稳定后，才将 family scheduler 上提为有界并发 LTS 探索；
-4. 将当前只供 CleanUnique 消费的预置 `SD` 扩展为可生成、可维持的 Owned lifecycle，再以 dirty
+5. 将当前只供 CleanUnique 消费的预置 `SD` 扩展为可生成、可维持的 Owned lifecycle，再以 dirty
    `SnpShared`、owner handoff、replacement 与 forwarding/DCT 检验 MOESI-like 扩展；
-5. 第二种 packet network 提出相同接口后，再把 family scheduler 的稳定形状投影到通用 system runtime。
+6. 第二种 packet network 提出相同接口后，再把 family scheduler 的稳定形状投影到通用 system runtime。
 
 当前每个 resolved feature scope 显式选择一个未进入 address-router translation 的 address claim 和一个
 scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 resolver 核对；同一 runtime 按地址动态

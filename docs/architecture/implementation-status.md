@@ -61,10 +61,11 @@ MESI ReadNotSharedDirty，因为 pending MakeUnique 接收 `SnpNotSharedDirty`�
 ReadNotSharedDirty 接收 `SnpMakeInvalid` 的 same-line 路径尚未共同闭合。这是阶段限制，不是 CHI
 协议禁配。
 
-packet-delivery composition 对 coherent read、CleanUnique、MakeUnique 与 Evict 的 Home→Requester
-completion 保存并一次性消费完整 packet evidence；只复用 transaction identity 而替换 data、Resp、DBID、
-RespErr 或 packet metadata，以及 completion replay，均不能推进 RN。该 evidence 属于 system correlation，
-不增加 CHI wire 字段。
+packet-delivery composition 对 coherent read、CleanUnique、MakeUnique、Evict 与 WriteBack
+`CompDBIDResp` 的 Home→Requester completion 保存并一次性消费完整 packet evidence；RN 成功接收
+`CompDBIDResp` 后，再为其实际产生的 `CopyBackWrData` 保存 RN→Home exact evidence，Home 成功消费后
+一次性退休。只复用 transaction identity 而替换 data、byte enable、Resp、DBID、RespErr、端点或 packet
+metadata，以及 replay，均不能推进 RN/Home。该 evidence 属于 system correlation，不增加 CHI wire 字段。
 
 本页的 “post-snoop error” 始终指**同一笔已接纳 request 已经发出 Snoop 后**才形成的错误路径；它不包括
 另一笔 transaction 曾使同一 RN cache line 失效、随后 credited reissue 在自身发 Snoop 前返回 NDERR 的

@@ -89,6 +89,12 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         self.assertIsNone(transition.blocked)
         return transition
 
+    def assert_atomic_fault(self, transition, state, rule: str) -> None:
+        self.assertIsNotNone(transition.fault)
+        self.assertTrue(transition.fault.rule.endswith(rule))
+        self.assertIs(state, transition.state)
+        self.assertFalse(transition.emissions)
+
     def test_ud_writeback_commits_only_after_copyback_data(self) -> None:
         rn, home = self.build_participants()
         rn_state = rn.initial_state()
@@ -254,10 +260,28 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             issued.state,
             ChiDeliverCoherencePacket(issued.emissions[0]),
         )
+        self.assertEqual(
+            accepted.emissions[0],
+            accepted.state.expected_writeback_dbid_responses[
+                (self.RN, 0x14)
+            ],
+        )
         copied = self.apply(
             session,
             accepted.state,
             ChiDeliverCoherencePacket(accepted.emissions[0]),
+        )
+        self.assertFalse(
+            copied.state.expected_writeback_dbid_responses
+        )
+        self.assertEqual(
+            copied.emissions[0],
+            copied.state.expected_copyback_data[
+                (
+                    self.RN,
+                    copied.emissions[0].message.transaction_id,
+                )
+            ],
         )
         committed = self.apply(
             session,
@@ -272,6 +296,314 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         )
         self.assertIsNone(
             committed.state.home.directory[self.ADDRESS].unique_owner
+        )
+        self.assertFalse(committed.state.expected_copyback_data)
+
+    def test_system_rejects_forged_and_replayed_writeback_packets(
+        self,
+    ) -> None:
+        rn, home = self.build_participants()
+        session = ChiCoherenceSession(
+            "writeback_exact_packets",
+            home,
+            {self.RN: rn},
+            enabled_features=frozenset(
+                (CHI_FEATURE_DIRTY_WRITEBACK,)
+            ),
+            requester_node_ids=frozenset((self.RN,)),
+            snoopee_node_ids=frozenset(),
+        )
+        initial = session.initial_state()
+        unsubmitted_request = ChiNetworkPacket.request(
+            ChiWriteBackFullMessage(0x15, self.ADDRESS),
+            source_id=self.RN,
+            target_id=self.HOME,
+        )
+        rejected_early = session.step(
+            initial,
+            ChiDeliverCoherencePacket(unsubmitted_request),
+        )
+        self.assert_atomic_fault(
+            rejected_early,
+            initial,
+            "writeback_admission_evidence",
+        )
+        issued = self.apply(
+            session,
+            initial,
+            ChiSubmitWriteBackFull(
+                self.RN,
+                ChiWriteBackFullMessage(0x15, self.ADDRESS),
+            ),
+        )
+        forged_request = replace(
+            issued.emissions[0],
+            message=replace(issued.emissions[0].message, qos=1),
+            packet_count=2,
+        )
+        rejected_request = session.step(
+            issued.state,
+            ChiDeliverCoherencePacket(forged_request),
+        )
+        self.assert_atomic_fault(
+            rejected_request,
+            issued.state,
+            "writeback_admission_evidence",
+        )
+        accepted = self.apply(
+            session,
+            issued.state,
+            ChiDeliverCoherencePacket(issued.emissions[0]),
+        )
+        exact_response = accepted.emissions[0]
+        response = exact_response.message
+        assert isinstance(response, ChiCompDBIDRespMessage)
+        response_variants = {
+            "DBID": replace(
+                exact_response,
+                message=replace(
+                    response,
+                    data_buffer_id=(response.data_buffer_id + 1)
+                    % (1 << 12),
+                ),
+            ),
+            "Resp": replace(
+                exact_response,
+                message=replace(response, response=1),
+            ),
+            "endpoint": replace(
+                exact_response,
+                source_id=self.HOME + 1,
+            ),
+            "packet metadata": replace(
+                exact_response,
+                packet_count=2,
+            ),
+        }
+        for name, forged in response_variants.items():
+            with self.subTest(packet="CompDBIDResp", field=name):
+                rejected = session.step(
+                    accepted.state,
+                    ChiDeliverCoherencePacket(forged),
+                )
+                self.assert_atomic_fault(
+                    rejected,
+                    accepted.state,
+                    "writeback_dbid_response_correlation",
+                )
+
+        copied = self.apply(
+            session,
+            accepted.state,
+            ChiDeliverCoherencePacket(exact_response),
+        )
+        replayed_response = session.step(
+            copied.state,
+            ChiDeliverCoherencePacket(exact_response),
+        )
+        self.assert_atomic_fault(
+            replayed_response,
+            copied.state,
+            "writeback_dbid_response_correlation",
+        )
+
+        exact_data = copied.emissions[0]
+        copyback = exact_data.message
+        assert isinstance(copyback, ChiCopyBackWrDataMessage)
+        data_variants = {
+            "data": replace(
+                exact_data,
+                message=replace(copyback, data=copyback.data ^ 1),
+            ),
+            "byte enable": replace(
+                exact_data,
+                message=replace(
+                    copyback,
+                    byte_enable=copyback.byte_enable ^ 1,
+                ),
+            ),
+            "Resp": replace(
+                exact_data,
+                message=replace(copyback, response=ChiRespCode.UC),
+            ),
+            "endpoint": replace(
+                exact_data,
+                source_id=self.RN + 1,
+            ),
+            "packet metadata": replace(
+                exact_data,
+                packet_count=2,
+            ),
+        }
+        for name, forged in data_variants.items():
+            with self.subTest(packet="CopyBackWrData", field=name):
+                rejected = session.step(
+                    copied.state,
+                    ChiDeliverCoherencePacket(forged),
+                )
+                expected_rule = (
+                    "requester_authority"
+                    if name == "endpoint"
+                    else "copyback_correlation"
+                )
+                self.assert_atomic_fault(
+                    rejected,
+                    copied.state,
+                    expected_rule,
+                )
+
+        committed = self.apply(
+            session,
+            copied.state,
+            ChiDeliverCoherencePacket(exact_data),
+        )
+        replayed_data = session.step(
+            committed.state,
+            ChiDeliverCoherencePacket(exact_data),
+        )
+        self.assert_atomic_fault(
+            replayed_data,
+            committed.state,
+            "copyback_correlation",
+        )
+        self.assertEqual(
+            self.DIRTY_DATA,
+            committed.state.home.backing.line_at(self.ADDRESS).data,
+        )
+        self.assertTrue(session.is_quiescent(committed.state))
+
+    def test_original_txnid_and_home_dbid_use_distinct_evidence_maps(
+        self,
+    ) -> None:
+        second_address = self.ADDRESS + 0x40
+        second_payload = self.DIRTY_DATA ^ 0x55
+        rn = build_chi_cache_participant_fixture(
+            "dirty_cache",
+            self.RN,
+            self.HOME,
+            initial_lines=(
+                ChiCacheLine(
+                    self.ADDRESS,
+                    ChiCacheState.UD,
+                    self.DIRTY_DATA,
+                ),
+                ChiCacheLine(
+                    second_address,
+                    ChiCacheState.UD,
+                    second_payload,
+                ),
+            ),
+        )
+        home = ChiCoherentHomeNode(
+            "home",
+            self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(
+                    BackingLine(self.ADDRESS, self.STALE_BACKING),
+                    BackingLine(second_address, self.STALE_BACKING),
+                ),
+            ),
+            initial_directory=(
+                ChiHomeDirectoryEntry(
+                    self.ADDRESS,
+                    unique_owner=self.RN,
+                ),
+                ChiHomeDirectoryEntry(
+                    second_address,
+                    unique_owner=self.RN,
+                ),
+            ),
+            transaction_capacity=2,
+            allow_dirty_data_transfer=True,
+        )
+        session = ChiCoherenceSession(
+            "writeback_id_namespaces",
+            home,
+            {self.RN: rn},
+            enabled_features=frozenset(
+                (CHI_FEATURE_DIRTY_WRITEBACK,)
+            ),
+            requester_node_ids=frozenset((self.RN,)),
+            snoopee_node_ids=frozenset(),
+        )
+
+        first_issued = self.apply(
+            session,
+            session.initial_state(),
+            ChiSubmitWriteBackFull(
+                self.RN,
+                ChiWriteBackFullMessage(0x100, self.ADDRESS),
+            ),
+        )
+        first_at_home = self.apply(
+            session,
+            first_issued.state,
+            ChiDeliverCoherencePacket(first_issued.emissions[0]),
+        )
+        self.assertEqual(
+            0x200,
+            first_at_home.emissions[0].message.data_buffer_id,
+        )
+        first_data = self.apply(
+            session,
+            first_at_home.state,
+            ChiDeliverCoherencePacket(first_at_home.emissions[0]),
+        )
+
+        second_issued = self.apply(
+            session,
+            first_data.state,
+            ChiSubmitWriteBackFull(
+                self.RN,
+                ChiWriteBackFullMessage(0x200, second_address),
+            ),
+        )
+        second_at_home = self.apply(
+            session,
+            second_issued.state,
+            ChiDeliverCoherencePacket(second_issued.emissions[0]),
+        )
+        self.assertEqual(
+            0x201,
+            second_at_home.emissions[0].message.data_buffer_id,
+        )
+        colliding_key = (self.RN, 0x200)
+        self.assertEqual(
+            first_data.emissions[0],
+            second_at_home.state.expected_copyback_data[colliding_key],
+        )
+        self.assertEqual(
+            second_at_home.emissions[0],
+            second_at_home.state.expected_writeback_dbid_responses[
+                colliding_key
+            ],
+        )
+
+        second_copyback = self.apply(
+            session,
+            second_at_home.state,
+            ChiDeliverCoherencePacket(second_at_home.emissions[0]),
+        )
+        first_retired = self.apply(
+            session,
+            second_copyback.state,
+            ChiDeliverCoherencePacket(first_data.emissions[0]),
+        )
+        retired = self.apply(
+            session,
+            first_retired.state,
+            ChiDeliverCoherencePacket(second_copyback.emissions[0]),
+        )
+        self.assertTrue(session.is_quiescent(retired.state))
+        self.assertEqual(
+            self.DIRTY_DATA,
+            retired.state.home.backing.line_at(self.ADDRESS).data,
+        )
+        self.assertEqual(
+            second_payload,
+            retired.state.home.backing.line_at(second_address).data,
         )
 
     def test_home_rejects_copyback_after_backing_version_changes(self) -> None:
@@ -434,6 +766,12 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             clean_unique_retired.state,
             ChiDeliverCoherencePacket(delayed_writeback),
         )
+        self.assertEqual(
+            canceled_at_home.emissions[0],
+            canceled_at_home.state.expected_writeback_dbid_responses[
+                (self.RN, 0x31)
+            ],
+        )
         home_pending = next(
             iter(canceled_at_home.state.home.pending_writebacks.values())
         )
@@ -445,6 +783,18 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             session,
             canceled_at_home.state,
             ChiDeliverCoherencePacket(canceled_at_home.emissions[0]),
+        )
+        self.assertFalse(
+            cancel_sent.state.expected_writeback_dbid_responses
+        )
+        self.assertEqual(
+            cancel_sent.emissions[0],
+            cancel_sent.state.expected_copyback_data[
+                (
+                    self.RN,
+                    cancel_sent.emissions[0].message.transaction_id,
+                )
+            ],
         )
         copyback = cancel_sent.emissions[0].message
         self.assertIsInstance(copyback, ChiCopyBackWrDataMessage)
@@ -470,7 +820,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         assert rejected_stale_data.fault is not None
         self.assertTrue(
             rejected_stale_data.fault.rule.endswith(
-                "copyback_cancellation_profile"
+                "copyback_correlation"
             )
         )
         self.assertEqual(cancel_sent.state, rejected_stale_data.state)
@@ -488,6 +838,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             before_cancel_backing,
             retired.state.home.backing.line_at(self.ADDRESS),
         )
+        self.assertFalse(retired.state.expected_copyback_data)
         self.assertTrue(session.is_quiescent(retired.state))
         self.assertFalse(
             ChiCoherenceInvariantMonitor().explain(
@@ -500,14 +851,21 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             retired.state,
             ChiDeliverCoherencePacket(delayed_writeback),
         )
-        self.assertIsNotNone(replayed_request.fault)
-        assert replayed_request.fault is not None
-        self.assertTrue(
-            replayed_request.fault.rule.endswith(
-                "writeback_cancellation_evidence"
-            )
+        self.assert_atomic_fault(
+            replayed_request,
+            retired.state,
+            "writeback_admission_evidence",
         )
-        self.assertEqual(retired.state, replayed_request.state)
+
+        replayed_copyback = session.step(
+            retired.state,
+            ChiDeliverCoherencePacket(cancel_sent.emissions[0]),
+        )
+        self.assert_atomic_fault(
+            replayed_copyback,
+            retired.state,
+            "copyback_correlation",
+        )
 
 
 if __name__ == "__main__":

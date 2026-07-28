@@ -86,7 +86,9 @@ CleanUnique 已提交新 owner 后才到达 Home，只有组合 session 能从�
 `CANCELED_I` 和 `I` line 派生 `SNOOP_CANCELED` admission；这不是 wire field，独立 Home 也不从一笔
 non-owner REQ 自行推断。Home 接纳时冻结当前 directory snapshot 与 backing version，收到
 `CopyBackWrData_I` 时确认二者未变，只释放 DBID，不覆盖新 backing/owner。direct 双 Requester witness 已
-闭合 `CleanUnique + delayed WriteBack`；一般多 Requester resolved construction 仍未闭合。
+闭合 `CleanUnique + delayed WriteBack`。normal 与 canceled outcome 现共用两阶段 exact packet evidence：
+Home-produced `CompDBIDResp` 与 RN-produced `CopyBackWrData` 分别只允许成功消费一次，伪造或 replay
+不推进 participant state；一般多 Requester resolved construction 仍未闭合。
 
 第一条 Retry/Snoop/error 窄组合也已闭合。被 `RetryAck` 拒绝的初始 `ReadUnique` 不会产生 Snoop；
 Requester 在 `WAIT_RETRY_CREDIT` 期间可以响应另一笔同址 transaction 引发的 `SnpUnique`，由

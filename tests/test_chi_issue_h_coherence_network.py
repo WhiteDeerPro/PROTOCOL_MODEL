@@ -1673,6 +1673,10 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         self.assertIsNone(entry.unique_owner)
         self.assertFalse(entry.sharers)
         self.assertFalse(home_state.pending_writebacks)
+        self.assertFalse(
+            state.coherence.expected_writeback_dbid_responses
+        )
+        self.assertFalse(state.coherence.expected_copyback_data)
         self.assertEqual(
             (response.data_buffer_id + 1) % (1 << 12),
             home_state.next_data_buffer_id,

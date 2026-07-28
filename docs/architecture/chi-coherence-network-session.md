@@ -299,8 +299,13 @@ coherence decision
 - SnpResp/SnpRespData 只由声明的 Snoopee 返回相应 Home；
 - `RetryAck`/`PCrdGrant` 必须命中并一次性消费 Home 实际产生的完整 packet evidence；credit type、
   source/target、channel 或 packet metadata 被替换以及 replay 都不能驱动 Requester retry ledger；
-- RSP/DAT completion 只进入已授权 requester，并命中、一次性消费 Home 实际产生的完整 packet
-  evidence；data、Resp、DBID、RespErr 或 packet metadata 任一被替换以及 completion replay 都被拒绝。
+- coherent-read DAT 与 dataless RSP completion 只进入已授权 requester，并命中、一次性消费 Home
+  实际产生的完整 packet evidence；data、Resp、DBID、RespErr 或 packet metadata 任一被替换以及
+  completion replay 都被拒绝。
+- WriteBack 的 Home→Requester `CompDBIDResp` 同样命中并一次性消费 Home-produced exact packet；RN 成功
+  消费后，composition 登记其实际产生的 `CopyBackWrData`，Home 只接收并一次性消费该 RN-produced exact
+  packet。DBID、data、byte enable、Resp/RespErr、端点或 packet metadata 被替换以及 replay，均在相应
+  participant mutation 前拒绝。
 
 这些 evidence 是 system correlation，不增加 wire 字段；它们把“身份相似的输入”收窄为“本 session
 实际发出的 packet”，同时保持 participant state 为 cache permission 与 transaction lifecycle 的权威。
@@ -593,6 +598,12 @@ MakeUnique profile 丢弃旧 dirty payload 并只返回 `SnpResp_I`。两类路�
 WriteBack request/TxnID correlation。之后收到 `CompDBIDResp`，`LIVE_UD` 产生
 `CopyBackWrData_UD_PD` 并转 `I`，`CANCELED_I` 则产生 data 与 byte-enable 均为零的
 `CopyBackWrData_I`；两者都退休 RN pending。
+
+两种 outcome 共用同一 evidence phase：Home 发出并登记 exact `CompDBIDResp`，RN 成功消费后才退休该
+response evidence、登记 exact `CopyBackWrData`；Home 成功消费 DAT 后再退休后一项 evidence。任一步的
+伪造或 replay 都不推进 RN/Home participant state。前一阶段以 `(Requester, original TxnID)` 关联，后一
+阶段以 `(Requester, Home DBID)` 关联；DBID 与另一 transaction 的 original TxnID 数值相同是合法状态，
+两类 namespace 不合并。
 
 这里闭合的顺序是 Snoop response 完成后，Home 才给出 `CompDBIDResp`，RN 再发送 DAT。CopyBack
 WriteData 是 implicit `CompAck`；Home 发出 completion 后必须等 DAT 才能发新的同址 Snoop，因此本切片

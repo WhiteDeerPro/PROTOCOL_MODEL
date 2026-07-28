@@ -505,8 +505,10 @@ packet-delivery composition 另保存并一次性消费 Home-produced exact SNP 
 相同 transaction identity/address/target、却把实际发出的 opcode/message 换成另一 SNP，或在 completion
 后重放旧 SNP，都会在进入 RN participant 前被拒绝。它也为 Evict、CleanUnique、MakeUnique 和 coherent
 read 的 Home→Requester completion 保存完整 packet evidence；data、Resp、DBID、RespErr 或 packet
-metadata 任一被替换以及 completion replay 都被拒绝。这些 evidence 是 system correlation，不增加 wire
-字段。
+metadata 任一被替换以及 completion replay 都被拒绝。WriteBack 另按两段保存 Home-produced exact
+`CompDBIDResp` 与 RN-produced exact `CopyBackWrData`；RN/Home 各自成功消费后才一次性退休相应
+evidence，DBID、data、byte enable、Resp、端点或 metadata 变造及 replay 均不先改变 participant state。
+这些 evidence 是 system correlation，不增加 wire 字段。
 
 Home 因同址 reservation 暂不接纳 endpoint packet 时，组合 transition 不 drain transport capture；
 packet 留在 endpoint head，首笔事务的 `CompAck` 释放 reservation 后由 scheduler 自动 replay。只读

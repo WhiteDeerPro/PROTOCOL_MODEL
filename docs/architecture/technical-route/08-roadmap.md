@@ -52,7 +52,8 @@ commit 与 directory transition 提交 requester 为 unique owner。Home payload
 `ReadUnique→RetryAck→PCrdGrant→AllowRetry=0 重发→SnpUnique→CompData→CompAck` 复用 family-local
 Request-Retry/P-Credit 合同和原有 ReadUnique lifecycle。Retry 阶段不建立 Home coherence pending、
 不分配 Snoop/DBID、不改 directory/backing；Grant 预留真实 transaction slot，network scheduler 自动推进
-credit 与重发。当前只覆盖一次 Retry 后成功，不含 cancel、多 waiter fairness 或 Retry/error composition。
+credit 与重发。一次 Retry 后成功是独立基线；下文另记录已闭合的 Retry/Snoop/pre-Snoop-NDERR 窄组合。
+cancel 与多 waiter fairness 仍未实现。
 第一条 construction authority
 切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home，并从
 coherence-domain membership 派生 `eligible Snoopees = members - requester`；NodeID、逐成员 capability
@@ -87,6 +88,16 @@ non-owner REQ 自行推断。Home 接纳时冻结当前 directory snapshot 与 b
 `CopyBackWrData_I` 时确认二者未变，只释放 DBID，不覆盖新 backing/owner。direct 双 Requester witness 已
 闭合 `CleanUnique + delayed WriteBack`；一般多 Requester resolved construction 仍未闭合。
 
+第一条 Retry/Snoop/error 窄组合也已闭合。被 `RetryAck` 拒绝的初始 `ReadUnique` 不会产生 Snoop；
+Requester 在 `WAIT_RETRY_CREDIT` 期间可以响应另一笔同址 transaction 引发的 `SnpUnique`，由
+`SC→I` 而不丢失原 TxnID/retry correlation。独立 transaction 完成并释放 Home line reservation 后，
+P-Credit 重发被接纳，再由既有 pre-Snoop policy 返回 `CompData_I(NDERR)`；Requester 保持 Snoop 后的
+`I`，不会恢复旧 payload，Home 也不会回滚新 owner 或 backing。组合复用现有 Retry phase、cache state、
+feature/capability 与 flow 的并集，没有新增 opcode、组合 feature 或 cancel state。direct 双 Requester
+witness 负责同址交错，单 XP witness 负责
+`RetryAck/PCrdGrant→credited reissue→CompData_I(NDERR)` 的 topology closure；DERR、同一 accepted
+request 已发出 Snoop 后的 error 与任意到达次序所需的 accepted-but-waiting queue 仍未闭合。
+
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
 | 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
@@ -94,13 +105,13 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 0 · `ReadUnique` same-line | `ReadUnique`、`SnpUnique`、`SnpResp`、`CompData`、`CompAck` | pending/Retry correlation、Home line reservation、blocked packet replay | 无；复用 `I/SC/UC` | 已闭合 |
 | 1 · `CleanUnique` / `UCE` | `CleanUnique`、`SnpCleanInvalid`/`SnpUnique`、`SnpResp`、`Comp_UC`、`CompAck` | 既有 CleanUnique fanout/聚合、同址 reservation、full-line local write | `UCE` 空数据 unique authority；pending CU 的 post-Snoop line state | 本切片已闭合 |
 | 2 · WriteBack same-line/cancel outcome | `WriteBackFull`、invalidating Snoop、`CompDBIDResp`、post-Snoop `CopyBackWrData_I` | 既有 writeback DBID/correlation、dirty Snoop data transfer、directory/backing authority | RN `LIVE_UD/CANCELED_I`；system-derived stale-owner admission；Home snapshot/version guard 与零数据 retirement | 本切片已闭合 |
-| 3 · Retry/Snoop/error 窄组合 | `RetryAck`、`PCrdGrant`、SNP、`CompData_I(NDERR)`；DERR 原子待来源 | 既有 Retry ledger、coherence pending 与 pre-Snoop NDERR modifier | 组合 phase/cancel 证据；post-Snoop DERR 需 ECC/Poison/DataCheck 来源 | **下一条主线** |
+| 3 · Retry/Snoop/error 窄组合 | `RetryAck`、`PCrdGrant`、独立 transaction 的 SNP、`CompData_I(NDERR)`；DERR 原子待来源 | 既有 Retry ledger、same-line transient、coherence pending 与 pre-Snoop NDERR modifier | 无新增；正交组合 `ChiRequestRetryPhase × ChiCacheState` | 本切片已闭合 |
 | 4 · clean `Evict` | `Evict` REQ form 尚未登记；通用 `Comp_I` 可复用 | 复用 clean directory removal、TxnID 与 completion retirement | 显式 victim/evict intent；不等于自动 replacement policy | 后续独立 opcode slice |
 | 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid` form 尚未登记，completion/ack 可复用 | 复用 `UCE`、失效 fanout、Home reservation 与 full-line write | 不再引入 payload 稳态；补 operation-specific correlation | `Evict` 后加入 |
 
-1. 下一条主线把既有 Retry、Snoop 与 pre-Snoop NDERR 组合成窄而可执行的 phase；DERR 等待
+1. 下一条主线按表中依赖加入 clean `Evict`，随后是 `MakeUnique`；DERR 继续等待
    ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
-2. 再按表中依赖加入 clean `Evict` 和 `MakeUnique`；只有验证目标需要观察 physical commit 时，才增加
+2. 只有验证目标需要观察 physical commit 时，才增加
    topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；
 3. 增加多 waiter 选择/公平性、多个 pending emission batch 和 wait-for cycle witness；只有这些运行投影
    稳定后，才将 family scheduler 上提为有界并发 LTS 探索；
@@ -113,7 +124,8 @@ scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 reso
 切换多个 Home、由 SAM route 派生 system-visible window、remap 和跨 domain 执行尚未实现。
 read/retry/coherence profile 另固定单 Requester、受限 opcode 与 full-line DAT；
 AddressTarget 路径固定对齐，只闭合成功与 decode/access→NDERR completion；coherent path 另闭合
-pre-snoop `ReadUnique` NDERR。两者都未覆盖 DERR、post-snoop failure、sideband lowering 或
+pre-snoop `ReadUnique` NDERR 及其与 Retry/独立同址 Snoop 的窄组合。两者都未覆盖 DERR、
+post-snoop failure、sideband lowering 或
 narrow/multi-packet data。coherent Home backing 是 fixed-resident、同步、无 blocked
 的 line-local commit profile，尚未等价于独立 SN physical memory。它们是上述工作的可执行起点；准确覆盖仍只在
 [实现状态](../implementation-status.md)维护。

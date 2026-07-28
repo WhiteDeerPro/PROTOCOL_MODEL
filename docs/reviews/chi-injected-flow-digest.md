@@ -103,8 +103,8 @@ eligibility/final-state、Home holder removal、feature/flow closure 以及负�
 
 ## 对后续切片的实际输入
 
-1. 当前 roadmap 的 Retry/Snoop/error 窄组合仍必须直接核对 Issue H；本批材料只补充 wait-for 与 phase
-   表达方法，没有提供该组合的协议证据。
+1. 在本评审基线中，roadmap 的 Retry/Snoop/error 窄组合仍必须直接核对 Issue H；本批材料只补充
+   wait-for 与 phase 表达方法，没有提供该组合的协议证据。该切片后续是否闭合仍查实时实现状态。
 2. clean `Evict` 可以采用最小候选边界：clean resident line 发 REQ、RN 进入 `I`、Home 原子删除匹配 holder、
    返回普通 completion、无 DAT/backing write；dirty line、non-holder、重复/迟到 completion 必须是负例。
 3. `WriteEvictFull`、`WriteEvictOrEvict`、自动 victim policy 与 replacement scheduler 是相邻机会，不与第一版

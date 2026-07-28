@@ -24,17 +24,23 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiRnRetryCoherentRequest,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation import (
+    ChiCompAckMessage,
     ChiCompDataMessage,
     ChiNetworkPacket,
     ChiPCrdGrantMessage,
     ChiReadUniqueMessage,
     ChiRespCode,
+    ChiRespErr,
     ChiRetryAckMessage,
+    ChiSnpRespMessage,
+    ChiSnpUniqueMessage,
     ChiWriteBackFullMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
     CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
+    ChiCoherenceInvariantMonitor,
     ChiCoherenceSession,
     ChiDeliverCoherencePacket,
     ChiGrantCoherentHomePCredit,
@@ -579,6 +585,290 @@ class ChiIssueHCoherentRetryParticipantTest(unittest.TestCase):
         self.assertEqual(
             self.DATA,
             retired.state.home.backing.line_at(self.ADDRESS).data,
+        )
+
+    def test_retry_wait_survives_independent_same_line_snoop_then_nderr(
+        self,
+    ) -> None:
+        retrying_requester = build_chi_cache_participant_fixture(
+            "rn_retrying",
+            self.REQUESTER,
+            self.HOME,
+            initial_lines=(
+                ChiCacheLine(
+                    self.ADDRESS,
+                    ChiCacheState.SC,
+                    self.DATA,
+                ),
+            ),
+        )
+        contender = build_chi_cache_participant_fixture(
+            "rn_contender",
+            self.PEER,
+            self.HOME,
+        )
+        home = ChiCoherentHomeNode(
+            "home",
+            self.HOME,
+            backing_core=FullLineBackingCore(
+                "home.backing",
+                line_bytes=64,
+                initial_lines=(
+                    BackingLine(self.ADDRESS, self.DATA),
+                ),
+            ),
+            initial_directory=(
+                ChiHomeDirectoryEntry(
+                    self.ADDRESS,
+                    sharers=frozenset((self.REQUESTER,)),
+                ),
+            ),
+            transaction_capacity=1,
+            initial_snoop_transaction_id=self.SNOOP_ID,
+            initial_data_buffer_id=self.DATA_BUFFER_ID,
+            retry_policy=lambda request, _state: (
+                self.CREDIT_TYPE
+                if request.transaction_id == self.TRANSACTION_ID
+                else None
+            ),
+            read_unique_nderr_policy=lambda request, _state: (
+                request.transaction_id == self.TRANSACTION_ID
+                and not request.allow_retry
+            ),
+        )
+        session = ChiCoherenceSession(
+            "retry_snoop_nderr",
+            home,
+            {
+                self.REQUESTER: retrying_requester,
+                self.PEER: contender,
+            },
+            enabled_features=frozenset(
+                (
+                    CHI_FEATURE_CLEAN_READ_UNIQUE,
+                    CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
+                    CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
+                )
+            ),
+        )
+        initial = session.initial_state()
+        retry_request = self.request()
+
+        retry_issued = self.apply(
+            session,
+            initial,
+            ChiSubmitCoherentRead(self.REQUESTER, retry_request),
+        )
+        retry_rejected = self.apply(
+            session,
+            retry_issued.state,
+            ChiDeliverCoherencePacket(retry_issued.emissions[0]),
+        )
+        self.assertEqual(1, len(retry_rejected.emissions))
+        retry_ack = retry_rejected.emissions[0]
+        self.assertIsInstance(retry_ack.message, ChiRetryAckMessage)
+        self.assertFalse(retry_rejected.state.home.pending)
+        self.assertEqual(
+            initial.home.directory,
+            retry_rejected.state.home.directory,
+        )
+        self.assertEqual(
+            initial.home.backing,
+            retry_rejected.state.home.backing,
+        )
+        self.assertEqual(
+            initial.home.next_snoop_transaction_id,
+            retry_rejected.state.home.next_snoop_transaction_id,
+        )
+
+        ack_seen = self.apply(
+            session,
+            retry_rejected.state,
+            ChiDeliverCoherencePacket(retry_ack),
+        )
+        retry_entry = ack_seen.state.request_nodes[
+            self.REQUESTER
+        ].request_retry.entries[self.TRANSACTION_ID]
+        self.assertIs(
+            ChiRequestRetryPhase.WAIT_RETRY_CREDIT,
+            retry_entry.phase,
+        )
+
+        contender_request = ChiReadUniqueMessage(
+            transaction_id=self.TRANSACTION_ID + 1,
+            address=self.ADDRESS,
+        )
+        contender_issued = self.apply(
+            session,
+            ack_seen.state,
+            ChiSubmitCoherentRead(self.PEER, contender_request),
+        )
+        contender_accepted = self.apply(
+            session,
+            contender_issued.state,
+            ChiDeliverCoherencePacket(contender_issued.emissions[0]),
+        )
+        self.assertEqual(1, len(contender_accepted.emissions))
+        snoop = contender_accepted.emissions[0]
+        self.assertIsInstance(snoop.message, ChiSnpUniqueMessage)
+        self.assertEqual(self.REQUESTER, snoop.target_id)
+
+        retrying_snooped = self.apply(
+            session,
+            contender_accepted.state,
+            ChiDeliverCoherencePacket(snoop),
+        )
+        retrying_state = retrying_snooped.state.request_nodes[
+            self.REQUESTER
+        ]
+        invalidated = retrying_state.line_at(self.ADDRESS)
+        assert invalidated is not None
+        self.assertIs(ChiCacheState.I, invalidated.state)
+        self.assertIsNone(invalidated.data)
+        self.assertIsInstance(
+            retrying_snooped.emissions[0].message,
+            ChiSnpRespMessage,
+        )
+        self.assertIs(
+            ChiRequestRetryPhase.WAIT_RETRY_CREDIT,
+            retrying_state.request_retry.entries[
+                self.TRANSACTION_ID
+            ].phase,
+        )
+        self.assertIn(
+            self.TRANSACTION_ID,
+            retrying_state.pending_transactions,
+        )
+
+        contender_completed = self.apply(
+            session,
+            retrying_snooped.state,
+            ChiDeliverCoherencePacket(
+                retrying_snooped.emissions[0]
+            ),
+        )
+        contender_installed = self.apply(
+            session,
+            contender_completed.state,
+            ChiDeliverCoherencePacket(
+                contender_completed.emissions[0]
+            ),
+        )
+        self.assertIsInstance(
+            contender_installed.emissions[0].message,
+            ChiCompAckMessage,
+        )
+        contender_retired = self.apply(
+            session,
+            contender_installed.state,
+            ChiDeliverCoherencePacket(
+                contender_installed.emissions[0]
+            ),
+        )
+        committed_directory = contender_retired.state.home.directory
+        committed_backing = contender_retired.state.home.backing
+        self.assertEqual(
+            self.PEER,
+            committed_directory[self.ADDRESS].unique_owner,
+        )
+
+        granted = self.apply(
+            session,
+            contender_retired.state,
+            ChiGrantCoherentHomePCredit(),
+        )
+        self.assertIsInstance(
+            granted.emissions[0].message,
+            ChiPCrdGrantMessage,
+        )
+        credit_seen = self.apply(
+            session,
+            granted.state,
+            ChiDeliverCoherencePacket(granted.emissions[0]),
+        )
+        retry_entry = credit_seen.state.request_nodes[
+            self.REQUESTER
+        ].request_retry.entries[self.TRANSACTION_ID]
+        self.assertIs(
+            ChiRequestRetryPhase.WAIT_RETRY_CREDIT,
+            retry_entry.phase,
+        )
+        retried = self.apply(
+            session,
+            credit_seen.state,
+            ChiRetryCoherentRequest(
+                self.REQUESTER,
+                self.TRANSACTION_ID,
+            ),
+        )
+        credited_request = retried.emissions[0].message
+        self.assertIsInstance(credited_request, ChiReadUniqueMessage)
+        self.assertFalse(credited_request.allow_retry)
+        self.assertEqual(
+            self.CREDIT_TYPE,
+            credited_request.protocol_credit_type,
+        )
+
+        failed = self.apply(
+            session,
+            retried.state,
+            ChiDeliverCoherencePacket(retried.emissions[0]),
+        )
+        self.assertEqual(1, len(failed.emissions))
+        completion = failed.emissions[0]
+        self.assertIsInstance(completion.message, ChiCompDataMessage)
+        self.assertIs(
+            ChiRespErr.NDERR,
+            completion.message.response_error,
+        )
+        self.assertIs(ChiRespCode.I, completion.message.response)
+        pending = failed.state.home.pending[
+            completion.message.data_buffer_id
+        ]
+        self.assertIsNone(pending.snoop_transaction_id)
+        self.assertFalse(pending.snoop_targets)
+        self.assertEqual(
+            committed_directory,
+            failed.state.home.directory,
+        )
+        self.assertEqual(committed_backing, failed.state.home.backing)
+
+        failure_seen = self.apply(
+            session,
+            failed.state,
+            ChiDeliverCoherencePacket(completion),
+        )
+        retrying_state = failure_seen.state.request_nodes[
+            self.REQUESTER
+        ]
+        failed_line = retrying_state.line_at(self.ADDRESS)
+        assert failed_line is not None
+        self.assertIs(ChiCacheState.I, failed_line.state)
+        self.assertIsNone(failed_line.data)
+        self.assertFalse(retrying_state.pending_transactions)
+        self.assertFalse(retrying_state.request_retry.entries)
+        retired = self.apply(
+            session,
+            failure_seen.state,
+            ChiDeliverCoherencePacket(
+                failure_seen.emissions[0]
+            ),
+        )
+
+        self.assertTrue(session.is_quiescent(retired.state))
+        self.assertEqual(committed_directory, retired.state.home.directory)
+        self.assertEqual(committed_backing, retired.state.home.backing)
+        retry_state = retired.state.home.request_retry
+        self.assertEqual(1, retry_state.retry_ack_count)
+        self.assertEqual(1, retry_state.grant_count)
+        self.assertEqual(1, retry_state.consumed_count)
+        self.assertEqual(0, retry_state.reserved_count)
+        self.assertFalse(retry_state.retry_debts)
+        self.assertFalse(
+            ChiCoherenceInvariantMonitor().explain(
+                retired.state.home,
+                retired.state.request_nodes,
+            )
         )
 
 

@@ -54,7 +54,6 @@ from protocol_model.protocols.amba.chi.issue_h.system.coherence import (
 from protocol_model.protocols.amba.chi.issue_h.system.capability import (
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
-    CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
 )
 from protocol_model.virtual_dut.backend import (
     BackingLine,
@@ -991,23 +990,6 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
                     )
                 ),
             )
-        with self.assertRaisesRegex(
-            ValueError,
-            "NDERR and Retry composition",
-        ):
-            ChiCoherenceSession(
-                "unsupported_nderr_retry_composition",
-                configured.home,
-                configured.request_nodes,
-                enabled_features=frozenset(
-                    (
-                        CHI_FEATURE_CLEAN_READ_UNIQUE,
-                        CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
-                        CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
-                    )
-                ),
-            )
-
     def test_session_rejects_ambiguous_participant_names(self) -> None:
         base = self.build_session()
 

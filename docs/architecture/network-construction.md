@@ -310,7 +310,7 @@ clean `ReadShared` 与任一允许 `UD` 的 feature 组合仍在本 profile 之�
 clean `ReadUnique` 的单次 Retry 也已经经 resolved XP topology 自动闭合 RetryAck、PCrdGrant、
 credited reissue 与原有 SnpUnique lifecycle；显式 `UD` writeback 已经经同类 topology 闭合。真实 snoop
 filter、router multicast、
-`MakeUnique`、clean `Evict`、自动 dirty victim/writeback scheduling、same-line transient/hazard 和
+clean `Evict`、`MakeUnique`、自动 dirty victim/writeback scheduling、一般 same-line transient/hazard 和
 一般 MOESI `SD`/Owned 仍属于后续
 participant/system 能力。
 
@@ -351,11 +351,14 @@ transport projection；其余 property 仍未闭合：
   Request-Retry/P-Credit 合同，Home grant 与 requester reissue 由同一 composition scheduler 自主推进；
   direct address-backed read 已把 authority 内 decode/access failure 映射为沿原 DAT route 返回的
   `CompData_I(NDERR)`；coherent `ReadUnique` 也已闭合 pre-snoop
-  `CompData_I(NDERR)→CompAck`、零 SNP 与 cache/directory/backing 不变式。当前不含 coherent cancel、
-  多 waiter policy、DERR/post-snoop error 或 Retry/Snoop/error 组合。通用 participant plan、
+  `CompData_I(NDERR)→CompAck`、零 SNP 与 cache/directory/backing 不变式。Retry 与 NDERR modifier
+  现可联合闭合经 XP 的六 packet 路径；direct 双 Requester witness 另证明等待 P-Credit 时可响应独立
+  同址 Snoop 而保留 correlation。当前不含 coherent cancel、多 waiter policy、DERR 或同一 accepted
+  request 已发出 Snoop 后的 error，
+  或超出该窄 witness 的 Retry/Snoop 到达次序。通用 participant plan、
   multi-Home/SAM authority、
-  `MakeUnique`、clean `Evict`、自动 dirty victim/writeback scheduling、
-  same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
+  clean `Evict`、`MakeUnique`、自动 dirty victim/writeback scheduling、
+  一般 same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；
 - translation 内已有 V1 `CapabilitySet/CapabilityRelation` 和 `SemanticEffect`，但尚未与 InterfacePort capability

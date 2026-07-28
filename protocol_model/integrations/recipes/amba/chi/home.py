@@ -24,6 +24,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiHomeDirectoryEntry,
     ChiParticipantBinding,
     ChiParticipantPortBinding,
+    ChiReadUniqueNderrPolicy,
     ChiVirtualDutFacets,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation import (
@@ -107,6 +108,7 @@ def bind_chi_issue_h_home_vdut(
     allow_dirty_data_transfer: bool = False,
     default_protocol_credit_type: int = 0,
     retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
+    read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
 ) -> ChiIssueHHomeVdutAssembly:
     """Bind coherent Home behavior to one existing canonical VirtualDut.
 
@@ -216,6 +218,7 @@ def bind_chi_issue_h_home_vdut(
         allow_dirty_data_transfer=allow_dirty_data_transfer,
         default_protocol_credit_type=default_protocol_credit_type,
         retry_policy=retry_policy,
+        read_unique_nderr_policy=read_unique_nderr_policy,
     )
     binding = ChiParticipantBinding(
         (
@@ -252,6 +255,7 @@ def attach_chi_issue_h_home(
     allow_dirty_data_transfer: bool = False,
     default_protocol_credit_type: int = 0,
     retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
+    read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
     transmit_port_name: str = "chi_tx",
     receive_port_name: str = "chi_rx",
     clock_domain: str | None = None,
@@ -335,6 +339,7 @@ def attach_chi_issue_h_home(
         allow_dirty_data_transfer=allow_dirty_data_transfer,
         default_protocol_credit_type=default_protocol_credit_type,
         retry_policy=retry_policy,
+        read_unique_nderr_policy=read_unique_nderr_policy,
     )
 
 

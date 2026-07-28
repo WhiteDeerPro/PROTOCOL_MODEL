@@ -233,8 +233,8 @@ initial ReadUnique
 
 被拒绝的初始请求不会分配 coherence pending、DBID 或 snoop，也不会修改 directory/backing。正确重发原子
 消耗 Home reservation 后才进入原有 clean `ReadUnique` lifecycle；Grant 可以先于 Ack 到达。当前 coherent
-slice 只闭合一次 Retry 后成功，不包含取消、同 Home/type 多 waiter 公平性，或 Retry 与
-error/Snoop/writeback 的组合。
+slice 以一次 Retry 后成功为基线；Retry 与 pre-Snoop NDERR 及独立同址 Snoop 的窄组合见下文。
+取消、同 Home/type 多 waiter 公平性和 Retry/writeback 组合仍未实现。
 
 ### Coherent reads 与受限 dirty ownership transfer
 
@@ -277,8 +277,26 @@ RN0 ReadUnique(A)
 错误数据位只作为无效线上占位，RN 不安装它；从 `I` 发起时不分配 cache line，从 `SC` upgrade 发起时保留
 原 payload 和权限。Home 在 `CompAck` 前仍持有 pending/DBID 和同址 reservation，但 directory、backing
 及 Snoop TxnID 均不变化。modifier 复用 base 的 REQ/DAT/CompAck 以及构造期 SNP/RSP flow，不声称错误专用
-channel；policy 与 feature 必须同时启用。当前明确不组合 Retry→NDERR，post-snoop failure 与 DERR 也仍是
-独立后续切片。
+channel；policy 与 feature 必须同时启用。
+
+Retry 与 NDERR modifier 现在可以同时选择，而不增加组合 feature：
+
+```text
+RN-A SC → ReadUnique(A) → RetryAck，Home 不产生 Snoop/DBID
+  → RN-A 进入 WAIT_RETRY_CREDIT
+  → RN-B 的独立同址 ReadUnique 引发 SnpUnique 到 RN-A
+  → RN-A SC→I、SnpResp_I，但保留 A 的 pending/retry correlation
+  → RN-B 完成并成为 unique owner
+  → Home PCrdGrant；RN-A 以 AllowRetry=0 重发 A
+  → Home 接纳后由 pre-Snoop policy 返回 CompData_I(NDERR)
+  → RN-A 保持 Snoop 后的 I，CompAck；RN-B owner/backing 不被回滚
+```
+
+被拒绝的第一次尝试与 Snoop 属于不同 transaction；NDERR 只属于 credited 第二次尝试。direct 双 Requester
+witness 固化上述交错，单 XP 六 packet witness 另证明两个 modifier 的 feature/capability/flow 并集可执行：
+两份 REQ、`RetryAck`、`PCrdGrant`、`CompData_I(NDERR)` 与 `CompAck`，SNP 数量为零。post-snoop
+failure 在这里特指同一 accepted request 已发出 Snoop 后的 failure；它与 Snoop error、DERR 和任意
+到达次序所需的 accepted-but-waiting queue 都仍是后续切片。
 
 `SnpUnique` 设置 `DoNotGoToSD=1`。只启用 clean profile 时固定 `RetToSrc=0`。启用
 `CHI_FEATURE_DIRTY_UNIQUE_TRANSFER` 后，持有 `UC` 的 RN 可执行本地 full-line write，使缓存行进入
@@ -478,7 +496,9 @@ clean-peer `CleanUnique` 经 direct 与单 XP topology 的五 packet witness，�
 `ReadUnique`、`RetryAck`、`PCrdGrant`、两个 `SnpUnique`、两个 `SnpResp`、`CompData` 与 `CompAck`，
 并检查最终 authority、backing version、retry ledger 和 transport quiescence。预侦听 NDERR modifier
 另有三 packet witness：REQ、`CompData_I(NDERR)` 与 `CompAck` 都经过同一 XP，SNP/SnpResp 数量为零，
-最终 cache、peer、directory 与 backing 保持原值。它也已闭合 dirty owner 经 XP 返回
+最终 cache、peer、directory 与 backing 保持原值。Retry+NDERR 联合选择另有六 packet witness，证明
+两份 REQ、`RetryAck`、`PCrdGrant`、错误 completion 与 Ack 都经同一 XP，且 feature closure 不虚构
+NDERR 专用 flow。它也已闭合 dirty owner 经 XP 返回
 `SnpRespData_I_PD`、再以 `CompData_UD_PD` 转移责任的五 packet witness。第三条五 packet witness
 执行 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`，
 并检查 Home
@@ -517,9 +537,10 @@ Snoop 只返回无数据 `SnpResp_I` 并进入 `I`。pending WriteBack 接收同
 CleanUnique 与延迟 WriteBack cancel，但 resolved system 仍只有一个构造期 Requester authority，不能据此
 声称一般多 Requester topology 已闭合。
 
-仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、`MakeUnique`、clean `Evict`、自动
-victim/writeback scheduling、coherent DERR 与 post-snoop/组合错误路径、Retry 与
-error/Snoop/writeback 的并发组合、超出已闭合 invalidating-Snoop cancel 的其他 WriteBack phase、
+仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、clean `Evict`、`MakeUnique`、自动
+victim/writeback scheduling、coherent DERR 与同一 accepted request 已发出 Snoop 后的错误路径、
+Retry 与 writeback 的组合、
+超出当前窄 witness 的 Retry/Snoop 到达次序、超出已闭合 invalidating-Snoop cancel 的其他 WriteBack phase、
 显式 transient phase/等待者合并、
 完整 `SD`/Owned lifecycle、forwarding snoop、真实 snoop filter、可共同执行的 Home→Memory/SN
 participant 与 topology-visible `WriteNoSnp` physical commit、multi-packet DAT、同一 runtime 的

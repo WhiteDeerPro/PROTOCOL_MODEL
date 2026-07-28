@@ -109,21 +109,28 @@ transmitter→receiver hop 上的 flit，不解释 coherence opcode；`Interface
 clean ReadUnique 还有一个独立的 pre-snoop NDERR modifier：
 `ReadUnique→CompData_I(NDERR)→CompAck` 只分配 DBID，不发 SNP；Requester 保持原 `I`/`SC` 和 payload，
 Home 在 Ack 后只释放 pending/同址 reservation，directory/backing 不变。它已有经单 XP 的三 packet
-witness，但当前不与 Retry 组合。
+witness。Retry 与 NDERR feature 现可同时选择：被拒绝的初始 request 不产生 Snoop；direct 双 Requester
+witness 证明 Requester 在 `WAIT_RETRY_CREDIT` 期间可被另一笔同址 `SnpUnique` 失效而保留 retry
+correlation，等该 transaction 退休后再以 P-Credit 重发，并由上述 pre-Snoop policy 返回
+`CompData_I(NDERR)`。单 XP 另闭合不含实际 Snoop packet 的
+`RetryAck/PCrdGrant→credited reissue→CompData_I(NDERR)` transport 路径。这里没有把 Snoop 归因给
+被拒绝的 request，也不声称同一 accepted request 已发出 Snoop 后的 error 或 DERR。
 
 当前 Home 固定选择“吸收 PassDirty、返回 `CompData_SC`、在 `CompAck` 后提交 backing/directory”这一种
 规范允许的 no-SD 结果；它没有覆盖所有可选 Home policy。`SC` holder 已可通过
 `CleanUnique→UC→local write→UD` 保留本地数据完成权限升级，也可通过
-`ReadUnique→UC→local write→UD` 走需要返回数据的路径。当前仍未实现 `MakeUnique`、clean `Evict`、
+`ReadUnique→UC→local write→UD` 走需要返回数据的路径。当前仍未实现 clean `Evict`、`MakeUnique`、
 packed bit/raw pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty
-victim/writeback scheduling、coherent DERR/post-snoop error 与 Retry/Snoop/error 并发、coherent Retry cancel/multi-waiter
-policy、same-line transient/hazard，以及一般 MOESI `SD`/Owned。Participant
+victim/writeback scheduling、coherent DERR/同一 accepted request 已发出 Snoop 后的 error、
+coherent Retry cancel/multi-waiter
+policy、超出当前窄 witness 的一般 same-line transient/hazard，以及一般 MOESI `SD`/Owned。Participant
 facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，尚未并入通用
 `SystemSession` action loop；有界 scheduler budget 耗尽给出 inconclusive，不作为 network deadlock
 证明。
 
-后续扩展继续以可执行 lifecycle 为单位增加。紧邻的增量包括 `MakeUnique`、clean `Evict`、自动 dirty
-victim/writeback scheduling、same-line transient/hazard，以及同一 Home/type 下多个 waiter 的具名选择与公平性合同。
+后续扩展继续以可执行 lifecycle 为单位增加。紧邻的增量先是 clean `Evict`，随后是 `MakeUnique`；
+自动 dirty victim/writeback scheduling、一般 same-line transient/hazard，以及同一 Home/type 下多个
+waiter 的具名选择与公平性合同再按依赖推进。
 `PCrdGrant`、`RetryAck` 仍走 Home→Requester 的 RSP 路径；`PCrdReturn` 根据 CHI Issue H B2.5.6 走
 Requester→Home 的 REQ 路径，router 继续只按 `channel + TgtID` 透明转发。NodeID ownership 与首条
 single-scope address/Home/domain authority 已由 system construction 闭合；multi-Home/SAM 选择和

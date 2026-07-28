@@ -348,7 +348,8 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
   Requester witness 证明两笔 CleanUnique 可由 Home line reservation 串行、第二笔最终取得 `UCE`；
   pending WriteBack 接收同址 invalidating Snoop，把 dirty data 交给 Home 后显式变为
   `CANCELED_I`，再以 `CopyBackWrData_I` 退休。等待者合并、一般 transient phase、Snoop 优先级，以及
-  Retry/error/Snoop 组合与取消仍未闭合；
+  超出当前窄 witness 的 Retry/Snoop 到达次序、同一 accepted request 已发出 Snoop 后的 error 与
+  Retry cancel 仍未闭合；
 - runtime 按地址动态选择多个 Home、SAM remap 和跨 domain 执行。
 
 当前 `SD` 只是一条受限 CleanUnique 前置状态及其失效出口，不是完整 MOESI/Owned profile。后者还需要
@@ -594,8 +595,10 @@ RN0 ReadUnique
 ```
 
 这个 modifier 复用 base feature 已证明的 REQ/DAT/CompAck 以及构造期 SNP/RSP flow；“本次没有实际
-Snoop packet”不等于删掉 base lifecycle 的 topology contract。当前 Home policy 与 modifier 必须成对启用，
-且 Retry→NDERR、post-snoop failure 和 DERR 没有被这个 witness 声称。
+Snoop packet”不等于删掉 base lifecycle 的 topology contract。当前 Home policy 与 modifier 必须成对启用。
+这个三 packet witness 本身不声称
+`RetryAck/PCrdGrant→credited reissue→CompData_I(NDERR)`、同一 accepted request 已发出 Snoop 后的
+failure 或 DERR；Retry 组合由下文的独立 witness 闭合。
 
 同一装配可再运行 `ReadShared`，验证 shared directory 更新。首版验收至少包含：
 
@@ -702,8 +705,29 @@ clean ReadUnique 现另有一次成功 Retry 的 modifier：
 `ReadUnique→RetryAck→PCrdGrant→AllowRetry=0 重发` 之后复用本页既有 SnpUnique/CompData/CompAck
 lifecycle。Home 拒绝阶段只建立 Retry debt；Grant 预留真实 transaction slot，credited reissue 原子消费
 reservation 后才建立 coherence pending。direct packet-delivery 与单 XP topology witness 均覆盖该路径，
-但 cancel、Retry/error composition、多 waiter，以及 Retry 与同址 Snoop 的组合仍延期。基础
-ReadUnique/SnpUnique 重叠由上面的独立 transient 切片覆盖。
+但 cancel 与多 waiter 仍延期。
+
+Retry、独立同址 Snoop 与 pre-Snoop NDERR 现另有一条窄组合。direct 双 Requester witness 的顺序为：
+
+```text
+RN-A(SC) ReadUnique(A) → RetryAck，Home 不建立 pending/Snoop/DBID
+  → RN-A waits for P-Credit
+  → RN-B 的独立同址 ReadUnique 使 Home 向 RN-A 发送 SnpUnique
+  → RN-A SC→I、SnpResp_I，并保留 A 的 pending/retry correlation
+  → RN-B CompData_UC→CompAck，Home 提交 RN-B 为 unique owner
+  → PCrdGrant；RN-A 以 AllowRetry=0/匹配 PCrdType 重发 A
+  → Home 接纳后在 Snoop 前选择 CompData_I(NDERR)
+  → RN-A 保持 I、返回 CompAck；RN-B owner 与 backing 不被回滚
+```
+
+初始 request 已被 `RetryAck` 拒绝，因此这里的 Snoop 只能归因于 RN-B 的独立 transaction；NDERR 只属于
+credited reissue。组合不增加 feature key 或 wire form，而是同时选择现有 Retry/NDERR modifier，并使用
+`ChiRequestRetryPhase × ChiCacheState` 表达正交状态。单 XP 另有六 packet witness：两份 REQ、
+`RetryAck`、`PCrdGrant`、`CompData_I(NDERR)` 与 `CompAck`；两项 response 可以相互乱序，但都必须先于
+credited REQ，且全程不产生 SNP。当前 Home 对尚未释放的同址 reservation 仍返回 `ResourceDemand`，
+因此不能把该证据扩大成“credited REQ 在任意跨 channel 到达次序下均立即接纳”；那需要
+accepted-but-waiting queue。同一 accepted request 已发出 Snoop 后的 failure、DERR/Snoop error 与
+Retry cancel 也仍未实现。
 
 展示产物优先包含一张 topology、一张简化 MSC 和一份最终 directory/cache-state 摘要。Link tick 等内部
 microstep 保存在诊断记录中，无需全部放入主 MSC。
@@ -712,7 +736,7 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 
 下列能力仍在当前切片之外：
 
-- `MakeUnique`、clean `Evict`、自动 victim selection/writeback scheduling、CMO/DVM、等待者合并和
+- clean `Evict`、`MakeUnique`、自动 victim selection/writeback scheduling、CMO/DVM、等待者合并和
   一般 transient phase；
 - dirty writeback 与 RetryAck/P-Credit 或错误响应的组合，以及超出已闭合 invalidating-Snoop cancel 的
   其他 WriteBack/Snoop phase 组合；
@@ -726,8 +750,9 @@ microstep 保存在诊断记录中，无需全部放入主 MSC。
 - 动态 snoop filter、router multicast 和 topology-wide broadcast；
 - 独立 fanout branch admission、fanout continuation 及其额外 storage；
 - message→multi-packet DAT splitter/reassembler、multi-flit response、narrow completion、DERR 与
-  post-snoop error completion；
-- 多个 coherence Retry waiter、cancel，以及 Retry/error/同址 Snoop 的并发组合；
+  同一 accepted request 已发出 Snoop 后的 error completion；
+- 多个 coherence Retry waiter、cancel、上述 post-Snoop error，以及超出上述窄 witness 的
+  Retry/Snoop 到达次序；
 - 多 waiter 公平性、跨资源 wait-for graph、escape transition 搜索和 deadlock verdict；当前
   `ChiCoherenceProgress` 只提供 family-local held/wait/wakeup evidence；
 - virtual channel、adaptive route、QoS/fairness property 和 deadlock/livelock proof；

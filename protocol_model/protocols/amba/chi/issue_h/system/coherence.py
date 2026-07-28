@@ -10,10 +10,12 @@ The profile is intentionally narrow.  It closes clean ``ReadShared`` and
 ``CleanUnique`` permission upgrades, the ``UD`` owner-transfer path for
 ``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
 explicit ``UD`` ``WriteBackFull``, one successful clean ``ReadUnique``
-Request-Retry cycle, and a pre-snoop ``ReadUnique`` NDERR completion.  The
-``SD`` state exists only for the CleanUnique memory-update slice; general
-shared-dirty behavior, Retry/error composition, automatic victim selection,
-forwarding snoops, and packed pin observations remain separate extensions.
+Request-Retry cycle, a pre-snoop ``ReadUnique`` NDERR completion, and their
+narrow composition with an independent same-line Snoop while the Requester
+waits for P-Credit.  The ``SD`` state exists only for the CleanUnique
+memory-update slice; general shared-dirty behavior, post-snoop errors,
+automatic victim selection, forwarding snoops, and packed pin observations
+remain separate extensions.
 """
 
 from __future__ import annotations
@@ -500,13 +502,6 @@ class ChiCoherenceSession(
         ):
             raise ValueError(
                 "ReadUnique Retry requires the clean ReadUnique base feature"
-            )
-        if (
-            CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR in features
-            and CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY in features
-        ):
-            raise ValueError(
-                "ReadUnique NDERR and Retry composition is not implemented"
             )
         if (
             home.read_unique_nderr_policy is not None

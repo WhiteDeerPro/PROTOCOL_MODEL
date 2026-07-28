@@ -65,6 +65,9 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
         def retry_policy(request, state):
             return 5
 
+        def read_unique_nderr_policy(request, state):
+            return False
+
         assembly = attach_chi_issue_h_home(
             "hn0",
             core,
@@ -76,6 +79,7 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
             allow_dirty_data_transfer=True,
             default_protocol_credit_type=5,
             retry_policy=retry_policy,
+            read_unique_nderr_policy=read_unique_nderr_policy,
             clock_domain="chi_clk",
             reset_domain="chi_reset",
         )
@@ -106,6 +110,10 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
             assembly.participant.default_protocol_credit_type,
         )
         self.assertIs(retry_policy, assembly.participant.retry_policy)
+        self.assertIs(
+            read_unique_nderr_policy,
+            assembly.participant.read_unique_nderr_policy,
+        )
 
         dut = assembly.virtual_dut
         self.assertEqual(
@@ -204,6 +212,30 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
         self.assertEqual("hn0", assembly.binding.name)
         self.assertIs(tx, assembly.binding.ports[0].port)
         self.assertIs(rx, assembly.binding.ports[1].port)
+        self.assertIsNone(assembly.participant.read_unique_nderr_policy)
+
+    def test_binder_passes_read_unique_nderr_policy_to_home(self) -> None:
+        rx = self.port("rx_req", TransportDirection.RECEIVE)
+        dut = VirtualDut("hn0", {rx.name: rx})
+
+        def read_unique_nderr_policy(request, state):
+            return True
+
+        assembly = bind_chi_issue_h_home_vdut(
+            dut,
+            self.backing_core(),
+            self.HOME,
+            port_channels={
+                rx.name: frozenset((ChiChannelKind.REQ,))
+            },
+            initial_directory=self.directory(),
+            read_unique_nderr_policy=read_unique_nderr_policy,
+        )
+
+        self.assertIs(
+            read_unique_nderr_policy,
+            assembly.participant.read_unique_nderr_policy,
+        )
 
     def test_binder_rejects_non_home_channel_directions(self) -> None:
         tx = self.port("tx", TransportDirection.TRANSMIT)

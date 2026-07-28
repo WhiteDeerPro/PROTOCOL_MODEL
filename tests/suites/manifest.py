@@ -40,6 +40,7 @@ CHI_MODULES = (
     "tests.test_chi_issue_h_dirty_unique_coherence",
     "tests.test_chi_issue_h_evict_retry_participants",
     "tests.test_chi_issue_h_evict_retry_system",
+    "tests.test_chi_issue_h_flow_observation",
     "tests.test_chi_issue_h_generated_topologies",
     "tests.test_chi_issue_h_home_vdut",
     "tests.test_chi_issue_h_identity",
@@ -139,6 +140,7 @@ ARCHITECTURE_MODULES = (
     "tests.test_causal_graph",
     "tests.test_source_architecture",
     "tests.test_suite_manifest",
+    "tests.test_transaction_time_space_view",
     "tests.test_visualization_interconnect",
 )
 

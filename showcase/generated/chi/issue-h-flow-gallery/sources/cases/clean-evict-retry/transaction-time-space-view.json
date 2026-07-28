@@ -1,0 +1,260 @@
+{
+  "schema": "protocol-model.transaction-time-space-view/v1",
+  "descriptor": {
+    "view_kind": "transaction_sequence",
+    "scope": "scenario",
+    "evidence_basis": "observed",
+    "source_schema": "protocol-model.transaction-time-space-view/v1",
+    "projection_intent": "direct",
+    "time_basis": "model_step",
+    "detail": "standard"
+  },
+  "name": "Clean Evict retry, P-Credit and credited reissue",
+  "lifelines": [
+    {
+      "ref": "rn0",
+      "label": "RN0 · requester",
+      "kind": "requester",
+      "display_fields": {
+        "NodeID": "0x7"
+      }
+    },
+    {
+      "ref": "hn0",
+      "label": "HN0 · home",
+      "kind": "home",
+      "display_fields": {
+        "NodeID": "0x21"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "event_ref": "clean-evict-retry:message:00",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "source": "rn0",
+      "destination": "hn0",
+      "time": 8,
+      "label": "Evict",
+      "lane": "req",
+      "channel": "req",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x31",
+        "address": "0x8000",
+        "AllowRetry": true,
+        "PCrdType": 0,
+        "summary": "T31 AR1"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:message:01",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "source": "hn0",
+      "destination": "rn0",
+      "time": 16,
+      "label": "RetryAck",
+      "lane": "rsp",
+      "channel": "rsp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x31",
+        "PCrdType": 5,
+        "summary": "T31 P5"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:message:02",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "source": "hn0",
+      "destination": "rn0",
+      "time": 21,
+      "label": "PCrdGrant",
+      "lane": "rsp",
+      "channel": "rsp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x0",
+        "PCrdType": 5,
+        "summary": "T0 P5"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:message:03",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "source": "rn0",
+      "destination": "hn0",
+      "time": 30,
+      "label": "Evict",
+      "lane": "req",
+      "channel": "req",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x31",
+        "address": "0x8000",
+        "AllowRetry": false,
+        "PCrdType": 5,
+        "summary": "T31 P5 AR0"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:message:04",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "source": "hn0",
+      "destination": "rn0",
+      "time": 36,
+      "label": "Comp",
+      "lane": "rsp",
+      "channel": "rsp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x31",
+        "DBID": "0x0",
+        "Resp": "I",
+        "summary": "T31 D0 RI"
+      }
+    }
+  ],
+  "state_changes": [
+    {
+      "event_ref": "clean-evict-retry:state:000:rn0",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "lifeline": "rn0",
+      "time": 0,
+      "before": "line=UC | txn=- | copyback=- | retry=-",
+      "after": "line=I | txn=0x31 | copyback=- | retry=0x31:initial_in_flight",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "I T31 R31:init",
+        "summary": "rn0: UC → I T31 R31:init",
+        "transition": "local request issue"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:state:008:hn0",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "lifeline": "hn0",
+      "time": 8,
+      "before": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "after": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=1 reserved=0",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "D:U7 RD1 Bv0",
+        "summary": "hn0: D:U7 Bv0 → D:U7 RD1 Bv0",
+        "transition": "hn0 accepts Evict"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:state:012:hn0",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "lifeline": "hn0",
+      "time": 12,
+      "before": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=1 reserved=0",
+      "after": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=1",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "D:U7 PR1 Bv0",
+        "summary": "hn0: D:U7 RD1 Bv0 → D:U7 PR1 Bv0",
+        "transition": "Home P-Credit grant"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:state:016:rn0",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "lifeline": "rn0",
+      "time": 16,
+      "before": "line=I | txn=0x31 | copyback=- | retry=0x31:initial_in_flight",
+      "after": "line=I | txn=0x31 | copyback=- | retry=0x31:wait_retry_credit",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "I T31 R31:wait-credit",
+        "summary": "rn0: I T31 R31:init → I T31 R31:wait-credit",
+        "transition": "rn0 accepts RetryAck"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:state:024:rn0",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "lifeline": "rn0",
+      "time": 24,
+      "before": "line=I | txn=0x31 | copyback=- | retry=0x31:wait_retry_credit",
+      "after": "line=I | txn=0x31 | copyback=- | retry=0x31:retried_in_flight",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "I T31 R31:retry-flight",
+        "summary": "rn0: I T31 R31:wait-credit → I T31 R31:retry-flight",
+        "transition": "credited request reissue"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:state:030:hn0",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "lifeline": "hn0",
+      "time": 30,
+      "before": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=1",
+      "after": "dir[U=-;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "D:I Bv0",
+        "summary": "hn0: D:U7 PR1 Bv0 → D:I Bv0",
+        "transition": "hn0 accepts Evict"
+      }
+    },
+    {
+      "event_ref": "clean-evict-retry:state:036:rn0",
+      "operation_ref": "clean-evict-retry:n7:h21:t31",
+      "lifeline": "rn0",
+      "time": 36,
+      "before": "line=I | txn=0x31 | copyback=- | retry=0x31:retried_in_flight",
+      "after": "line=I | txn=- | copyback=- | retry=-",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "I",
+        "summary": "rn0: I T31 R31:retry-flight → I",
+        "transition": "rn0 accepts Comp"
+      }
+    }
+  ],
+  "causal_edges": [
+    {
+      "source_event_ref": "clean-evict-retry:state:000:rn0",
+      "destination_event_ref": "clean-evict-retry:message:00",
+      "reason": "local issue emits"
+    },
+    {
+      "source_event_ref": "clean-evict-retry:message:00",
+      "destination_event_ref": "clean-evict-retry:message:01",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "clean-evict-retry:state:012:hn0",
+      "destination_event_ref": "clean-evict-retry:message:02",
+      "reason": "local issue emits"
+    },
+    {
+      "source_event_ref": "clean-evict-retry:state:024:rn0",
+      "destination_event_ref": "clean-evict-retry:message:03",
+      "reason": "local issue emits"
+    },
+    {
+      "source_event_ref": "clean-evict-retry:message:03",
+      "destination_event_ref": "clean-evict-retry:message:04",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "clean-evict-retry:message:00",
+      "destination_event_ref": "clean-evict-retry:state:012:hn0",
+      "reason": "Retry debt enables P-Credit"
+    },
+    {
+      "source_event_ref": "clean-evict-retry:message:01",
+      "destination_event_ref": "clean-evict-retry:message:03",
+      "reason": "RetryAck observed"
+    },
+    {
+      "source_event_ref": "clean-evict-retry:message:02",
+      "destination_event_ref": "clean-evict-retry:message:03",
+      "reason": "P-Credit enables reissue"
+    }
+  ]
+}

@@ -1,14 +1,20 @@
-# CHI Issue H：两种调用方拓扑的可执行见证
+# CHI Issue H：两种独立的调用方拓扑见证
 
-本示例把同一条受限 `ReadNoSnp → CompData` 生命周期放进两种由调用方明确构造的
-`SystemProtocol` topology：
+本源码目录共享装配和展示投影，但发布为两个彼此独立的 `SystemProtocol` topology 叶节点：
 
-1. 四 router 双向 ring backbone；R1 挂两个 leaf，R3 只做 transit；
-2. 16 router 的 4×4 双向 mesh；四个 endpoint 位于四角，采用确定性 X-then-Y exact route。
+1. [`chi-issue-h-heterogeneous-ring-star`](../../../generated/system/chi-issue-h-heterogeneous-ring-star/README.md)：
+   四 router 双向 ring backbone；R1 挂两个 leaf，R3 只做 transit；
+2. [`chi-issue-h-four-by-four-mesh`](../../../generated/system/chi-issue-h-four-by-four-mesh/README.md)：
+   16 router 的 4×4 双向 mesh；四个 endpoint 位于四角，采用确定性 X-then-Y exact route。
 
 两案复用 `protocol_model` 中的 CHI participant、finite store-and-forward router、transport connection、
 Link Credit 和 transaction session。`model.py` 只保存用户可读的参考装配；它不是 CHI package 的内建
 ring/mesh recipe。
+
+图中将 `ChiStoreForwardRouterNode` 简写为 **XP abstraction**。这是对 CHI
+路由边界的简单拓扑表达：节点显式具有 ingress queue、exact NodeID route、
+egress 与逐 hop Link Credit；它不等同于完整 XP 微架构，也不提供 pipeline
+周期或物理延迟模型。
 
 ## 运行
 
@@ -28,18 +34,22 @@ ring/mesh recipe。
 ```
 
 发布脚本先在目标目录旁完成执行、渲染、manifest 和 provenance，然后只替换
-`chi-issue-h-topology-shapes/` 叶级目录。
+`chi-issue-h-heterogeneous-ring-star/` 与 `chi-issue-h-four-by-four-mesh/` 叶级目录。也可以只重建
+其中一案：
+
+```bash
+.venv/bin/python \
+  showcase/demos/system/chi_issue_h_topology_shapes/run.py \
+  --case four-by-four-mesh
+```
 
 ## 生成内容
 
-- `heterogeneous-ring-star.svg`：双向 ring backbone、非均匀 leaf attachment，以及本次 REQ/DAT 路径；
-- `four-by-four-mesh.svg`：4×4 mesh、四角 endpoint、全部声明连接与角到角执行路径；
-- `route-comparison.svg`：两案的规模、actual route 和共同能力边界；
-- `result.json`：紧凑的 topology、transaction、route、runtime 摘要与断言；
+- 每个 leaf 只包含本 case 的 topology/path SVG 与 `sources/*.dot`；
+- `result.json`：本 case 的 topology、transaction、route、runtime 摘要与断言；
 - `README.md`：从本次执行结果生成的阅读导航；
 - `provenance.json`：构造入口、renderer、时间基准与宣称边界；
-- `sources/*.dot`：三张 SVG 的可检查 Graphviz 源；
-- `manifest.json`：发布脚本实际拥有的文件、case 和结果。
+- `manifest.json`：该 leaf 实际拥有的文件、case 和结果。
 
 图中的固定位置属于示例级 presentation metadata；节点、连接、exact route 和执行路径均从同一次实际装配读取。
 灰色连接表示已声明但本次 read 未经过的 topology，不表示已经覆盖相应 traffic 组合。
@@ -53,7 +63,7 @@ ring/mesh recipe。
 ## 文件职责
 
 - `model.py`：构造两种 topology 并执行相同的 direct read；
-- `presentation.py`：只从 assembly/result 投影三张图和生成版说明；
-- `run.py`：管理 staging、渲染、provenance、manifest 与显式发布。
+- `presentation.py`：从单案 assembly/result 投影 topology/path 图和生成版说明；
+- `run.py`：共享 staging/渲染逻辑，但分别生成两个 leaf publication。
 
 测试可以导入 `model.py` 的 public builder/executor 检查结构和行为，但 showcase 不依赖 `tests/`。

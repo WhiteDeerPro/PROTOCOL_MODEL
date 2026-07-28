@@ -1,0 +1,63 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "========",
+      "data": [
+        "0",
+        "8",
+        "12",
+        "16",
+        "21",
+        "24",
+        "30",
+        "36"
+      ]
+    },
+    {
+      "name": "rn0 · rsp",
+      "wave": "000==00=",
+      "data": [
+        "m01 RetryAck",
+        "m02 PCrdGrant",
+        "m04 Comp"
+      ]
+    },
+    {
+      "name": "rn0 · STATE",
+      "wave": "=00=0=0=",
+      "data": [
+        "s000 I T31 R31:init",
+        "s016 I T31 R31:wait-credit",
+        "s024 I T31 R31:retry-flight",
+        "s036 I"
+      ]
+    },
+    {
+      "name": "hn0 · req",
+      "wave": "0=0000=0",
+      "data": [
+        "m00 Evict",
+        "m03 Evict"
+      ]
+    },
+    {
+      "name": "hn0 · STATE",
+      "wave": "0==000=0",
+      "data": [
+        "s008 D:U7 RD1 Bv0",
+        "s012 D:U7 PR1 Bv0",
+        "s030 D:I Bv0"
+      ]
+    }
+  ],
+  "head": {
+    "text": "Clean Evict retry, P-Credit and credited reissue · accepted semantic events"
+  },
+  "foot": {
+    "text": "1 column = 1 observed model step slot · SEMANTIC EVENTS ONLY · NOT PINS/CYCLES/RTL"
+  },
+  "config": {
+    "hscale": 4
+  }
+}

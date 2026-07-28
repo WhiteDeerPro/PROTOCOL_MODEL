@@ -1,0 +1,13 @@
+digraph "chi_flow_writeback-snoop-cancel" {
+  graph [rankdir=LR, bgcolor="white", pad=0.28, nodesep=0.46, ranksep=0.78, splines=polyline, labelloc="t", label="Dirty WriteBackFull canceled by pre-response same-line Snoop\nparticipant interaction boundary", fontname="sans-serif", fontsize=16];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=10, margin="0.13,0.08"];
+  edge [style=dashed, penwidth=1.5, fontname="sans-serif", fontsize=8, color="#64748b", fontcolor="#334155", arrowsize=0.62];
+  "node-33" [label="writeback_snoop_home\nhome\nNodeID 0x21", fillcolor="#ffedd5", color="#ea580c", tooltip="writeback_snoop_home"];
+  "node-7" [label="dirty_old_owner\nrequester / snoopee\nNodeID 0x7", fillcolor="#dbeafe", color="#2563eb", tooltip="dirty_old_owner.coherence"];
+  "node-8" [label="clean_unique_requester\nrequester / snoopee\nNodeID 0x8", fillcolor="#dbeafe", color="#2563eb", tooltip="clean_unique_requester.coherence"];
+  "node-7" -> "node-33" [label="participant packets · REQ/DAT\n3 emitted", tooltip="WriteBackFull, SnpRespData, CopyBackWrData"];
+  "node-8" -> "node-33" [label="participant packets · REQ/RSP\n2 emitted", tooltip="CleanUnique, CompAck"];
+  "node-33" -> "node-7" [label="participant packets · RSP/SNP\n2 emitted", tooltip="SnpCleanInvalid, CompDBIDResp"];
+  "node-33" -> "node-8" [label="participant packets · RSP\n1 emitted", tooltip="Comp"];
+  boundary [shape=note, style="filled", fillcolor="#fff7ed", color="#f97316", fontsize=8, label="dashed = model-emitted participant packets\nno transport connections or hop execution claimed"];
+}

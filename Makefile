@@ -8,7 +8,8 @@ UNITTEST_FLAGS ?= -q
 	test-integration \
 	test-sentinels \
 	test-release \
-	showcase-axi4
+	showcase-axi4 \
+	showcase-chi-flow
 
 smoke:
 	$(PYTHON) -m unittest $(UNITTEST_FLAGS) tests.suites.smoke
@@ -33,3 +34,6 @@ test-release:
 
 showcase-axi4:
 	$(PYTHON) showcase/demos/axi4/run.py
+
+showcase-chi-flow:
+	$(PYTHON) showcase/demos/chi/issue_h_flow_gallery/run.py

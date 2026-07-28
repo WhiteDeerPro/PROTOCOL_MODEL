@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from html import escape
 import json
 from typing import Mapping
 
@@ -169,12 +168,15 @@ def heterogeneous_ring_star_dot(
             else f"{local_count} local endpoint"
             + ("s" if local_count != 1 else "")
         )
+        router_label = (
+            f"{router.upper()}\nXP abstraction\n{local_label}"
+        )
         lines.append(
             f"  {router} [pos={_quoted(f'{x},{y}!')}, pin=true, "
-            "shape=box, width=1.35, height=0.80, "
+            "shape=box, width=1.45, height=0.96, "
             f'style="rounded,filled", fillcolor="{ROUTER_FILL}", '
             f'color="{ROUTER_COLOR}", '
-            f"label={_quoted(router.upper() + chr(10) + local_label)}];"
+            f"label={_quoted(router_label)}];"
         )
     for endpoint in assembly.endpoints:
         x, y = positions[endpoint.name]
@@ -208,6 +210,10 @@ def heterogeneous_ring_star_dot(
             '<FONT POINT-SIZE="9" COLOR="#475569">',
             "      The leaf cluster is not a shared bus; each line is an "
             "explicit point-to-point attachment.",
+            "    </FONT></TD></TR><TR><TD COLSPAN=\"3\">"
+            '<FONT POINT-SIZE="9" COLOR="#475569">',
+            "      XP abstraction = finite store-and-forward route node; "
+            "not a complete CHI XP microarchitecture.",
             "    </FONT></TD></TR></TABLE>",
             "  >];",
             "}",
@@ -257,9 +263,10 @@ def four_by_four_mesh_dot(
     for router, (x, y) in router_positions.items():
         lines.append(
             f"  {router} [pos={_quoted(f'{x},{y}!')}, pin=true, "
-            "shape=box, width=0.70, height=0.56, "
+            "shape=box, width=0.78, height=0.72, "
             f'style="rounded,filled", fillcolor="{ROUTER_FILL}", '
-            f'color="{ROUTER_COLOR}", label={_quoted(router.upper())}];'
+            f'color="{ROUTER_COLOR}", '
+            f"label={_quoted(router.upper() + chr(10) + 'XP')}];"
         )
     for endpoint in assembly.endpoints:
         x, y = endpoint_positions[endpoint.name]
@@ -302,6 +309,10 @@ def four_by_four_mesh_dot(
             f"{len(transaction['request_route'])}+"
             f"{len(transaction['data_route'])} hops; grey interior links "
             "remain declared topology.",
+            "    </FONT></TD></TR><TR><TD COLSPAN=\"3\">"
+            '<FONT POINT-SIZE="9" COLOR="#475569">',
+            "      XP = modeled finite store-and-forward route boundary; "
+            "not a complete CHI XP microarchitecture.",
             "    </FONT></TD></TR></TABLE>",
             "  >];",
             "}",
@@ -316,128 +327,67 @@ def _display_route(nodes: object) -> str:
     return " → ".join(str(node).upper() for node in nodes)
 
 
-def route_comparison_dot(
-    cases: Mapping[
-        str,
-        tuple[GeneratedTopologyAssembly, Mapping[str, object]],
-    ],
-) -> str:
-    """Compare executed routes without presenting scheduler time as latency."""
-
-    rows = []
-    labels = {
-        RING_CASE: "Ring + leaf stars",
-        MESH_CASE: "4×4 mesh",
-    }
-    for case in (RING_CASE, MESH_CASE):
-        _, result = cases[case]
-        topology = result["topology"]
-        transaction = result["transaction"]
-        rows.append(
-            "<TR>"
-            f'<TD ALIGN="LEFT"><B>{escape(labels[case])}</B></TD>'
-            f'<TD>{topology["router_count"]}</TD>'
-            f'<TD>{topology["directed_hop_count"]}</TD>'
-            f'<TD>{topology["exact_route_count"]}</TD>'
-            '<TD ALIGN="LEFT"><FONT COLOR="#2563eb">'
-            f'{escape(_display_route(transaction["request_nodes"]))}'
-            "</FONT><BR ALIGN=\"LEFT\"/>"
-            '<FONT COLOR="#c026d3">'
-            f'{escape(_display_route(transaction["data_nodes"]))}'
-            "</FONT></TD>"
-            f'<TD>{escape(str(result["verdict"]))}</TD>'
-            "</TR>"
-        )
-    return "\n".join(
-        (
-            "digraph chi_route_comparison {",
-            '  graph [bgcolor="white", pad=0.4, labelloc="t", '
-            'label="Same restricted operation · two caller-built topologies", '
-            'fontname="sans-serif", fontsize=18];',
-            '  node [shape=plain, fontname="sans-serif", fontsize=10];',
-            "  comparison [label=<",
-            '    <TABLE BORDER="1" COLOR="#cbd5e1" CELLBORDER="0" '
-            'CELLSPACING="0" CELLPADDING="9">',
-            '      <TR><TD BGCOLOR="#f8fafc"><B>Case</B></TD>'
-            '<TD BGCOLOR="#f8fafc"><B>Routers</B></TD>'
-            '<TD BGCOLOR="#f8fafc"><B>Directed hops</B></TD>'
-            '<TD BGCOLOR="#f8fafc"><B>Exact routes</B></TD>'
-            '<TD BGCOLOR="#f8fafc"><B>Executed REQ / DAT node path</B></TD>'
-            '<TD BGCOLOR="#f8fafc"><B>Result</B></TD></TR>',
-            *rows,
-            '      <TR><TD COLSPAN="6" ALIGN="LEFT" BGCOLOR="#eff6ff">'
-            "<B>Executed common contract:</B> ReadNoSnp → CompData, "
-            "TxnID correlation, finite router queues, per-hop Link Credit, "
-            "exact NodeID routing, and final quiescence.</TD></TR>",
-            '      <TR><TD COLSPAN="6" ALIGN="LEFT" BGCOLOR="#fff7ed">'
-            "<B>Not established by these shapes:</B> shared-bus arbitration, "
-            "RSP/SNP coherence, adaptive routing, CHI completeness, "
-            "performance, fairness, or deadlock freedom.</TD></TR>",
-            "    </TABLE>",
-            "  >];",
-            "}",
-        )
-    ) + "\n"
-
-
 def guide(
-    cases: Mapping[
-        str,
-        tuple[GeneratedTopologyAssembly, Mapping[str, object]],
-    ],
+    assembly: GeneratedTopologyAssembly,
+    result: Mapping[str, object],
 ) -> str:
-    """Build the generated result-specific navigation page."""
+    """Build one generated, result-specific leaf navigation page."""
 
-    _, ring = cases[RING_CASE]
-    _, mesh = cases[MESH_CASE]
-    ring_topology = ring["topology"]
-    mesh_topology = mesh["topology"]
-    ring_transaction = ring["transaction"]
-    mesh_transaction = mesh["transaction"]
-    return f"""# CHI Issue H：同一事务经过两种调用方拓扑
-
-本页执行同一条受限 `ReadNoSnp → CompData` 生命周期，但让调用方提供两种不同
-`SystemProtocol` topology。目的不是用网络外观代替协议覆盖，而是展示现有 CHI participant、
-有限 store-and-forward router、exact NodeID route 和逐跳 transport 能在不同固定拓扑上组合。
-
-## 非均匀 ring backbone + leaf stars
-
-![非均匀双向环形骨干](heterogeneous-ring-star.svg)
-
-四个 router 构成双向 ring backbone。R0 挂 requester，R2 挂 Home，R1 同时挂两个声明但本次空闲的
+    topology = result["topology"]
+    transaction = result["transaction"]
+    if assembly.case == RING_CASE:
+        title = "CHI Issue H：异构 ring backbone + leaf stars"
+        image = "heterogeneous-ring-star.svg"
+        image_alt = "非均匀双向环形骨干与已执行路径"
+        body = f"""
+四个 XP abstraction/router 构成双向 ring backbone。R0 挂 requester，R2 挂 Home，R1 同时挂两个声明但本次空闲的
 leaf endpoint，R3 则是 transit-only。这个不均匀 attachment 使 topology 不再只是对称方框：
-本次 REQ 使用 `{_display_route(ring_transaction['request_nodes'])}`，DAT 走
-`{_display_route(ring_transaction['data_nodes'])}`，合起来覆盖 ring 的四条物理边。
+本次 REQ 使用 `{_display_route(transaction['request_nodes'])}`，DAT 走
+`{_display_route(transaction['data_nodes'])}`，合起来覆盖 ring 的四条物理边。
 
 这里的“star”只描述 R1 周围的点到点叶节点簇。它不是 multi-drop shared bus，也没有从图形推断
-broadcast 或共享介质仲裁。实际系统包含 {ring_topology['directed_hop_count']} 条有向 hop 和
-{ring_topology['exact_route_count']} 条 router exact-route entry。
+broadcast 或共享介质仲裁。有向 hop 数为 {topology['directed_hop_count']}，router
+exact-route entry 数为 {topology['exact_route_count']}。
+"""
+    elif assembly.case == MESH_CASE:
+        title = "CHI Issue H：4×4 bidirectional mesh"
+        image = "four-by-four-mesh.svg"
+        image_alt = "4×4 mesh 与角到角已执行路径"
+        body = f"""
+本 case 生成 {topology['router_count']} 个 XP abstraction/router、{topology['physical_backbone_edge_count']}
+条物理 grid edge、{topology['directed_backbone_hop_count']} 条有向 backbone hop，再加四个角点
+endpoint 的双向 attachment。每个 router 为四个 endpoint 建立 exact NodeID route，因此共有
+{topology['exact_route_count']} 条 route entry。
 
-## 4×4 bidirectional mesh
-
-![4×4 mesh 与角到角路径](four-by-four-mesh.svg)
-
-第二个 case 生成 16 个 router、{mesh_topology['physical_backbone_edge_count']} 条物理 grid edge、
-{mesh_topology['directed_backbone_hop_count']} 条有向 backbone hop，再加四个角点 endpoint 的
-双向 attachment。每个 router 为四个 endpoint 建立 exact NodeID route，因此共有
-{mesh_topology['exact_route_count']} 条 route entry。
-
-REQ 与 DAT 各执行 {len(mesh_transaction['request_route'])} 条有向 hop，采用确定性的 X-then-Y
+REQ 与 DAT 各执行 {len(transaction['request_route'])} 条有向 hop，采用确定性的 X-then-Y
 选择并在角到角往返后静默。灰色 interior edge 是已 elaborated、route table 已覆盖但这一次事务没有穿过的
 topology；图没有暗示一笔 read 已经动态扫遍所有 mesh link。
+"""
+    else:
+        raise ValueError(f"unsupported topology publication {assembly.case!r}")
 
-## 对照与边界
+    return f"""# {title}
 
-![两种拓扑的已执行路径与能力边界](route-comparison.svg)
+本页执行一条受限 `ReadNoSnp → CompData` 生命周期。Topology 由调用方明确构造为
+`SystemProtocol`；CHI participant、有限 store-and-forward router、exact NodeID route 和逐跳
+transport 来自 `protocol_model`。
 
-两案都实际检查了 completion、返回值、每个已执行 hop 的 lineage、router accept/forward 计数和最终
+这里把每个 `ChiStoreForwardRouterNode` 简写为 **XP abstraction**：它显式拥有
+ingress queue、exact NodeID route、egress 与 Link Credit，但不宣称覆盖完整 CHI XP
+微架构、内部 pipeline 或周期延迟。
+
+![{image_alt}]({image})
+{body}
+## 执行证据与边界
+
+本 case 实际检查 completion、返回值、每个已执行 hop 的 lineage、router accept/forward 计数和最终
 quiescence。reference microstep 数只记录确定性模型执行，不是吞吐或物理延迟测量。
 
-这两个 case 当前集中在 REQ/DAT direct read。它们不建立 shared-bus/broadcast 语义，不包含
-RSP/SNP coherence、Retry/error 组合或 adaptive routing，也不构成完整 CHI compliance、QoS/fairness
-结论或 deadlock proof。clean coherence 的状态闭合需要另外的 ReadUnique/Snoop witness。
+当前流程集中在 REQ/DAT direct read。它不建立 shared-bus/broadcast 语义，不包含 RSP/SNP coherence、
+Retry/error 组合或 adaptive routing，也不构成完整 CHI compliance、QoS/fairness 结论或 deadlock proof。
+clean coherence 的状态闭合需要另外的 ReadUnique/Snoop witness。
 
-机器结果见 [result.json](result.json)，三张图的可检查 DOT 源见 [sources](sources/)，构造与宣称边界见
+机器结果见 [result.json](result.json)，图的可检查 DOT 源见 [sources](sources/)，构造与宣称边界见
 [provenance.json](provenance.json)，发布文件清单见 [manifest.json](manifest.json)。
 """
 
@@ -446,5 +396,4 @@ __all__ = [
     "four_by_four_mesh_dot",
     "guide",
     "heterogeneous_ring_star_dot",
-    "route_comparison_dot",
 ]

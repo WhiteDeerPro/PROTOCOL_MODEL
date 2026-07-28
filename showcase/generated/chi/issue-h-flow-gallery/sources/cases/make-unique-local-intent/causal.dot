@@ -1,0 +1,20 @@
+digraph transaction_causality {
+  rankdir=TB;
+  label="MakeUnique: dataless permission and local full-line intent · explicit causality";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.45, ranksep=0.72, splines=polyline, pad=0.2];
+  node [shape=box, style="rounded,filled", fillcolor="#eef5ff", color="#3169a8", fontname="sans-serif", fontsize=10];
+  edge [color="#3169a8", fontname="sans-serif", fontsize=9];
+  event_0 [label="[model_step 0] coherence/transaction state\nrn0: I → I T41\nevent=000:rn0 · op=h21:t41\nrn0"];
+  event_1 [label="[model_step 14] MakeUnique\nreq · req\nT41 AR1\nevent=message:00 · op=h21:t41\nrn0 → hn0"];
+  event_2 [label="[model_step 24] SnpMakeInvalid\nsnp · snp\nT100\nevent=message:01 · op=h21:t41\nhn0 → rn1"];
+  event_3 [label="[model_step 34] SnpResp\nrsp · rsp\nT100 RI\nevent=message:02 · op=h21:t41\nrn1 → hn0"];
+  event_4 [label="[model_step 44] Comp\nrsp · rsp\nT41 D200 RUC\nevent=message:03 · op=h21:t41\nhn0 → rn0"];
+  event_5 [label="[model_step 54] CompAck\nrsp · rsp\nT200 R0\nevent=message:04 · op=h21:t41\nrn0 → hn0"];
+  event_0 -> event_1 [label="local issue emits"];
+  event_1 -> event_2 [label="participant emits"];
+  event_2 -> event_3 [label="participant emits"];
+  event_3 -> event_4 [label="Home Snoop-response join"];
+  event_4 -> event_5 [label="participant emits"];
+  boundary [shape=note, fillcolor="white", color="#777777", label="Edges are supplied evidence\ntime proximity does not infer causality"];
+}

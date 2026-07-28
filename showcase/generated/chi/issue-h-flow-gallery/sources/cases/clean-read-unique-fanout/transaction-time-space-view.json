@@ -1,0 +1,292 @@
+{
+  "schema": "protocol-model.transaction-time-space-view/v1",
+  "descriptor": {
+    "view_kind": "transaction_sequence",
+    "scope": "scenario",
+    "evidence_basis": "observed",
+    "source_schema": "protocol-model.transaction-time-space-view/v1",
+    "projection_intent": "direct",
+    "time_basis": "model_step",
+    "detail": "standard"
+  },
+  "name": "Clean ReadUnique: two-peer fanout and response join",
+  "lifelines": [
+    {
+      "ref": "rn0",
+      "label": "RN0 · requester",
+      "kind": "requester",
+      "display_fields": {
+        "NodeID": "0x7"
+      }
+    },
+    {
+      "ref": "hn0",
+      "label": "HN0 · home",
+      "kind": "home",
+      "display_fields": {
+        "NodeID": "0x21"
+      }
+    },
+    {
+      "ref": "rn1",
+      "label": "RN1 · snoopee",
+      "kind": "snoopee",
+      "display_fields": {
+        "NodeID": "0x8"
+      }
+    },
+    {
+      "ref": "rn2",
+      "label": "RN2 · snoopee",
+      "kind": "snoopee",
+      "display_fields": {
+        "NodeID": "0x9"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "event_ref": "clean-read-unique-fanout:message:00",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "source": "rn0",
+      "destination": "hn0",
+      "time": 20,
+      "label": "ReadUnique",
+      "lane": "req",
+      "channel": "req",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x12",
+        "address": "0x8000",
+        "AllowRetry": true,
+        "PCrdType": 0,
+        "summary": "T12 AR1"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:message:01",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "source": "hn0",
+      "destination": "rn1",
+      "time": 35,
+      "label": "SnpUnique",
+      "lane": "snp",
+      "channel": "snp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x100",
+        "address": "0x8000",
+        "summary": "T100"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:message:02",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "source": "hn0",
+      "destination": "rn2",
+      "time": 43,
+      "label": "SnpUnique",
+      "lane": "snp",
+      "channel": "snp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x100",
+        "address": "0x8000",
+        "summary": "T100"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:message:03",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "source": "rn1",
+      "destination": "hn0",
+      "time": 51,
+      "label": "SnpResp",
+      "lane": "rsp",
+      "channel": "rsp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x100",
+        "Resp": "I",
+        "summary": "T100 RI"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:message:04",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "source": "rn2",
+      "destination": "hn0",
+      "time": 58,
+      "label": "SnpResp",
+      "lane": "rsp",
+      "channel": "rsp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x100",
+        "Resp": "I",
+        "summary": "T100 RI"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:message:05",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "source": "hn0",
+      "destination": "rn0",
+      "time": 72,
+      "label": "CompData",
+      "lane": "dat",
+      "channel": "dat",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x12",
+        "DBID": "0x200",
+        "Resp": "UC",
+        "summary": "T12 D200 RUC"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:message:06",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "source": "rn0",
+      "destination": "hn0",
+      "time": 86,
+      "label": "CompAck",
+      "lane": "rsp",
+      "channel": "rsp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x200",
+        "Resp": "0",
+        "summary": "T200 R0"
+      }
+    }
+  ],
+  "state_changes": [
+    {
+      "event_ref": "clean-read-unique-fanout:state:000:rn0",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "lifeline": "rn0",
+      "time": 0,
+      "before": "line=I | txn=- | copyback=- | retry=-",
+      "after": "line=I | txn=0x12 | copyback=- | retry=0x12:initial_in_flight",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "I T12 R12:init",
+        "summary": "rn0: I → I T12 R12:init",
+        "transition": "local request issue"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:state:020:hn0",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "lifeline": "hn0",
+      "time": 20,
+      "before": "dir[U=-;S=0x8,0x9;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "after": "dir[U=-;S=0x8,0x9;SD=-] | pending=0x200 | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "D:S8,9 P1 Bv0",
+        "summary": "hn0: D:S8,9 Bv0 → D:S8,9 P1 Bv0",
+        "transition": "hn0 accepts ReadUnique"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:state:035:rn1",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "lifeline": "rn1",
+      "time": 35,
+      "before": "line=SC | txn=- | copyback=- | retry=-",
+      "after": "line=I | txn=- | copyback=- | retry=-",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "I",
+        "summary": "rn1: SC → I",
+        "transition": "rn1 accepts SnpUnique"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:state:043:rn2",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "lifeline": "rn2",
+      "time": 43,
+      "before": "line=SC | txn=- | copyback=- | retry=-",
+      "after": "line=I | txn=- | copyback=- | retry=-",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "I",
+        "summary": "rn2: SC → I",
+        "transition": "rn2 accepts SnpUnique"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:state:072:rn0",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "lifeline": "rn0",
+      "time": 72,
+      "before": "line=I | txn=0x12 | copyback=- | retry=0x12:initial_in_flight",
+      "after": "line=UC | txn=- | copyback=- | retry=-",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "UC",
+        "summary": "rn0: I T12 R12:init → UC",
+        "transition": "rn0 accepts CompData"
+      }
+    },
+    {
+      "event_ref": "clean-read-unique-fanout:state:086:hn0",
+      "operation_ref": "clean-read-unique-fanout:n7:h21:t12",
+      "lifeline": "hn0",
+      "time": 86,
+      "before": "dir[U=-;S=0x8,0x9;SD=-] | pending=0x200 | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "after": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "D:U7 Bv0",
+        "summary": "hn0: D:S8,9 P1 Bv0 → D:U7 Bv0",
+        "transition": "hn0 accepts CompAck"
+      }
+    }
+  ],
+  "causal_edges": [
+    {
+      "source_event_ref": "clean-read-unique-fanout:state:000:rn0",
+      "destination_event_ref": "clean-read-unique-fanout:message:00",
+      "reason": "local issue emits"
+    },
+    {
+      "source_event_ref": "clean-read-unique-fanout:message:00",
+      "destination_event_ref": "clean-read-unique-fanout:message:01",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "clean-read-unique-fanout:message:00",
+      "destination_event_ref": "clean-read-unique-fanout:message:02",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "clean-read-unique-fanout:message:01",
+      "destination_event_ref": "clean-read-unique-fanout:message:03",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "clean-read-unique-fanout:message:02",
+      "destination_event_ref": "clean-read-unique-fanout:message:04",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "clean-read-unique-fanout:message:04",
+      "destination_event_ref": "clean-read-unique-fanout:message:05",
+      "reason": "Home Snoop-response join"
+    },
+    {
+      "source_event_ref": "clean-read-unique-fanout:message:05",
+      "destination_event_ref": "clean-read-unique-fanout:message:06",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "clean-read-unique-fanout:message:03",
+      "destination_event_ref": "clean-read-unique-fanout:message:05",
+      "reason": "Home Snoop-response join"
+    }
+  ]
+}

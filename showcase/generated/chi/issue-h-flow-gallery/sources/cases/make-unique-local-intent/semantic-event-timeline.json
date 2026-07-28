@@ -1,0 +1,77 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "======",
+      "data": [
+        "0",
+        "14",
+        "24",
+        "34",
+        "44",
+        "54"
+      ]
+    },
+    {
+      "name": "rn0 · rsp",
+      "wave": "0000=0",
+      "data": [
+        "m03 Comp"
+      ]
+    },
+    {
+      "name": "rn0 · STATE",
+      "wave": "=000=0",
+      "data": [
+        "s000 I T41",
+        "s044 UD"
+      ]
+    },
+    {
+      "name": "hn0 · req",
+      "wave": "0=0000",
+      "data": [
+        "m00 MakeUnique"
+      ]
+    },
+    {
+      "name": "hn0 · rsp",
+      "wave": "000=0=",
+      "data": [
+        "m02 SnpResp",
+        "m04 CompAck"
+      ]
+    },
+    {
+      "name": "hn0 · STATE",
+      "wave": "0=000=",
+      "data": [
+        "s014 D:S8/SD8 P1 Bv0",
+        "s054 D:U7 Bv0"
+      ]
+    },
+    {
+      "name": "rn1 · snp",
+      "wave": "00=000",
+      "data": [
+        "m01 SnpMakeInvalid"
+      ]
+    },
+    {
+      "name": "rn1 · STATE",
+      "wave": "00=000",
+      "data": [
+        "s024 I"
+      ]
+    }
+  ],
+  "head": {
+    "text": "MakeUnique: dataless permission and local full-line intent · accepted semantic events"
+  },
+  "foot": {
+    "text": "1 column = 1 observed model step slot · SEMANTIC EVENTS ONLY · NOT PINS/CYCLES/RTL"
+  },
+  "config": {
+    "hscale": 4
+  }
+}

@@ -1,0 +1,61 @@
+digraph transaction_time_space {
+  rankdir=TB;
+  label="CleanUnique: absorb a shared-dirty peer through DAT · transaction time-space";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.7, ranksep=0.72, splines=line, pad=0.2, newrank=true, forcelabels=true];
+  node [fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9];
+  time_header [shape=plaintext, group="time", label="time"];
+  lifeline_0 [shape=box, style="rounded,filled", group="lifeline_0", fillcolor="#eef5ff", color="#3169a8", label="RN0 · requester\nrequester · rn0\nNodeID=0x7"];
+  lifeline_1 [shape=box, style="rounded,filled", group="lifeline_1", fillcolor="#eef5ff", color="#3169a8", label="HN0 · home\nhome · hn0\nNodeID=0x21"];
+  lifeline_2 [shape=box, style="rounded,filled", group="lifeline_2", fillcolor="#eef5ff", color="#3169a8", label="RN1 · snoopee\nsnoopee · rn1\nNodeID=0x8"];
+  { rank=same; time_header; lifeline_0; lifeline_1; lifeline_2; }
+  time_0 [shape=plaintext, group="time", label="model_step 0"];
+  point_0_0 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="SC T31", tooltip="dirty-peer-clean-unique:state:000:rn0: rn0: SC → SC T31"];
+  point_1_0 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  point_2_0 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_0; point_0_0; point_1_0; point_2_0; }
+  time_0 -> point_0_0 -> point_1_0 -> point_2_0 [style=invis, weight=100];
+  time_1 [shape=plaintext, group="time", label="model_step 14"];
+  point_0_1 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
+  point_1_1 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:S7,8/SD8 P1 Bv0", tooltip="dirty-peer-clean-unique:state:014:hn0: hn0: D:S7,8/SD8 Bv0 → D:S7,8/SD8 P1 Bv0"];
+  point_2_1 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_1; point_0_1; point_1_1; point_2_1; }
+  time_1 -> point_0_1 -> point_1_1 -> point_2_1 [style=invis, weight=100];
+  time_2 [shape=plaintext, group="time", label="model_step 24"];
+  point_0_2 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
+  point_1_2 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  point_2_2 [shape=point, width=0.10, height=0.10, group="lifeline_2", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I", tooltip="dirty-peer-clean-unique:state:024:rn1: rn1: SD → I"];
+  { rank=same; time_2; point_0_2; point_1_2; point_2_2; }
+  time_2 -> point_0_2 -> point_1_2 -> point_2_2 [style=invis, weight=100];
+  time_3 [shape=plaintext, group="time", label="model_step 34"];
+  point_0_3 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
+  point_1_3 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  point_2_3 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_3; point_0_3; point_1_3; point_2_3; }
+  time_3 -> point_0_3 -> point_1_3 -> point_2_3 [style=invis, weight=100];
+  time_4 [shape=plaintext, group="time", label="model_step 44"];
+  point_0_4 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="UC", tooltip="dirty-peer-clean-unique:state:044:rn0: rn0: SC T31 → UC"];
+  point_1_4 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  point_2_4 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_4; point_0_4; point_1_4; point_2_4; }
+  time_4 -> point_0_4 -> point_1_4 -> point_2_4 [style=invis, weight=100];
+  time_5 [shape=plaintext, group="time", label="model_step 54"];
+  point_0_5 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
+  point_1_5 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 Bv1", tooltip="dirty-peer-clean-unique:state:054:hn0: hn0: D:S7,8/SD8 P1 Bv0 → D:U7 Bv1"];
+  point_2_5 [shape=point, width=0.07, height=0.07, group="lifeline_2", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_5; point_0_5; point_1_5; point_2_5; }
+  time_5 -> point_0_5 -> point_1_5 -> point_2_5 [style=invis, weight=100];
+  lifeline_0 -> point_0_0 -> point_0_1 -> point_0_2 -> point_0_3 -> point_0_4 -> point_0_5 [arrowhead=none, style=dashed, color="#94a3b8", weight=20];
+  lifeline_1 -> point_1_0 -> point_1_1 -> point_1_2 -> point_1_3 -> point_1_4 -> point_1_5 [arrowhead=none, style=dashed, color="#94a3b8", weight=20];
+  lifeline_2 -> point_2_0 -> point_2_1 -> point_2_2 -> point_2_3 -> point_2_4 -> point_2_5 [arrowhead=none, style=dashed, color="#94a3b8", weight=20];
+  point_0_1 -> point_1_1 [constraint=false, color="#2563a8", fontcolor="#2563a8", penwidth=1.7, xlabel="CleanUnique · REQ [m00]\nT31 AR1"];
+  point_1_2 -> point_2_2 [constraint=false, color="#c46a00", fontcolor="#c46a00", penwidth=1.7, xlabel="SnpCleanInvalid · SNP [m01]\nT100"];
+  point_2_3 -> point_1_3 [constraint=false, color="#7c4aa5", fontcolor="#7c4aa5", penwidth=1.7, xlabel="SnpRespData · DAT [m02]\nT100 D0 RI_PD"];
+  point_1_4 -> point_0_4 [constraint=false, color="#247148", fontcolor="#247148", penwidth=1.7, xlabel="Comp · RSP [m03]\nT31 D200 RUC"];
+  point_0_5 -> point_1_5 [constraint=false, color="#247148", fontcolor="#247148", penwidth=1.7, xlabel="CompAck · RSP [m04]\nT200 R0"];
+  legend [shape=plain, label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="5" CELLPADDING="2"><TR><TD><B>Legend</B></TD><TD BORDER="1" COLOR="#2563a8" BGCOLOR="#2563a8" WIDTH="12"></TD><TD ALIGN="LEFT">REQ · request</TD><TD BORDER="1" COLOR="#c46a00" BGCOLOR="#c46a00" WIDTH="12"></TD><TD ALIGN="LEFT">SNP · snoop</TD><TD BORDER="1" COLOR="#247148" BGCOLOR="#247148" WIDTH="12"></TD><TD ALIGN="LEFT">RSP · response/credit</TD><TD BORDER="1" COLOR="#7c4aa5" BGCOLOR="#7c4aa5" WIDTH="12"></TD><TD ALIGN="LEFT">DAT · data/copyback</TD><TD BORDER="1" COLOR="#a87d21" BGCOLOR="#fff7dd" WIDTH="12"></TD><TD ALIGN="LEFT">state change</TD></TR></TABLE>>];
+  boundary [shape=note, color="#777777", label="Semantic event position only\nnot pins, cycles, or RTL timing"];
+  { rank=same; legend; boundary; }
+  point_0_5 -> legend [style=invis, minlen=1];
+}

@@ -1,0 +1,16 @@
+digraph "chi_flow_clean-read-unique-fanout" {
+  graph [rankdir=LR, bgcolor="white", pad=0.28, nodesep=0.42, ranksep=0.72, splines=polyline, labelloc="t", label="Clean ReadUnique: two-peer fanout and response join\nresolved SystemProtocol topology", fontname="sans-serif", fontsize=16];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=10, margin="0.13,0.08"];
+  edge [fontname="sans-serif", fontsize=8, color="#64748b", fontcolor="#334155", arrowsize=0.62];
+  "rn0" [label="RN0\nrequester\nNodeID 0x7", fillcolor="#dbeafe", color="#2563eb"];
+  "rn1" [label="RN1\nsnoopee\nNodeID 0x8", fillcolor="#dcfce7", color="#16a34a"];
+  "rn2" [label="RN2\nsnoopee\nNodeID 0x9", fillcolor="#dcfce7", color="#16a34a"];
+  "hn0" [label="HN0\nhome\nNodeID 0x21", fillcolor="#ffedd5", color="#ea580c"];
+  "rn0" -> "hn0" [label="request_ack\ntransport · REQ/RSP", tooltip="rn0.tx_request_ack → hn0.rx_request_ack"];
+  "hn0" -> "rn0" [label="completion\ntransport · DAT", tooltip="hn0.tx_completion → rn0.rx_completion"];
+  "hn0" -> "rn1" [label="snoop_rn1\ntransport · SNP", tooltip="hn0.tx_snoop_rn1 → rn1.rx_snoop"];
+  "rn1" -> "hn0" [label="result_rn1\ntransport · RSP", tooltip="rn1.tx_snoop_result → hn0.rx_result_rn1"];
+  "hn0" -> "rn2" [label="snoop_rn2\ntransport · SNP", tooltip="hn0.tx_snoop_rn2 → rn2.rx_snoop"];
+  "rn2" -> "hn0" [label="result_rn2\ntransport · RSP", tooltip="rn2.tx_snoop_result → hn0.rx_result_rn2"];
+  evidence [shape=note, style="filled", fillcolor="#f8fafc", color="#94a3b8", fontsize=8, label="4 VirtualDuts · 6 declared connections\nsolid arrows come from resolved construction\ndirect participant topology · no XP-like forwarder constructed\nflow time-space omits per-hop transport MOVE events"];
+}

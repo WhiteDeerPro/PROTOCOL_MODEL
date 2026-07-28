@@ -28,11 +28,13 @@ trace、拓扑和诊断证据。
 | 展示 | 主要内容 |
 |---|---|
 | [AXI4 场景集](showcase/generated/axi4/README.zh-CN.md) | 24 个确定性合法/违规场景；每案连接输入、verdict、波形、因果图和机器结果 |
-| [CHI 2×2 clean-coherence mesh](showcase/generated/system/chi-issue-h-clean-2x2-mesh/README.md) | `ReadUnique`、两路 Snoop fan-out、REQ/RSP/SNP/DAT 多跳路径与 `I/SC/UC` 状态闭合 |
-| [CHI topology shapes](showcase/generated/system/chi-issue-h-topology-shapes/README.md) | 非均匀环形骨干与星形叶节点，以及 4×4 mesh 的规模化 exact-route witness |
+| [CHI Issue H flow gallery](showcase/generated/chi/issue-h-flow-gallery/README.md) | 5 个实际执行流程；每案连接实际拓扑/交互边界、transaction 时空图、显式因果图与语义事件时间线 |
+| [CHI 异构 ring + star](showcase/generated/system/chi-issue-h-heterogeneous-ring-star/README.md) | 非均匀环形骨干、星形叶节点与方向化 exact-route witness |
+| [CHI 4×4 mesh](showcase/generated/system/chi-issue-h-four-by-four-mesh/README.md) | 16-router mesh、角到角长路径与 route-table closure witness |
 
-2×2 mesh 用较小拓扑讲清一致性事务；topology-shapes 示例关注异构结构、长路径和规模。两者回答的问题
-不同，不能用节点数量替代协议功能覆盖。
+flow gallery 观察 `ReadUnique`、`CleanUnique`、`MakeUnique`、`Evict` Retry 和
+`WriteBackFull` 同址 Snoop 组合；两个 topology 示例分别关注异构结构和 mesh 长路径/规模。它们回答的问题不同，
+不能用场景数量或节点数量替代协议功能覆盖。
 
 ## 快速开始
 

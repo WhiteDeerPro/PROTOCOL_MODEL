@@ -1,0 +1,100 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "==========",
+      "data": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9"
+      ]
+    },
+    {
+      "name": "rn0 · snp",
+      "wave": "000=000000",
+      "data": [
+        "m01 SnpCleanInvalid"
+      ]
+    },
+    {
+      "name": "rn0 · rsp",
+      "wave": "00000000=0",
+      "data": [
+        "m06 CompDBIDResp"
+      ]
+    },
+    {
+      "name": "rn0 · STATE",
+      "wave": "=00=0000=0",
+      "data": [
+        "s000 UD CB31:live",
+        "s003 I CB31:cancel",
+        "s008 I"
+      ]
+    },
+    {
+      "name": "hn0 · req",
+      "wave": "00=0000=00",
+      "data": [
+        "m00 CleanUnique",
+        "m05 WriteBackFull"
+      ]
+    },
+    {
+      "name": "hn0 · dat",
+      "wave": "0000=0000=",
+      "data": [
+        "m02 SnpRespData",
+        "m07 CopyBackWrData"
+      ]
+    },
+    {
+      "name": "hn0 · rsp",
+      "wave": "000000=000",
+      "data": [
+        "m04 CompAck"
+      ]
+    },
+    {
+      "name": "hn0 · STATE",
+      "wave": "00=000==0=",
+      "data": [
+        "s002 D:U7 P1 Bv0",
+        "s006 D:U8 Bv1",
+        "s007 D:U8 CB1 Bv1",
+        "s009 D:U8 Bv1"
+      ]
+    },
+    {
+      "name": "rn1 · rsp",
+      "wave": "00000=0000",
+      "data": [
+        "m03 Comp"
+      ]
+    },
+    {
+      "name": "rn1 · STATE",
+      "wave": "0=000=0000",
+      "data": [
+        "s001 - T32",
+        "s005 UCE"
+      ]
+    }
+  ],
+  "head": {
+    "text": "Dirty WriteBackFull canceled by pre-response same-line Snoop · accepted semantic events"
+  },
+  "foot": {
+    "text": "1 column = 1 observed model step slot · SEMANTIC EVENTS ONLY · NOT PINS/CYCLES/RTL"
+  },
+  "config": {
+    "hscale": 4
+  }
+}

@@ -1,0 +1,94 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "========",
+      "data": [
+        "0",
+        "20",
+        "35",
+        "43",
+        "51",
+        "58",
+        "72",
+        "86"
+      ]
+    },
+    {
+      "name": "rn0 · dat",
+      "wave": "000000=0",
+      "data": [
+        "m05 CompData"
+      ]
+    },
+    {
+      "name": "rn0 · STATE",
+      "wave": "=00000=0",
+      "data": [
+        "s000 I T12 R12:init",
+        "s072 UC"
+      ]
+    },
+    {
+      "name": "hn0 · req",
+      "wave": "0=000000",
+      "data": [
+        "m00 ReadUnique"
+      ]
+    },
+    {
+      "name": "hn0 · rsp",
+      "wave": "0000==0=",
+      "data": [
+        "m03 SnpResp",
+        "m04 SnpResp",
+        "m06 CompAck"
+      ]
+    },
+    {
+      "name": "hn0 · STATE",
+      "wave": "0=00000=",
+      "data": [
+        "s020 D:S8,9 P1 Bv0",
+        "s086 D:U7 Bv0"
+      ]
+    },
+    {
+      "name": "rn1 · snp",
+      "wave": "00=00000",
+      "data": [
+        "m01 SnpUnique"
+      ]
+    },
+    {
+      "name": "rn1 · STATE",
+      "wave": "00=00000",
+      "data": [
+        "s035 I"
+      ]
+    },
+    {
+      "name": "rn2 · snp",
+      "wave": "000=0000",
+      "data": [
+        "m02 SnpUnique"
+      ]
+    },
+    {
+      "name": "rn2 · STATE",
+      "wave": "000=0000",
+      "data": [
+        "s043 I"
+      ]
+    }
+  ],
+  "head": {
+    "text": "Clean ReadUnique: two-peer fanout and response join · accepted semantic events"
+  },
+  "foot": {
+    "text": "1 column = 1 observed model step slot · SEMANTIC EVENTS ONLY · NOT PINS/CYCLES/RTL"
+  },
+  "config": {
+    "hscale": 4
+  }
+}

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Publish the CHI Issue H caller-built topology-shapes showcase."""
+"""Publish two independent CHI Issue H topology witnesses."""
 
 from __future__ import annotations
 
@@ -25,13 +25,14 @@ if str(REPOSITORY_ROOT) not in sys.path:
 from model import (  # noqa: E402
     MESH_CASE,
     RING_CASE,
-    execute_topology_shapes,
+    GeneratedTopologyAssembly,
+    execute_four_by_four_mesh,
+    execute_heterogeneous_ring_star,
 )
 from presentation import (  # noqa: E402
     four_by_four_mesh_dot,
     guide,
     heterogeneous_ring_star_dot,
-    route_comparison_dot,
 )
 from protocol_model import __version__  # noqa: E402
 from protocol_model.artifacts import RunArtifactStore  # noqa: E402
@@ -41,91 +42,152 @@ from protocol_model.visualization import (  # noqa: E402
 )
 
 
-DEMO_NAME = "chi-issue-h-topology-shapes"
+LEGACY_DEMO_NAME = "chi-issue-h-topology-shapes"
+PUBLICATION_NAMES = {
+    RING_CASE: "chi-issue-h-heterogeneous-ring-star",
+    MESH_CASE: "chi-issue-h-four-by-four-mesh",
+}
 
 
 def _require_renderers() -> None:
-    missing = tuple(
-        executable
-        for executable in ("dot", "neato")
-        if shutil.which(executable) is None
-    )
-    if missing:
-        joined = ", ".join(f"Graphviz '{item}'" for item in missing)
-        raise SystemExit(f"Missing renderer dependency: {joined}")
+    if shutil.which("neato") is None:
+        raise SystemExit("Missing renderer dependency: Graphviz 'neato'")
 
 
 def _mapping(value: object) -> Mapping[str, object]:
     return value if isinstance(value, Mapping) else {}
 
 
-def _build_publication(directory: Path) -> Path:
-    cases = execute_topology_shapes()
-    ring_assembly, ring = cases[RING_CASE]
-    mesh_assembly, mesh = cases[MESH_CASE]
-    if ring["verdict"] != "PASS" or mesh["verdict"] != "PASS":
-        raise RuntimeError("topology-shapes publication requires two PASS cases")
+def _case_details(
+    case: str,
+) -> tuple[
+    str,
+    str,
+    str,
+    str,
+    str,
+]:
+    if case == RING_CASE:
+        return (
+            "heterogeneous-ring-star",
+            (
+                "REQ and DAT take opposite halves of a bidirectional ring "
+                "while uneven leaf attachments remain explicit"
+            ),
+            "chi.issue_h.heterogeneous_ring_star_witness",
+            (
+                "one operation executed over an explicitly elaborated "
+                "four-router ring with uneven point-to-point leaf attachment"
+            ),
+            (
+                "ring leaf attachment is not a shared bus or broadcast "
+                "medium"
+            ),
+        )
+    if case == MESH_CASE:
+        return (
+            "four-by-four-mesh",
+            (
+                "a corner read completes over deterministic routes in a "
+                "generated 4x4 bidirectional mesh"
+            ),
+            "chi.issue_h.four_by_four_mesh_witness",
+            (
+                "one operation executed over an explicitly elaborated "
+                "16-router mesh with deterministic X-then-Y exact routes"
+            ),
+            (
+                "mesh size and route-table closure do not imply broader "
+                "opcode or traffic-pattern coverage"
+            ),
+        )
+    raise ValueError(f"unknown topology case {case!r}")
 
-    combined_result = {
-        "schema": "protocol-model.showcase.chi-topology-shapes/v1",
-        "verdict": "PASS",
-        "cases": {
-            RING_CASE: ring,
-            MESH_CASE: mesh,
-        },
-    }
-    store = RunArtifactStore(DEMO_NAME, directory)
-    topology_publisher = VisualizationPublisher(
+
+def _topology_dot(
+    assembly: GeneratedTopologyAssembly,
+    result: Mapping[str, object],
+) -> str:
+    if assembly.case == RING_CASE:
+        return heterogeneous_ring_star_dot(assembly, result)
+    if assembly.case == MESH_CASE:
+        return four_by_four_mesh_dot(assembly, result)
+    raise ValueError(f"unknown topology case {assembly.case!r}")
+
+
+def _build_publication(
+    directory: Path,
+    assembly: GeneratedTopologyAssembly,
+    result: Mapping[str, object],
+) -> Path:
+    case = assembly.case
+    if result["case"] != case:
+        raise ValueError("topology result belongs to another assembly")
+    if result["verdict"] != "PASS":
+        raise RuntimeError(f"{case} publication requires a PASS execution")
+
+    publication_name = PUBLICATION_NAMES[case]
+    (
+        artifact_name,
+        expected,
+        system_identity,
+        system_definition,
+        topology_boundary,
+    ) = _case_details(case)
+    store = RunArtifactStore(publication_name, directory)
+    publisher = VisualizationPublisher(
         store,
         graphviz=GraphvizRenderer("neato"),
     )
-    diagram_publisher = VisualizationPublisher(
-        store,
-        graphviz=GraphvizRenderer("dot"),
-    )
-    topology_publisher.render_dot(
-        "heterogeneous-ring-star",
-        heterogeneous_ring_star_dot(ring_assembly, ring),
+    publisher.render_dot(
+        artifact_name,
+        _topology_dot(assembly, result),
         kind="system_topology_and_route",
-    )
-    topology_publisher.render_dot(
-        "four-by-four-mesh",
-        four_by_four_mesh_dot(mesh_assembly, mesh),
-        kind="system_topology_and_route",
-    )
-    diagram_publisher.render_dot(
-        "route-comparison",
-        route_comparison_dot(cases),
-        kind="route_and_scope_comparison",
     )
     store.write_json(
         "result.json",
-        combined_result,
+        result,
         kind="scenario_result",
     )
     store.write_text(
         "README.md",
-        guide(cases),
+        guide(assembly, result),
         kind="demo_guide",
         media_type="text/markdown",
     )
+
+    topology = _mapping(result.get("topology"))
+    provenance_case = {
+        "shape": result["shape"],
+        "router_count": topology["router_count"],
+        "directed_hop_count": topology["directed_hop_count"],
+        "exact_route_count": topology["exact_route_count"],
+    }
+    if case == MESH_CASE:
+        provenance_case["route_policy"] = "deterministic X-then-Y"
     store.write_json(
         "provenance.json",
         {
             "schema": "protocol-model.showcase.provenance/v1",
-            "demo": DEMO_NAME,
+            "demo": publication_name,
             "source": (
                 "showcase/demos/system/"
                 "chi_issue_h_topology_shapes/run.py"
             ),
             "command": (
                 ".venv/bin/python showcase/demos/system/"
-                "chi_issue_h_topology_shapes/run.py"
+                f"chi_issue_h_topology_shapes/run.py --case {case}"
             ),
             "protocol_model_version": __version__,
             "time_basis": (
                 "committed semantic microsteps and per-hop transport ticks; "
                 "not a physical latency measurement"
+            ),
+            "router_boundary": (
+                "ChiStoreForwardRouterNode is presented as an XP "
+                "abstraction with finite ingress, exact NodeID route, "
+                "egress, and Link Credit; not a complete XP "
+                "microarchitecture or cycle-latency model"
             ),
             "construction": [
                 "SystemProtocolBuilder",
@@ -135,60 +197,32 @@ def _build_publication(directory: Path) -> Path:
                 "ChiParticipantBinding[requester,home]",
                 "ChiReadNoSnpSystemSession",
             ],
-            "cases": {
-                RING_CASE: {
-                    "shape": ring["shape"],
-                    "router_count": ring["topology"]["router_count"],
-                    "directed_hop_count": ring["topology"][
-                        "directed_hop_count"
-                    ],
-                    "exact_route_count": ring["topology"][
-                        "exact_route_count"
-                    ],
-                },
-                MESH_CASE: {
-                    "shape": mesh["shape"],
-                    "router_count": mesh["topology"]["router_count"],
-                    "directed_hop_count": mesh["topology"][
-                        "directed_hop_count"
-                    ],
-                    "exact_route_count": mesh["topology"][
-                        "exact_route_count"
-                    ],
-                    "route_policy": "deterministic X-then-Y",
-                },
+            "case": {
+                case: provenance_case,
             },
-            "renderers": {
-                "topologies": (
-                    "Graphviz neato; fixed showcase-only positions"
-                ),
-                "comparison": (
-                    "Graphviz dot; result-derived route/scope table"
-                ),
-            },
+            "renderer": (
+                "Graphviz neato; fixed showcase-only positions"
+            ),
             "topology_projection": (
-                "nodes and directed connections are validated against each "
+                "nodes and directed connections are validated against the "
                 "executed SystemProtocol; paired directed hops are folded "
-                "into a physical-edge backdrop, then actual REQ/DAT routes "
-                "are overlaid"
+                "into a physical-edge backdrop, then the actual REQ/DAT "
+                "routes are overlaid"
             ),
             "presentation_boundary": (
                 "model-level topology, exact routes, transaction lineage, "
                 "and quiescence; no raw pin waveform or RTL cycle spacing"
             ),
             "model_boundary": (
-                "restricted ReadNoSnp/CompData over REQ/DAT; ring leaf "
-                "attachment is not a shared bus or broadcast medium; no "
-                "shared-bus arbitration, RSP/SNP coherence, adaptive "
-                "routing, complete CHI, performance, QoS/fairness, or "
-                "deadlock proof"
+                "restricted ReadNoSnp/CompData over REQ/DAT; "
+                f"{topology_boundary}; no shared-bus arbitration, RSP/SNP "
+                "coherence, adaptive routing, complete CHI, performance, "
+                "QoS/fairness, or deadlock proof"
             ),
         },
         kind="provenance",
     )
 
-    ring_topology = _mapping(ring.get("topology"))
-    mesh_topology = _mapping(mesh.get("topology"))
     return store.finalize(
         verdict="PASS",
         protocols=(
@@ -198,90 +232,57 @@ def _build_publication(directory: Path) -> Path:
                 "definition": (
                     "ReadNoSnp to one correlated CompData completion"
                 ),
-                "parameters": ring["profile"],
+                "parameters": result["profile"],
             },
             {
                 "scope": "transport",
-                "identity": "chi.issue_h.caller_built_topology_shapes",
+                "identity": (
+                    "chi.issue_h.caller_built_exact_route_topology"
+                ),
                 "definition": (
                     "finite directed REQ/DAT hops and exact-NodeID "
                     "store-forward routers"
                 ),
                 "parameters": {
-                    RING_CASE: {
-                        key: ring_topology[key]
-                        for key in (
-                            "router_count",
-                            "physical_backbone_edge_count",
-                            "directed_hop_count",
-                            "exact_route_count",
-                        )
-                    },
-                    MESH_CASE: {
-                        key: mesh_topology[key]
-                        for key in (
-                            "router_count",
-                            "physical_backbone_edge_count",
-                            "directed_hop_count",
-                            "exact_route_count",
-                        )
-                    },
+                    key: topology[key]
+                    for key in (
+                        "router_count",
+                        "physical_backbone_edge_count",
+                        "directed_hop_count",
+                        "exact_route_count",
+                    )
                 },
             },
             {
                 "scope": "system",
-                "identity": "chi.issue_h.topology_shape_witnesses",
-                "definition": (
-                    "one operation executed over two explicitly elaborated "
-                    "caller-owned SystemProtocol topologies"
-                ),
+                "identity": system_identity,
+                "definition": system_definition,
                 "parameters": {
-                    "cases": (RING_CASE, MESH_CASE),
+                    "case": case,
                     "topology_in_protocol_core": False,
                 },
             },
         ),
         cases=(
             {
-                "name": RING_CASE,
-                "expected": (
-                    "REQ and DAT take opposite halves of a bidirectional "
-                    "ring while uneven leaf attachments remain explicit"
-                ),
-                "observed": ring["verdict"],
-            },
-            {
-                "name": MESH_CASE,
-                "expected": (
-                    "a corner read completes over deterministic routes in "
-                    "a generated 4x4 bidirectional mesh"
-                ),
-                "observed": mesh["verdict"],
+                "name": case,
+                "expected": expected,
+                "observed": result["verdict"],
             },
         ),
         state={
-            RING_CASE: {
-                "committed_microsteps": ring["runtime"][
-                    "committed_microsteps"
-                ],
-                "request_route": ring["transaction"]["request_route"],
-                "data_route": ring["transaction"]["data_route"],
-                "assertions": ring["assertions"],
-            },
-            MESH_CASE: {
-                "committed_microsteps": mesh["runtime"][
-                    "committed_microsteps"
-                ],
-                "request_route": mesh["transaction"]["request_route"],
-                "data_route": mesh["transaction"]["data_route"],
-                "assertions": mesh["assertions"],
-            },
+            "committed_microsteps": result["runtime"][
+                "committed_microsteps"
+            ],
+            "request_route": result["transaction"]["request_route"],
+            "data_route": result["transaction"]["data_route"],
+            "assertions": result["assertions"],
         },
         metadata={
             "publication": (
-                "showcase/generated/system/chi-issue-h-topology-shapes"
+                f"showcase/generated/system/{publication_name}"
             ),
-            "scope": "caller_built_chi_topology_shape_witnesses",
+            "scope": f"caller_built_chi_{case}_witness",
             "raw_waveform": False,
             "runtime_executable": True,
             "topology_source": "SystemProtocol",
@@ -307,27 +308,60 @@ def _publish(staged: Path, target: Path) -> None:
         shutil.rmtree(previous)
 
 
+def _execute(
+    case: str,
+) -> tuple[GeneratedTopologyAssembly, dict[str, object]]:
+    if case == RING_CASE:
+        return execute_heterogeneous_ring_star()
+    if case == MESH_CASE:
+        return execute_four_by_four_mesh()
+    raise ValueError(f"unknown topology case {case!r}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--publish-root",
         type=Path,
         default=SHOWCASE_ROOT / "generated" / "system",
-        help="parent directory of the demo publication",
+        help="parent directory of the two leaf publications",
+    )
+    parser.add_argument(
+        "--case",
+        choices=("all", RING_CASE, MESH_CASE),
+        default="all",
+        help="publish both independent leaves or rebuild one leaf",
     )
     args = parser.parse_args()
-    target = args.publish_root.expanduser().resolve() / DEMO_NAME
-    target.parent.mkdir(parents=True, exist_ok=True)
+    publish_root = args.publish_root.expanduser().resolve()
+    publish_root.mkdir(parents=True, exist_ok=True)
+    selected = (
+        (RING_CASE, MESH_CASE)
+        if args.case == "all"
+        else (args.case,)
+    )
     _require_renderers()
     with TemporaryDirectory(
-        prefix=f".{target.name}.stage-",
-        dir=target.parent,
+        prefix=".chi-issue-h-topologies.stage-",
+        dir=publish_root,
     ) as temporary:
-        staged = Path(temporary) / target.name
-        _build_publication(staged)
-        _publish(staged, target)
-    print(f"Published CHI Issue H topology shapes: {target}")
-    print(f"Manifest: {target / 'manifest.json'}")
+        stage_root = Path(temporary)
+        for case in selected:
+            assembly, result = _execute(case)
+            staged = stage_root / PUBLICATION_NAMES[case]
+            _build_publication(staged, assembly, result)
+        for case in selected:
+            staged = stage_root / PUBLICATION_NAMES[case]
+            _publish(staged, publish_root / PUBLICATION_NAMES[case])
+
+    legacy = publish_root / LEGACY_DEMO_NAME
+    if legacy.exists():
+        shutil.rmtree(legacy)
+
+    for case in selected:
+        target = publish_root / PUBLICATION_NAMES[case]
+        print(f"Published CHI Issue H {case}: {target}")
+        print(f"Manifest: {target / 'manifest.json'}")
 
 
 if __name__ == "__main__":

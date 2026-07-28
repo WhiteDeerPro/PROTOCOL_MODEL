@@ -25,7 +25,7 @@ RN-I profile 已经实现。三张视图及命名边界见
 | ACE-Lite data | AXI4 五通道语义加 ACE-Lite domain/snoop/bar 组合检查；不含 barrier/CMO |
 | VirtualDut | 具名 module、typed InterfacePort/TransportPort、attachment SPI/binding/builder、APB/AHB/AXI AddressSpace endpoint、有限 FIFO/dynamic-delay address responder、有限 stepped-emission wrapper、Sensor FIFO、serialized memory-copy engine、edge interrupt collector/EOI target、Stream capture、单入口 AddressFabric、scheduled N×M address crossbar、AXI4 read-only AR/R 与 write-only AW/W/B N×M crossbar、read 1×M demux 特化、统一 AMBA serial bridge 构造 |
 | SystemProtocol | 单一 topology registry 中的 InterfaceConnection/DirectedTransportConnection、typed ownership、elaboration、派生 ResolvedTransportPlan、同步 interface fixed-point 路由、显式 `DutAdvanceAction`、blocked step 原子回滚、系统 trace、递归封装，以及显式 address claim/router contract 的 direct-neighbor resolution |
-| 产物与展示 | run store、manifest、记录投影、renderer/publisher、系统 topology/trace DOT、自动 VirtualDut 展开、显式 single-ingress fabric 的 bus-strip 折叠投影，以及 AXI4 AR/R 2×4 crossbar 可执行 witness |
+| 产物与展示 | run store、manifest、记录投影、renderer/publisher、系统 topology/trace DOT、自动 VirtualDut 展开，以及 typed `TransactionTimeSpaceView` 到时空 DOT、显式因果 DOT 和离散 `model_step` 语义事件 WaveJSON 的投影。公开 witness 包括显式 single-ingress fabric 的 bus-strip、AXI4 AR/R 2×4 crossbar、逐案例四视图的 CHI Issue H flow gallery，以及与该 gallery 分开的 ring/star、4×4 mesh topology witness；flow gallery 前四案只声明各自的 resolved direct topology，WriteBackFull 干涉案只声明 participant packet boundary |
 
 ## 当前边界
 
@@ -225,12 +225,17 @@ AMBA protection decode/encode stage 也已从 bridge recipe 目录移入 `integr
   stateful snoop filter 是 Home/interconnect backend policy：假阳性只增加 Snoop，若用它抑制必要 Snoop，
   假阴性则会破坏一致性；当前 exact directory holder set 不模拟这类容量与误判行为。
   HN→SN protocol commit 则是需要独立 SN participant、flow 与 system witness 的下游集成 slice。它们不作为
-  同一类 CHI 网络可用性 blocker。两级 XP 的公开
-  happy-path 场景验证六条 REQ/DAT hop、L-Credit、有限 router FIFO、TgtID route 和跨组件原子 admission；
-  另有四 XP 的 2×2 square-mesh 公开场景让 clean `ReadUnique` 的 REQ/SNP/RSP/DAT/CompAck 覆盖
-  方环四边，并展示 `I/SC/UC` 与 Home directory 的稳定状态闭合；
-  clean ReadUnique Retry 已在同一个 XP witness 中让两次 REQ、RetryAck、PCrdGrant、SNP/RSP、
-  CompData/CompAck 全部经 resolved route 自动推进；direct ReadNoSnp retry/cancel witness 继续验证
+  同一类 CHI 网络可用性 blocker。当前公开 CHI Issue H flow gallery 为每个案例分别执行模型，并从该案例
+  自身的一次执行投影 topology/participant boundary、transaction time-space、explicit causality 和 semantic
+  event timeline。前四案使用 resolved direct topology；WriteBackFull 同址干涉案只显示实际 participant
+  packet boundary，不声明已构造 transport hop，也不把这些 lifecycle flow 描述为多跳 XP。与 flow gallery
+  分开的 ring/star 和 4×4 mesh topology witness 各执行一条受限 `ReadNoSnp → CompData`，用于观察调用方
+  显式构造的多跳 store-and-forward route、exact NodeID route、L-Credit 与最终 quiescence，不承载上述
+  coherence flow 的覆盖声明。展示把 `ChiStoreForwardRouterNode` 标为 XP abstraction，只声明有限
+  ingress、exact route、egress 与逐 hop credit；它不是完整 XP 微架构。flow 时空投影会过滤不改变
+  coherence state 的 transport `MOVE`，因此 `model_step` 间隔不能解释为 XP 周期或物理延迟。
+  clean ReadUnique Retry 已由 resolved scheduler 让两次
+  REQ、RetryAck、PCrdGrant、SNP/RSP、CompData/CompAck 自动推进；direct ReadNoSnp retry/cancel witness 继续验证
   `PCrdReturn`。clean Evict Retry 的 direct resolved witness 则恰好运输两份 Evict REQ、RetryAck、
   PCrdGrant 与 `Comp_I` 五个 packet，并验证零 SNP/DAT/CompAck。aligned full-DAT-width direct read
   已通过 `ChiAddressHomeNode` 委派给协议无关

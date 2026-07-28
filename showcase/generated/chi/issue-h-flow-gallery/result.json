@@ -1,0 +1,133 @@
+{
+  "schema": "protocol-model.showcase.chi-flow-gallery/v1",
+  "verdict": "PASS",
+  "case_count": 5,
+  "cases": {
+    "clean-read-unique-fanout": {
+      "title": "Clean ReadUnique: two-peer fanout and response join",
+      "verdict": "PASS",
+      "assertions": {
+        "scheduler_passed": true,
+        "quiescent": true,
+        "seven_packets_reached_endpoints": true,
+        "two_snp_unique_packets_fanned_out": true,
+        "two_clean_snoop_responses_joined": true,
+        "one_comp_data_and_ack_completed": true,
+        "requester_became_unique_clean": true,
+        "clean_peers_were_invalidated": true,
+        "directory_committed_unique_owner": true
+      },
+      "message_count": 7,
+      "state_change_count": 6,
+      "causal_edge_count": 8,
+      "operation_refs": [
+        "clean-read-unique-fanout:n7:h21:t12"
+      ],
+      "time_basis": "model_step",
+      "learning_goal": "Fan one ReadUnique out to two clean peers, join both Snoop responses, then commit Unique authority.",
+      "model_boundary": "Clean MESI authority transfer over a resolved direct topology; no dirty-owner forwarding or performance claim."
+    },
+    "dirty-peer-clean-unique": {
+      "title": "CleanUnique: absorb a shared-dirty peer through DAT",
+      "verdict": "PASS",
+      "assertions": {
+        "scheduler_passed": true,
+        "quiescent": true,
+        "dirty_snoop_used_dat": true,
+        "clean_unique_lifecycle_completed": true,
+        "home_absorbed_dirty_data": true,
+        "requester_became_unique_clean": true,
+        "dirty_peer_was_invalidated": true,
+        "directory_committed_unique_owner": true
+      },
+      "message_count": 5,
+      "state_change_count": 5,
+      "causal_edge_count": 5,
+      "operation_refs": [
+        "dirty-peer-clean-unique:n7:h21:t31"
+      ],
+      "time_basis": "model_step",
+      "learning_goal": "Return shared-dirty peer data on DAT, update Home backing once, and complete CleanUnique with Comp/CompAck.",
+      "model_boundary": "Restricted shared-dirty CleanUnique path; not general Owned/SD or DCT behavior."
+    },
+    "make-unique-local-intent": {
+      "title": "MakeUnique: dataless permission and local full-line intent",
+      "verdict": "PASS",
+      "assertions": {
+        "scheduler_passed": true,
+        "quiescent": true,
+        "dataless_network_lifecycle": true,
+        "make_unique_lifecycle_completed": true,
+        "local_full_line_intent_installed_dirty_unique": true,
+        "dirty_peer_was_invalidated_without_dat": true,
+        "backing_copy_was_not_rewritten": true,
+        "directory_committed_unique_owner": true
+      },
+      "message_count": 5,
+      "state_change_count": 5,
+      "causal_edge_count": 5,
+      "operation_refs": [
+        "make-unique-local-intent:n7:h21:t41"
+      ],
+      "time_basis": "model_step",
+      "learning_goal": "Obtain Unique permission with a dataless network lifecycle and install the requester's local full-line write intent.",
+      "model_boundary": "MakeUnique plus one modeled local store intent; not partial write or arbitrary cache-pipeline behavior."
+    },
+    "clean-evict-retry": {
+      "title": "Clean Evict retry, P-Credit and credited reissue",
+      "verdict": "PASS",
+      "assertions": {
+        "resolved_topology_closed": true,
+        "scheduler_passed": true,
+        "scheduler_not_blocked": true,
+        "session_quiescent": true,
+        "exact_five_packet_flow": true,
+        "two_req_three_rsp": true,
+        "credited_reissue_disables_retry": true,
+        "clean_line_evicted": true,
+        "directory_owner_released": true,
+        "backing_unchanged": true,
+        "retry_debt_retired": true,
+        "no_snoop_or_data_flow": true
+      },
+      "message_count": 5,
+      "state_change_count": 7,
+      "causal_edge_count": 8,
+      "operation_refs": [
+        "clean-evict-retry:n7:h21:t31"
+      ],
+      "time_basis": "model_step",
+      "learning_goal": "Observe RetryAck, Home P-Credit debt/grant, credited reissue, and the terminal clean Evict completion.",
+      "model_boundary": "One deterministic successful retry cycle; not general Retry/error composition, fairness, or liveness proof."
+    },
+    "writeback-snoop-cancel": {
+      "title": "Dirty WriteBackFull canceled by pre-response same-line Snoop",
+      "verdict": "PASS",
+      "assertions": {
+        "old_owner_invalidated": true,
+        "pending_writeback_marked_canceled": true,
+        "snoop_carries_dirty_payload": true,
+        "clean_unique_installs_new_owner": true,
+        "snoop_payload_committed_once": true,
+        "late_request_uses_snoop_cancel_admission": true,
+        "home_emits_comp_dbid_response": true,
+        "rn_emits_zero_byte_cancel_data": true,
+        "late_cancel_does_not_overwrite_directory": true,
+        "late_cancel_does_not_overwrite_backing": true,
+        "copyback_expectations_retired": true,
+        "session_quiescent": true,
+        "coherence_invariants_hold": true
+      },
+      "message_count": 8,
+      "state_change_count": 9,
+      "causal_edge_count": 9,
+      "operation_refs": [
+        "writeback-snoop-cancel:n7:h21:t31",
+        "writeback-snoop-cancel:n8:h21:t32"
+      ],
+      "time_basis": "model_step",
+      "learning_goal": "Delay an emitted dirty WriteBackFull while a same-line invalidating Snoop transfers ownership, then close the late request with zero-byte cancellation data.",
+      "model_boundary": "Scenario-controlled participant interleaving. Every packet and state transition is model-produced, but transport hop timing is not simulated for this case."
+    }
+  }
+}

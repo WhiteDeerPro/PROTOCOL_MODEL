@@ -1,0 +1,30 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "chi-issue-h-four-by-four-mesh",
+  "source": "showcase/demos/system/chi_issue_h_topology_shapes/run.py",
+  "command": ".venv/bin/python showcase/demos/system/chi_issue_h_topology_shapes/run.py --case four-by-four-mesh",
+  "protocol_model_version": "0.4.0",
+  "time_basis": "committed semantic microsteps and per-hop transport ticks; not a physical latency measurement",
+  "router_boundary": "ChiStoreForwardRouterNode is presented as an XP abstraction with finite ingress, exact NodeID route, egress, and Link Credit; not a complete XP microarchitecture or cycle-latency model",
+  "construction": [
+    "SystemProtocolBuilder",
+    "DirectedTransportConnection",
+    "ChiStoreForwardRouterNode",
+    "ChiExactNodeRoute",
+    "ChiParticipantBinding[requester,home]",
+    "ChiReadNoSnpSystemSession"
+  ],
+  "case": {
+    "four-by-four-mesh": {
+      "shape": "four-by-four bidirectional mesh with corner endpoints",
+      "router_count": 16,
+      "directed_hop_count": 56,
+      "exact_route_count": 64,
+      "route_policy": "deterministic X-then-Y"
+    }
+  },
+  "renderer": "Graphviz neato; fixed showcase-only positions",
+  "topology_projection": "nodes and directed connections are validated against the executed SystemProtocol; paired directed hops are folded into a physical-edge backdrop, then the actual REQ/DAT routes are overlaid",
+  "presentation_boundary": "model-level topology, exact routes, transaction lineage, and quiescence; no raw pin waveform or RTL cycle spacing",
+  "model_boundary": "restricted ReadNoSnp/CompData over REQ/DAT; mesh size and route-table closure do not imply broader opcode or traffic-pattern coverage; no shared-bus arbitration, RSP/SNP coherence, adaptive routing, complete CHI, performance, QoS/fairness, or deadlock proof"
+}

@@ -1,0 +1,35 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "issue-h-flow-gallery",
+  "source": "showcase/demos/chi/issue_h_flow_gallery/run.py",
+  "command": ".venv/bin/python showcase/demos/chi/issue_h_flow_gallery/run.py",
+  "protocol_model_version": "0.4.0",
+  "case_order": [
+    "clean-read-unique-fanout",
+    "dirty-peer-clean-unique",
+    "make-unique-local-intent",
+    "clean-evict-retry",
+    "writeback-snoop-cancel"
+  ],
+  "execution": {
+    "resolved_network_scheduler": [
+      "clean-read-unique-fanout",
+      "dirty-peer-clean-unique",
+      "make-unique-local-intent",
+      "clean-evict-retry"
+    ],
+    "scenario_controlled_participant_runtime": [
+      "writeback-snoop-cancel"
+    ]
+  },
+  "views": {
+    "topology": "resolved SystemProtocol connections for four network cases; emitted-packet participant boundary for the scenario-controlled WriteBackFull case",
+    "transaction-time-space": "accepted CHI messages and selected participant/Home state transitions",
+    "causal": "explicit packet production, correlation, Snoop join, Retry/P-Credit, and same-line cancellation edges",
+    "semantic-event-timeline": "WaveJSON rendering of the same model_step event refs; not pins, cycles, or RTL timing"
+  },
+  "source_ir": "typed TransactionTimeSpaceView JSON plus topology/flow/causal DOT and WaveJSON",
+  "xp_visibility": "the four resolved flow cases construct direct participant topologies and therefore show no XP; real forwarding bindings would appear as XP-like routing abstractions, while per-hop MOVE events remain outside the semantic time-space projection",
+  "reference_boundary": "docs/reviews/chi-injected-flow-digest.md guided case selection; raw injected images are not publication inputs",
+  "model_boundary": "selected executable Issue H lifecycle witnesses, not a complete opcode catalog, specification coverage claim, packed pin/phit model, CDC analysis, or deadlock proof"
+}

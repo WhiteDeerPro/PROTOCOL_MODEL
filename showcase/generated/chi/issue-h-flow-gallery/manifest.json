@@ -1,0 +1,560 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "issue-h-flow-gallery",
+  "run_id": "issue-h-flow-gallery",
+  "generated_at": "2026-07-28T19:38:52.227499+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "interface",
+      "identity": "chi.issue_h.selected_flow_lifecycles",
+      "definition": "ReadUnique, CleanUnique, MakeUnique, Evict Retry, and WriteBackFull/Snoop cancellation message correlation",
+      "parameters": {
+        "case_count": 5,
+        "packed_codec": false
+      }
+    },
+    {
+      "scope": "system",
+      "identity": "chi.issue_h.coherence_and_progress_witnesses",
+      "definition": "resolved participant authority plus one explicit scenario-controlled interference ordering",
+      "parameters": {
+        "resolved_network_cases": 4,
+        "participant_interleaving_cases": 1
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "clean-read-unique-fanout",
+      "expected": "Fan one ReadUnique out to two clean peers, join both Snoop responses, then commit Unique authority.",
+      "observed": "PASS",
+      "artifacts": [
+        "cases/clean-read-unique-fanout/causal.svg",
+        "cases/clean-read-unique-fanout/semantic-event-timeline.svg",
+        "cases/clean-read-unique-fanout/topology.svg",
+        "cases/clean-read-unique-fanout/transaction-time-space.svg",
+        "sources/cases/clean-read-unique-fanout/causal.dot",
+        "sources/cases/clean-read-unique-fanout/semantic-event-timeline.json",
+        "sources/cases/clean-read-unique-fanout/topology.dot",
+        "sources/cases/clean-read-unique-fanout/transaction-time-space-view.json",
+        "sources/cases/clean-read-unique-fanout/transaction-time-space.dot"
+      ]
+    },
+    {
+      "name": "dirty-peer-clean-unique",
+      "expected": "Return shared-dirty peer data on DAT, update Home backing once, and complete CleanUnique with Comp/CompAck.",
+      "observed": "PASS",
+      "artifacts": [
+        "cases/dirty-peer-clean-unique/causal.svg",
+        "cases/dirty-peer-clean-unique/semantic-event-timeline.svg",
+        "cases/dirty-peer-clean-unique/topology.svg",
+        "cases/dirty-peer-clean-unique/transaction-time-space.svg",
+        "sources/cases/dirty-peer-clean-unique/causal.dot",
+        "sources/cases/dirty-peer-clean-unique/semantic-event-timeline.json",
+        "sources/cases/dirty-peer-clean-unique/topology.dot",
+        "sources/cases/dirty-peer-clean-unique/transaction-time-space-view.json",
+        "sources/cases/dirty-peer-clean-unique/transaction-time-space.dot"
+      ]
+    },
+    {
+      "name": "make-unique-local-intent",
+      "expected": "Obtain Unique permission with a dataless network lifecycle and install the requester's local full-line write intent.",
+      "observed": "PASS",
+      "artifacts": [
+        "cases/make-unique-local-intent/causal.svg",
+        "cases/make-unique-local-intent/semantic-event-timeline.svg",
+        "cases/make-unique-local-intent/topology.svg",
+        "cases/make-unique-local-intent/transaction-time-space.svg",
+        "sources/cases/make-unique-local-intent/causal.dot",
+        "sources/cases/make-unique-local-intent/semantic-event-timeline.json",
+        "sources/cases/make-unique-local-intent/topology.dot",
+        "sources/cases/make-unique-local-intent/transaction-time-space-view.json",
+        "sources/cases/make-unique-local-intent/transaction-time-space.dot"
+      ]
+    },
+    {
+      "name": "clean-evict-retry",
+      "expected": "Observe RetryAck, Home P-Credit debt/grant, credited reissue, and the terminal clean Evict completion.",
+      "observed": "PASS",
+      "artifacts": [
+        "cases/clean-evict-retry/causal.svg",
+        "cases/clean-evict-retry/semantic-event-timeline.svg",
+        "cases/clean-evict-retry/topology.svg",
+        "cases/clean-evict-retry/transaction-time-space.svg",
+        "sources/cases/clean-evict-retry/causal.dot",
+        "sources/cases/clean-evict-retry/semantic-event-timeline.json",
+        "sources/cases/clean-evict-retry/topology.dot",
+        "sources/cases/clean-evict-retry/transaction-time-space-view.json",
+        "sources/cases/clean-evict-retry/transaction-time-space.dot"
+      ]
+    },
+    {
+      "name": "writeback-snoop-cancel",
+      "expected": "Delay an emitted dirty WriteBackFull while a same-line invalidating Snoop transfers ownership, then close the late request with zero-byte cancellation data.",
+      "observed": "PASS",
+      "artifacts": [
+        "cases/writeback-snoop-cancel/causal.svg",
+        "cases/writeback-snoop-cancel/semantic-event-timeline.svg",
+        "cases/writeback-snoop-cancel/topology.svg",
+        "cases/writeback-snoop-cancel/transaction-time-space.svg",
+        "sources/cases/writeback-snoop-cancel/causal.dot",
+        "sources/cases/writeback-snoop-cancel/semantic-event-timeline.json",
+        "sources/cases/writeback-snoop-cancel/topology.dot",
+        "sources/cases/writeback-snoop-cancel/transaction-time-space-view.json",
+        "sources/cases/writeback-snoop-cancel/transaction-time-space.dot"
+      ]
+    }
+  ],
+  "state": {
+    "clean-read-unique-fanout": {
+      "assertions": {
+        "scheduler_passed": true,
+        "quiescent": true,
+        "seven_packets_reached_endpoints": true,
+        "two_snp_unique_packets_fanned_out": true,
+        "two_clean_snoop_responses_joined": true,
+        "one_comp_data_and_ack_completed": true,
+        "requester_became_unique_clean": true,
+        "clean_peers_were_invalidated": true,
+        "directory_committed_unique_owner": true
+      },
+      "messages": 7,
+      "state_changes": 6,
+      "causal_edges": 8,
+      "operation_refs": [
+        "clean-read-unique-fanout:n7:h21:t12"
+      ]
+    },
+    "dirty-peer-clean-unique": {
+      "assertions": {
+        "scheduler_passed": true,
+        "quiescent": true,
+        "dirty_snoop_used_dat": true,
+        "clean_unique_lifecycle_completed": true,
+        "home_absorbed_dirty_data": true,
+        "requester_became_unique_clean": true,
+        "dirty_peer_was_invalidated": true,
+        "directory_committed_unique_owner": true
+      },
+      "messages": 5,
+      "state_changes": 5,
+      "causal_edges": 5,
+      "operation_refs": [
+        "dirty-peer-clean-unique:n7:h21:t31"
+      ]
+    },
+    "make-unique-local-intent": {
+      "assertions": {
+        "scheduler_passed": true,
+        "quiescent": true,
+        "dataless_network_lifecycle": true,
+        "make_unique_lifecycle_completed": true,
+        "local_full_line_intent_installed_dirty_unique": true,
+        "dirty_peer_was_invalidated_without_dat": true,
+        "backing_copy_was_not_rewritten": true,
+        "directory_committed_unique_owner": true
+      },
+      "messages": 5,
+      "state_changes": 5,
+      "causal_edges": 5,
+      "operation_refs": [
+        "make-unique-local-intent:n7:h21:t41"
+      ]
+    },
+    "clean-evict-retry": {
+      "assertions": {
+        "resolved_topology_closed": true,
+        "scheduler_passed": true,
+        "scheduler_not_blocked": true,
+        "session_quiescent": true,
+        "exact_five_packet_flow": true,
+        "two_req_three_rsp": true,
+        "credited_reissue_disables_retry": true,
+        "clean_line_evicted": true,
+        "directory_owner_released": true,
+        "backing_unchanged": true,
+        "retry_debt_retired": true,
+        "no_snoop_or_data_flow": true
+      },
+      "messages": 5,
+      "state_changes": 7,
+      "causal_edges": 8,
+      "operation_refs": [
+        "clean-evict-retry:n7:h21:t31"
+      ]
+    },
+    "writeback-snoop-cancel": {
+      "assertions": {
+        "old_owner_invalidated": true,
+        "pending_writeback_marked_canceled": true,
+        "snoop_carries_dirty_payload": true,
+        "clean_unique_installs_new_owner": true,
+        "snoop_payload_committed_once": true,
+        "late_request_uses_snoop_cancel_admission": true,
+        "home_emits_comp_dbid_response": true,
+        "rn_emits_zero_byte_cancel_data": true,
+        "late_cancel_does_not_overwrite_directory": true,
+        "late_cancel_does_not_overwrite_backing": true,
+        "copyback_expectations_retired": true,
+        "session_quiescent": true,
+        "coherence_invariants_hold": true
+      },
+      "messages": 8,
+      "state_changes": 9,
+      "causal_edges": 9,
+      "operation_refs": [
+        "writeback-snoop-cancel:n7:h21:t31",
+        "writeback-snoop-cancel:n8:h21:t32"
+      ]
+    }
+  },
+  "metadata": {
+    "publication": "showcase/generated/chi/issue-h-flow-gallery",
+    "runtime_executable": true,
+    "time_basis": "model_step",
+    "raw_waveform": false,
+    "cycle_accurate": false,
+    "source_ir_retained": true,
+    "topology_projection": true
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "explicit_causality",
+      "path": "cases/clean-evict-retry/causal.svg",
+      "media_type": "image/svg+xml",
+      "case": "clean-evict-retry",
+      "source": false
+    },
+    {
+      "kind": "semantic_event_timeline",
+      "path": "cases/clean-evict-retry/semantic-event-timeline.svg",
+      "media_type": "image/svg+xml",
+      "case": "clean-evict-retry",
+      "source": false
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary",
+      "path": "cases/clean-evict-retry/topology.svg",
+      "media_type": "image/svg+xml",
+      "case": "clean-evict-retry",
+      "source": false
+    },
+    {
+      "kind": "transaction_time_space",
+      "path": "cases/clean-evict-retry/transaction-time-space.svg",
+      "media_type": "image/svg+xml",
+      "case": "clean-evict-retry",
+      "source": false
+    },
+    {
+      "kind": "explicit_causality",
+      "path": "cases/clean-read-unique-fanout/causal.svg",
+      "media_type": "image/svg+xml",
+      "case": "clean-read-unique-fanout",
+      "source": false
+    },
+    {
+      "kind": "semantic_event_timeline",
+      "path": "cases/clean-read-unique-fanout/semantic-event-timeline.svg",
+      "media_type": "image/svg+xml",
+      "case": "clean-read-unique-fanout",
+      "source": false
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary",
+      "path": "cases/clean-read-unique-fanout/topology.svg",
+      "media_type": "image/svg+xml",
+      "case": "clean-read-unique-fanout",
+      "source": false
+    },
+    {
+      "kind": "transaction_time_space",
+      "path": "cases/clean-read-unique-fanout/transaction-time-space.svg",
+      "media_type": "image/svg+xml",
+      "case": "clean-read-unique-fanout",
+      "source": false
+    },
+    {
+      "kind": "explicit_causality",
+      "path": "cases/dirty-peer-clean-unique/causal.svg",
+      "media_type": "image/svg+xml",
+      "case": "dirty-peer-clean-unique",
+      "source": false
+    },
+    {
+      "kind": "semantic_event_timeline",
+      "path": "cases/dirty-peer-clean-unique/semantic-event-timeline.svg",
+      "media_type": "image/svg+xml",
+      "case": "dirty-peer-clean-unique",
+      "source": false
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary",
+      "path": "cases/dirty-peer-clean-unique/topology.svg",
+      "media_type": "image/svg+xml",
+      "case": "dirty-peer-clean-unique",
+      "source": false
+    },
+    {
+      "kind": "transaction_time_space",
+      "path": "cases/dirty-peer-clean-unique/transaction-time-space.svg",
+      "media_type": "image/svg+xml",
+      "case": "dirty-peer-clean-unique",
+      "source": false
+    },
+    {
+      "kind": "explicit_causality",
+      "path": "cases/make-unique-local-intent/causal.svg",
+      "media_type": "image/svg+xml",
+      "case": "make-unique-local-intent",
+      "source": false
+    },
+    {
+      "kind": "semantic_event_timeline",
+      "path": "cases/make-unique-local-intent/semantic-event-timeline.svg",
+      "media_type": "image/svg+xml",
+      "case": "make-unique-local-intent",
+      "source": false
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary",
+      "path": "cases/make-unique-local-intent/topology.svg",
+      "media_type": "image/svg+xml",
+      "case": "make-unique-local-intent",
+      "source": false
+    },
+    {
+      "kind": "transaction_time_space",
+      "path": "cases/make-unique-local-intent/transaction-time-space.svg",
+      "media_type": "image/svg+xml",
+      "case": "make-unique-local-intent",
+      "source": false
+    },
+    {
+      "kind": "explicit_causality",
+      "path": "cases/writeback-snoop-cancel/causal.svg",
+      "media_type": "image/svg+xml",
+      "case": "writeback-snoop-cancel",
+      "source": false
+    },
+    {
+      "kind": "semantic_event_timeline",
+      "path": "cases/writeback-snoop-cancel/semantic-event-timeline.svg",
+      "media_type": "image/svg+xml",
+      "case": "writeback-snoop-cancel",
+      "source": false
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary",
+      "path": "cases/writeback-snoop-cancel/topology.svg",
+      "media_type": "image/svg+xml",
+      "case": "writeback-snoop-cancel",
+      "source": false
+    },
+    {
+      "kind": "transaction_time_space",
+      "path": "cases/writeback-snoop-cancel/transaction-time-space.svg",
+      "media_type": "image/svg+xml",
+      "case": "writeback-snoop-cancel",
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "scenario_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "explicit_causality_source",
+      "path": "sources/cases/clean-evict-retry/causal.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "clean-evict-retry",
+      "source": true
+    },
+    {
+      "kind": "semantic_event_timeline_source",
+      "path": "sources/cases/clean-evict-retry/semantic-event-timeline.json",
+      "media_type": "application/json",
+      "case": "clean-evict-retry",
+      "source": true
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary_source",
+      "path": "sources/cases/clean-evict-retry/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "clean-evict-retry",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_view_ir",
+      "path": "sources/cases/clean-evict-retry/transaction-time-space-view.json",
+      "media_type": "application/json",
+      "case": "clean-evict-retry",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_source",
+      "path": "sources/cases/clean-evict-retry/transaction-time-space.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "clean-evict-retry",
+      "source": true
+    },
+    {
+      "kind": "explicit_causality_source",
+      "path": "sources/cases/clean-read-unique-fanout/causal.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "clean-read-unique-fanout",
+      "source": true
+    },
+    {
+      "kind": "semantic_event_timeline_source",
+      "path": "sources/cases/clean-read-unique-fanout/semantic-event-timeline.json",
+      "media_type": "application/json",
+      "case": "clean-read-unique-fanout",
+      "source": true
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary_source",
+      "path": "sources/cases/clean-read-unique-fanout/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "clean-read-unique-fanout",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_view_ir",
+      "path": "sources/cases/clean-read-unique-fanout/transaction-time-space-view.json",
+      "media_type": "application/json",
+      "case": "clean-read-unique-fanout",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_source",
+      "path": "sources/cases/clean-read-unique-fanout/transaction-time-space.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "clean-read-unique-fanout",
+      "source": true
+    },
+    {
+      "kind": "explicit_causality_source",
+      "path": "sources/cases/dirty-peer-clean-unique/causal.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "dirty-peer-clean-unique",
+      "source": true
+    },
+    {
+      "kind": "semantic_event_timeline_source",
+      "path": "sources/cases/dirty-peer-clean-unique/semantic-event-timeline.json",
+      "media_type": "application/json",
+      "case": "dirty-peer-clean-unique",
+      "source": true
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary_source",
+      "path": "sources/cases/dirty-peer-clean-unique/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "dirty-peer-clean-unique",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_view_ir",
+      "path": "sources/cases/dirty-peer-clean-unique/transaction-time-space-view.json",
+      "media_type": "application/json",
+      "case": "dirty-peer-clean-unique",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_source",
+      "path": "sources/cases/dirty-peer-clean-unique/transaction-time-space.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "dirty-peer-clean-unique",
+      "source": true
+    },
+    {
+      "kind": "explicit_causality_source",
+      "path": "sources/cases/make-unique-local-intent/causal.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "make-unique-local-intent",
+      "source": true
+    },
+    {
+      "kind": "semantic_event_timeline_source",
+      "path": "sources/cases/make-unique-local-intent/semantic-event-timeline.json",
+      "media_type": "application/json",
+      "case": "make-unique-local-intent",
+      "source": true
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary_source",
+      "path": "sources/cases/make-unique-local-intent/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "make-unique-local-intent",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_view_ir",
+      "path": "sources/cases/make-unique-local-intent/transaction-time-space-view.json",
+      "media_type": "application/json",
+      "case": "make-unique-local-intent",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_source",
+      "path": "sources/cases/make-unique-local-intent/transaction-time-space.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "make-unique-local-intent",
+      "source": true
+    },
+    {
+      "kind": "explicit_causality_source",
+      "path": "sources/cases/writeback-snoop-cancel/causal.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "writeback-snoop-cancel",
+      "source": true
+    },
+    {
+      "kind": "semantic_event_timeline_source",
+      "path": "sources/cases/writeback-snoop-cancel/semantic-event-timeline.json",
+      "media_type": "application/json",
+      "case": "writeback-snoop-cancel",
+      "source": true
+    },
+    {
+      "kind": "resolved_topology_or_participant_boundary_source",
+      "path": "sources/cases/writeback-snoop-cancel/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "writeback-snoop-cancel",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_view_ir",
+      "path": "sources/cases/writeback-snoop-cancel/transaction-time-space-view.json",
+      "media_type": "application/json",
+      "case": "writeback-snoop-cancel",
+      "source": true
+    },
+    {
+      "kind": "transaction_time_space_source",
+      "path": "sources/cases/writeback-snoop-cancel/transaction-time-space.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "writeback-snoop-cancel",
+      "source": true
+    }
+  ]
+}

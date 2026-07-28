@@ -1,0 +1,63 @@
+digraph transaction_time_space {
+  rankdir=TB;
+  label="Clean Evict retry, P-Credit and credited reissue · transaction time-space";
+  labelloc="t";
+  graph [bgcolor="white", nodesep=0.7, ranksep=0.72, splines=line, pad=0.2, newrank=true, forcelabels=true];
+  node [fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9];
+  time_header [shape=plaintext, group="time", label="time"];
+  lifeline_0 [shape=box, style="rounded,filled", group="lifeline_0", fillcolor="#eef5ff", color="#3169a8", label="RN0 · requester\nrequester · rn0\nNodeID=0x7"];
+  lifeline_1 [shape=box, style="rounded,filled", group="lifeline_1", fillcolor="#eef5ff", color="#3169a8", label="HN0 · home\nhome · hn0\nNodeID=0x21"];
+  { rank=same; time_header; lifeline_0; lifeline_1; }
+  time_0 [shape=plaintext, group="time", label="model_step 0"];
+  point_0_0 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I T31 R31:init", tooltip="clean-evict-retry:state:000:rn0: rn0: UC → I T31 R31:init"];
+  point_1_0 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_0; point_0_0; point_1_0; }
+  time_0 -> point_0_0 -> point_1_0 [style=invis, weight=100];
+  time_1 [shape=plaintext, group="time", label="model_step 8"];
+  point_0_1 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
+  point_1_1 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 RD1 Bv0", tooltip="clean-evict-retry:state:008:hn0: hn0: D:U7 Bv0 → D:U7 RD1 Bv0"];
+  { rank=same; time_1; point_0_1; point_1_1; }
+  time_1 -> point_0_1 -> point_1_1 [style=invis, weight=100];
+  time_2 [shape=plaintext, group="time", label="model_step 12"];
+  point_0_2 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
+  point_1_2 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:U7 PR1 Bv0", tooltip="clean-evict-retry:state:012:hn0: hn0: D:U7 RD1 Bv0 → D:U7 PR1 Bv0"];
+  { rank=same; time_2; point_0_2; point_1_2; }
+  time_2 -> point_0_2 -> point_1_2 [style=invis, weight=100];
+  time_3 [shape=plaintext, group="time", label="model_step 16"];
+  point_0_3 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I T31 R31:wait-credit", tooltip="clean-evict-retry:state:016:rn0: rn0: I T31 R31:init → I T31 R31:wait-credit"];
+  point_1_3 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_3; point_0_3; point_1_3; }
+  time_3 -> point_0_3 -> point_1_3 [style=invis, weight=100];
+  time_4 [shape=plaintext, group="time", label="model_step 21"];
+  point_0_4 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
+  point_1_4 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_4; point_0_4; point_1_4; }
+  time_4 -> point_0_4 -> point_1_4 [style=invis, weight=100];
+  time_5 [shape=plaintext, group="time", label="model_step 24"];
+  point_0_5 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I T31 R31:retry-flight", tooltip="clean-evict-retry:state:024:rn0: rn0: I T31 R31:wait-credit → I T31 R31:retry-flight"];
+  point_1_5 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_5; point_0_5; point_1_5; }
+  time_5 -> point_0_5 -> point_1_5 [style=invis, weight=100];
+  time_6 [shape=plaintext, group="time", label="model_step 30"];
+  point_0_6 [shape=point, width=0.07, height=0.07, group="lifeline_0", fixedsize=true, color="#64748b", label=""];
+  point_1_6 [shape=point, width=0.10, height=0.10, group="lifeline_1", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="D:I Bv0", tooltip="clean-evict-retry:state:030:hn0: hn0: D:U7 PR1 Bv0 → D:I Bv0"];
+  { rank=same; time_6; point_0_6; point_1_6; }
+  time_6 -> point_0_6 -> point_1_6 [style=invis, weight=100];
+  time_7 [shape=plaintext, group="time", label="model_step 36"];
+  point_0_7 [shape=point, width=0.10, height=0.10, group="lifeline_0", fixedsize=true, color="#a87d21", fillcolor="#fff7dd", style=filled, fontname="sans-serif", fontcolor="#7a5410", fontsize=8, label="", xlabel="I", tooltip="clean-evict-retry:state:036:rn0: rn0: I T31 R31:retry-flight → I"];
+  point_1_7 [shape=point, width=0.07, height=0.07, group="lifeline_1", fixedsize=true, color="#64748b", label=""];
+  { rank=same; time_7; point_0_7; point_1_7; }
+  time_7 -> point_0_7 -> point_1_7 [style=invis, weight=100];
+  lifeline_0 -> point_0_0 -> point_0_1 -> point_0_2 -> point_0_3 -> point_0_4 -> point_0_5 -> point_0_6 -> point_0_7 [arrowhead=none, style=dashed, color="#94a3b8", weight=20];
+  lifeline_1 -> point_1_0 -> point_1_1 -> point_1_2 -> point_1_3 -> point_1_4 -> point_1_5 -> point_1_6 -> point_1_7 [arrowhead=none, style=dashed, color="#94a3b8", weight=20];
+  point_0_1 -> point_1_1 [constraint=false, color="#2563a8", fontcolor="#2563a8", penwidth=1.7, xlabel="Evict · REQ [m00]\nT31 AR1"];
+  point_1_3 -> point_0_3 [constraint=false, color="#247148", fontcolor="#247148", penwidth=1.7, xlabel="RetryAck · RSP [m01]\nT31 P5"];
+  point_1_4 -> point_0_4 [constraint=false, color="#247148", fontcolor="#247148", penwidth=1.7, xlabel="PCrdGrant · RSP [m02]\nT0 P5"];
+  point_0_6 -> point_1_6 [constraint=false, color="#2563a8", fontcolor="#2563a8", penwidth=1.7, xlabel="Evict · REQ [m03]\nT31 P5 AR0"];
+  point_1_7 -> point_0_7 [constraint=false, color="#247148", fontcolor="#247148", penwidth=1.7, xlabel="Comp · RSP [m04]\nT31 D0 RI"];
+  legend [shape=plain, label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="5" CELLPADDING="2"><TR><TD><B>Legend</B></TD><TD BORDER="1" COLOR="#2563a8" BGCOLOR="#2563a8" WIDTH="12"></TD><TD ALIGN="LEFT">REQ · request</TD><TD BORDER="1" COLOR="#247148" BGCOLOR="#247148" WIDTH="12"></TD><TD ALIGN="LEFT">RSP · response/credit</TD><TD BORDER="1" COLOR="#a87d21" BGCOLOR="#fff7dd" WIDTH="12"></TD><TD ALIGN="LEFT">state change</TD></TR></TABLE>>];
+  boundary [shape=note, color="#777777", label="Semantic event position only\nnot pins, cycles, or RTL timing"];
+  { rank=same; legend; boundary; }
+  point_0_7 -> legend [style=invis, minlen=1];
+}

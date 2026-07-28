@@ -72,6 +72,19 @@ clean-residency 与 reference-backing 两条通用方法轴，不放置该 opcod
 system reservation。图中 monitor 只表达候选概念职责和成功条件，不宣称 CHI 强制一种硬件结构；是否已有
 executable lifecycle 仍查 canonical status。
 
+## 可执行投影
+
+[CHI Issue H flow gallery](../../showcase/generated/chi/issue-h-flow-gallery/README.md) 从 5 个实际执行场景生成
+各案的 resolved topology/participant boundary、transaction 时空图、显式因果图和以语义事件为基准的
+timeline；场景源码及重建入口见
+[`showcase/demos/chi/issue_h_flow_gallery/`](../../showcase/demos/chi/issue_h_flow_gallery/README.md)。
+首批场景选择 clean `ReadUnique`、dirty-peer `CleanUnique`、`MakeUnique`、clean `Evict` Retry，以及
+`WriteBackFull` 遇同址 invalidating Snoop，用来验证当前已经闭合的方法组合。
+
+这些执行投影不是输入摘要的逐图复刻，也不是 pin/cycle RTL 波形。本文列出的 partial write、Stash、
+Atomic/DVM、ordering、一般 deadlock 与 Exclusive 等候选主题不会因出现在摘要中而成为实现覆盖；实时能力
+仍以 implementation status 和可执行场景断言为准。
+
 ## 基本方法与组合功能
 
 | 建模层 | 可复用基本方法 | 由它组合出的功能 | `b4e5aba` 当时评审记录（历史，不维护） |

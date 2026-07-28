@@ -12,13 +12,12 @@ showcase/demos/
 ├── link/
 │   └── four_phase_handshake/          # 四相握手、频差与有限 FIFO
 ├── chi/
-│   └── issue_h_read_no_snp/           # direct ReadNoSnp 组件教程
+│   └── issue_h_flow_gallery/           # 五个 Issue H 流程的四视图
 ├── system/
 │   ├── axi4_lite_single_manager_fabric/
 │   ├── axi4_single_manager_read_demux/
 │   ├── axi4_read_2x4_crossbar/
-│   ├── chi_issue_h_clean_2x2_mesh/
-│   └── chi_issue_h_topology_shapes/
+│   └── chi_issue_h_topology_shapes/    # 两个独立发布 leaf 的共享装配
 └── vdut/
     ├── apb4_queued_responder/
     ├── axi_ahb_apb_chain/
@@ -38,8 +37,10 @@ showcase/demos/
   ordering/interleave、观察/复位和 exclusive/profile；每案生成结果、波形与因果图。
 - [`link/four_phase_handshake/`](link/four_phase_handshake/README.md) 展示合法 RTZ、ACK 抢跑、
   payload 覆盖，以及有限 FIFO 面对频率差的边界。
-- [`chi/issue_h_read_no_snp/`](chi/issue_h_read_no_snp/README.md) 拆开 direct-Home
-  `ReadNoSnp→CompData` 的 transaction correlation、双向 link 与 L-Credit 因果关系。
+- [`chi/issue_h_flow_gallery/`](chi/issue_h_flow_gallery/README.md) 让每个场景从自身的一次实际执行投影
+  topology/participant boundary、transaction 时空图、显式因果图和语义事件时间线，覆盖 clean
+  `ReadUnique`、dirty-peer
+  `CleanUnique`、`MakeUnique`、clean `Evict` Retry，以及 `WriteBackFull` 遇同址 invalidating Snoop。
 
 ### System 与互连
 
@@ -49,15 +50,14 @@ showcase/demos/
   展示 AR/R 单 manager、多 subordinate、RID return ownership 与 destination lock。
 - [`system/axi4_read_2x4_crossbar/`](system/axi4_read_2x4_crossbar/README.md)
   展示两个 manager、四个 target、raw-ID return-owner FIFO 和 manager-local RID namespace。
-- [`system/chi_issue_h_clean_2x2_mesh/`](system/chi_issue_h_clean_2x2_mesh/README.md)
-  在四 XP 方环上执行 clean `ReadUnique`。REQ、两路 SNP、两路 RSP、DAT 与 CompAck 覆盖四类 channel，
-  并将 `I/SC/UC` 与 Home directory 收束到稳定终态。
-- [`system/chi_issue_h_topology_shapes/`](system/chi_issue_h_topology_shapes/README.md)
-  执行两个 topology case：非均匀环形骨干加星形叶节点用于证明异构构造和方向化路由；4×4 mesh 用于
-  检查规模、角到角长路径、route table closure 与最终静止。
+- [CHI 异构 ring + star 发布页](../generated/system/chi-issue-h-heterogeneous-ring-star/README.md)
+  使用非均匀环形骨干加星形叶节点检查异构构造和方向化路由。
+- [CHI 4×4 mesh 发布页](../generated/system/chi-issue-h-four-by-four-mesh/README.md)
+  检查 16-router 规模、角到角长路径、route table closure 与最终静止。两案共享
+  [`system/chi_issue_h_topology_shapes/`](system/chi_issue_h_topology_shapes/README.md) 中的装配与 runner。
 
-2×2 mesh 保持较小，是为了让 Snoop fan-out、packet 路径和 coherence 状态图可读；4×4 mesh
-增加的是 topology/route 压力，不替代前者的协议语义见证。
+flow gallery 负责协议流程与状态/因果见证；两个 topology leaf 增加的是 topology/route 压力，不替代
+前者，也不因 4×4 mesh 的规模而形成更多 opcode 覆盖。
 
 ### VirtualDut 组合
 

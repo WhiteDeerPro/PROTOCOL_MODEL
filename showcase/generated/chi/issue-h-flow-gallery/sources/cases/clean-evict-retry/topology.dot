@@ -1,0 +1,10 @@
+digraph "chi_flow_clean-evict-retry" {
+  graph [rankdir=LR, bgcolor="white", pad=0.28, nodesep=0.42, ranksep=0.72, splines=polyline, labelloc="t", label="Clean Evict retry, P-Credit and credited reissue\nresolved SystemProtocol topology", fontname="sans-serif", fontsize=16];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=10, margin="0.13,0.08"];
+  edge [fontname="sans-serif", fontsize=8, color="#64748b", fontcolor="#334155", arrowsize=0.62];
+  "rn0" [label="RN0\nrequester\nNodeID 0x7", fillcolor="#dbeafe", color="#2563eb"];
+  "hn0" [label="HN0\nhome\nNodeID 0x21", fillcolor="#ffedd5", color="#ea580c"];
+  "rn0" -> "hn0" [label="evict_request\ntransport · REQ", tooltip="rn0.tx_req → hn0.rx_req"];
+  "hn0" -> "rn0" [label="evict_completion\ntransport · RSP", tooltip="hn0.tx_rsp → rn0.rx_rsp"];
+  evidence [shape=note, style="filled", fillcolor="#f8fafc", color="#94a3b8", fontsize=8, label="2 VirtualDuts · 2 declared connections\nsolid arrows come from resolved construction\ndirect participant topology · no XP-like forwarder constructed\nflow time-space omits per-hop transport MOVE events"];
+}

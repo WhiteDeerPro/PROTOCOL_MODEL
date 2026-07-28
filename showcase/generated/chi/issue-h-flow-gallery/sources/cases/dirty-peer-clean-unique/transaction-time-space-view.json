@@ -1,0 +1,224 @@
+{
+  "schema": "protocol-model.transaction-time-space-view/v1",
+  "descriptor": {
+    "view_kind": "transaction_sequence",
+    "scope": "scenario",
+    "evidence_basis": "observed",
+    "source_schema": "protocol-model.transaction-time-space-view/v1",
+    "projection_intent": "direct",
+    "time_basis": "model_step",
+    "detail": "standard"
+  },
+  "name": "CleanUnique: absorb a shared-dirty peer through DAT",
+  "lifelines": [
+    {
+      "ref": "rn0",
+      "label": "RN0 · requester",
+      "kind": "requester",
+      "display_fields": {
+        "NodeID": "0x7"
+      }
+    },
+    {
+      "ref": "hn0",
+      "label": "HN0 · home",
+      "kind": "home",
+      "display_fields": {
+        "NodeID": "0x21"
+      }
+    },
+    {
+      "ref": "rn1",
+      "label": "RN1 · snoopee",
+      "kind": "snoopee",
+      "display_fields": {
+        "NodeID": "0x8"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "event_ref": "dirty-peer-clean-unique:message:00",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "source": "rn0",
+      "destination": "hn0",
+      "time": 14,
+      "label": "CleanUnique",
+      "lane": "req",
+      "channel": "req",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x31",
+        "address": "0x8000",
+        "AllowRetry": true,
+        "PCrdType": 0,
+        "summary": "T31 AR1"
+      }
+    },
+    {
+      "event_ref": "dirty-peer-clean-unique:message:01",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "source": "hn0",
+      "destination": "rn1",
+      "time": 24,
+      "label": "SnpCleanInvalid",
+      "lane": "snp",
+      "channel": "snp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x100",
+        "address": "0x8000",
+        "summary": "T100"
+      }
+    },
+    {
+      "event_ref": "dirty-peer-clean-unique:message:02",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "source": "rn1",
+      "destination": "hn0",
+      "time": 34,
+      "label": "SnpRespData",
+      "lane": "dat",
+      "channel": "dat",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x100",
+        "DBID": "0x0",
+        "Resp": "I_PD",
+        "summary": "T100 D0 RI_PD"
+      }
+    },
+    {
+      "event_ref": "dirty-peer-clean-unique:message:03",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "source": "hn0",
+      "destination": "rn0",
+      "time": 44,
+      "label": "Comp",
+      "lane": "rsp",
+      "channel": "rsp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x31",
+        "DBID": "0x200",
+        "Resp": "UC",
+        "summary": "T31 D200 RUC"
+      }
+    },
+    {
+      "event_ref": "dirty-peer-clean-unique:message:04",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "source": "rn0",
+      "destination": "hn0",
+      "time": 54,
+      "label": "CompAck",
+      "lane": "rsp",
+      "channel": "rsp",
+      "observation_point": "acceptance",
+      "display_fields": {
+        "TxnID": "0x200",
+        "Resp": "0",
+        "summary": "T200 R0"
+      }
+    }
+  ],
+  "state_changes": [
+    {
+      "event_ref": "dirty-peer-clean-unique:state:000:rn0",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "lifeline": "rn0",
+      "time": 0,
+      "before": "line=SC | txn=- | copyback=- | retry=-",
+      "after": "line=SC | txn=0x31 | copyback=- | retry=-",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "SC T31",
+        "summary": "rn0: SC → SC T31",
+        "transition": "local request issue"
+      }
+    },
+    {
+      "event_ref": "dirty-peer-clean-unique:state:014:hn0",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "lifeline": "hn0",
+      "time": 14,
+      "before": "dir[U=-;S=0x7,0x8;SD=0x8] | pending=- | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "after": "dir[U=-;S=0x7,0x8;SD=0x8] | pending=0x200 | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "D:S7,8/SD8 P1 Bv0",
+        "summary": "hn0: D:S7,8/SD8 Bv0 → D:S7,8/SD8 P1 Bv0",
+        "transition": "hn0 accepts CleanUnique"
+      }
+    },
+    {
+      "event_ref": "dirty-peer-clean-unique:state:024:rn1",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "lifeline": "rn1",
+      "time": 24,
+      "before": "line=SD | txn=- | copyback=- | retry=-",
+      "after": "line=I | txn=- | copyback=- | retry=-",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "I",
+        "summary": "rn1: SD → I",
+        "transition": "rn1 accepts SnpCleanInvalid"
+      }
+    },
+    {
+      "event_ref": "dirty-peer-clean-unique:state:044:rn0",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "lifeline": "rn0",
+      "time": 44,
+      "before": "line=SC | txn=0x31 | copyback=- | retry=-",
+      "after": "line=UC | txn=- | copyback=- | retry=-",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "UC",
+        "summary": "rn0: SC T31 → UC",
+        "transition": "rn0 accepts Comp"
+      }
+    },
+    {
+      "event_ref": "dirty-peer-clean-unique:state:054:hn0",
+      "operation_ref": "dirty-peer-clean-unique:n7:h21:t31",
+      "lifeline": "hn0",
+      "time": 54,
+      "before": "dir[U=-;S=0x7,0x8;SD=0x8] | pending=0x200 | copyback=- | backing=v0 | retry_debt=0 reserved=0",
+      "after": "dir[U=0x7;S=-;SD=-] | pending=- | copyback=- | backing=v1 | retry_debt=0 reserved=0",
+      "label": "coherence/transaction state",
+      "display_fields": {
+        "badge": "D:U7 Bv1",
+        "summary": "hn0: D:S7,8/SD8 P1 Bv0 → D:U7 Bv1",
+        "transition": "hn0 accepts CompAck"
+      }
+    }
+  ],
+  "causal_edges": [
+    {
+      "source_event_ref": "dirty-peer-clean-unique:state:000:rn0",
+      "destination_event_ref": "dirty-peer-clean-unique:message:00",
+      "reason": "local issue emits"
+    },
+    {
+      "source_event_ref": "dirty-peer-clean-unique:message:00",
+      "destination_event_ref": "dirty-peer-clean-unique:message:01",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "dirty-peer-clean-unique:message:01",
+      "destination_event_ref": "dirty-peer-clean-unique:message:02",
+      "reason": "participant emits"
+    },
+    {
+      "source_event_ref": "dirty-peer-clean-unique:message:02",
+      "destination_event_ref": "dirty-peer-clean-unique:message:03",
+      "reason": "Home Snoop-response join"
+    },
+    {
+      "source_event_ref": "dirty-peer-clean-unique:message:03",
+      "destination_event_ref": "dirty-peer-clean-unique:message:04",
+      "reason": "participant emits"
+    }
+  ]
+}

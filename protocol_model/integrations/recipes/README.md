@@ -56,7 +56,7 @@ stage 并编译 plan，不再把 stage 实现藏在 `bridges/` 产品目录中�
 | 绑定具体协议的可复用成品方法 | `integrations/recipes/` | 同时理解 InterfaceProtocol 与 VirtualDut |
 | 某个网络中的具名 VirtualDut 实例 | System construction、scenario 或调用方 project | 实例的名称、连接、地址 claim 和 policy 属于该网络 |
 | 用于讲解的一次实例 | `showcase/demos/` | 展示如何构造和连接，不定义公共产品面 |
-| 定向验证 fixture | `tests/` | 只证明 recipe 行为，不充当产品目录 |
+| 调用方的定向验证 fixture | 调用方工程 | 只证明具体组合，不充当本项目的公共产品目录 |
 
 一个只在某个项目中使用的外部 RTL/RPC module 可以由调用方直接声明 opaque `VirtualDut`。当它的装配方式
 在多个场景复用时，再提升为 project recipe；只有具备跨项目价值时才进入本目录的公共 catalog。

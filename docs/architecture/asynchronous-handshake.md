@@ -128,7 +128,7 @@ asynchronous DUT emission 仍是 system/runtime 的另一项工作。
 - `protocol_model/protocols/asynchronous/four_phase/`：独立 token InterfaceProtocol；
 - `protocol_model/observation/asynchronous.py`：无共享 clock 声明的有序 snapshot；
 - `protocol_model/observation/four_phase.py`：四相 FSM、三种 data window、协调 reset；
-- `tests/test_async_four_phase.py`：完整周期、停顿、非法 ACK、payload 稳定、reset abort 和跨域端口声明。
+- 维护侧回归覆盖完整周期、停顿、非法 ACK、payload 稳定、reset abort 和跨域端口声明。
 
 下一步适合在出现实际场景时增加 two-phase toggle profile、具体 notification/stream attachment，以及
 SystemProtocol 的 clock/reset-domain closure。同步器的物理正确性继续交由 CDC lint、STA 或针对性 formal

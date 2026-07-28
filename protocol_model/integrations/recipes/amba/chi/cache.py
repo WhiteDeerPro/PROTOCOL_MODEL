@@ -416,7 +416,7 @@ def build_chi_cache_participant_fixture(
 ) -> ChiCoherentRnNode:
     """Return only the participant projection of a cache-first assembly.
 
-    This convenience is intended for participant lifecycle tests and compact
+    This convenience is intended for participant lifecycle checks and compact
     scenarios.  Code that needs the module boundary or topology identity
     should retain the :class:`ChiIssueHCacheVdutAssembly` returned by
     :func:`build_chi_issue_h_cache_vdut`.

@@ -31,6 +31,6 @@
   "source_ir": "typed TransactionTimeSpaceView JSON plus topology/flow/causal DOT and WaveJSON",
   "xp_visibility": "all five cases construct and execute one store-forward XP abstraction; endpoint routes contain two transport legs and forwarding counters retire every packet, while per-hop MOVE events remain outside the semantic time-space projection",
   "selected_ordering": "the WriteBackFull case holds only its RN0-to-XP REQ router-capture candidate until CleanUnique retires; this is model ordering control, not a latency or cycle claim",
-  "reference_boundary": "docs/reviews/chi-injected-flow-digest.md guided case selection; raw injected images are not publication inputs",
+  "reference_boundary": "case selection is justified by the executable evidence published in this gallery",
   "model_boundary": "selected executable Issue H lifecycle witnesses, not a complete opcode catalog, specification coverage claim, packed pin/phit model, CDC analysis, or deadlock proof"
 }

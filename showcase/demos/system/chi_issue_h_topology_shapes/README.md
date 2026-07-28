@@ -66,4 +66,4 @@ egress 与逐 hop Link Credit；它不等同于完整 XP 微架构，也不提�
 - `presentation.py`：从单案 assembly/result 投影 topology/path 图和生成版说明；
 - `run.py`：共享 staging/渲染逻辑，但分别生成两个 leaf publication。
 
-测试可以导入 `model.py` 的 public builder/executor 检查结构和行为，但 showcase 不依赖 `tests/`。
+调用方可以导入 `model.py` 的 public builder/executor 检查结构和行为；Showcase 本身保持独立可运行。

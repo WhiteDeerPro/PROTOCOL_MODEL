@@ -167,8 +167,8 @@ def _build_publication(directory: Path) -> Path:
                 "is model ordering control, not a latency or cycle claim"
             ),
             "reference_boundary": (
-                "docs/reviews/chi-injected-flow-digest.md guided case "
-                "selection; raw injected images are not publication inputs"
+                "case selection is justified by the executable evidence "
+                "published in this gallery"
             ),
             "model_boundary": (
                 "selected executable Issue H lifecycle witnesses, not a "

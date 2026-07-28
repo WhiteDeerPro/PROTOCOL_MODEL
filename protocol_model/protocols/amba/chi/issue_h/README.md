@@ -869,8 +869,8 @@ post-`Comp`/post-`CompDBIDResp`、pre-terminal 同址 Snoop 按 Home ordering �
 [实现状态](../../../../../docs/architecture/implementation-status.md)维护，协议/网络/链路的分工见
 [通信建模的三张视图](../../../../../docs/architecture/communication-scope-and-transport.md)。
 
-测试可以保存私有 topology builder 和负例 fixture；可复用状态机、ledger、router 或 session 必须位于本包，
-不能把 tests 当作生产实现目录。
+维护侧可以保存私有 topology builder 和负例 fixture；可复用状态机、ledger、router 或 session 必须位于本包，
+不能把验证代码当作生产实现目录。
 
 ## 与一般 NoC 构造的边界
 

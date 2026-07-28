@@ -40,12 +40,12 @@ construction，并显式包含实际执行的 XP forwarding abstraction。timeli
 - `showcase/generated/` 只由拥有相应子树的具名发布脚本重建；
 - 发布脚本保存 SVG 及其 DOT/WaveJSON/JSON 源、manifest 和 provenance；
 - 普通运行写入临时目录或调用方指定的 run root，不隐式改写发布材料；
-- 测试可以执行 Showcase 模型以防止示例腐化，但可复用实现仍属于 `protocol_model/`。
+- Showcase 模型可以由调用方重复执行以检查示例是否腐化；可复用实现仍属于 `protocol_model/`。
 
 重建统一 AXI4 Gallery：
 
 ```bash
 npm ci
 dot -V
-make showcase-axi4
+python3 showcase/demos/axi4/run.py
 ```

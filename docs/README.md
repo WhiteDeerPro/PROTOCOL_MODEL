@@ -71,5 +71,5 @@ canonical 入口继续阅读。
 - [项目 Roadmap](../ROADMAP.md)记录长期研究和工程方向；
 - [Release archive](releases/README.md)保留已发布 tag 当时的术语和边界。
 
-普通运行写入调用方选择的目录，测试使用临时目录。只有具名发布脚本可以重建其拥有的
-`showcase/generated/` 子树；普通测试和文档阅读不会隐式改写发布材料。
+普通运行和维护侧验证写入调用方选择的临时目录。只有具名发布脚本可以重建其拥有的
+`showcase/generated/` 子树；普通运行和文档阅读不会隐式改写发布材料。

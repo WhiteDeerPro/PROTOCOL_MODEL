@@ -21,7 +21,6 @@ trace、拓扑和诊断证据。
 | 核对当前到底实现了什么 | [实现状态](docs/architecture/implementation-status.md) |
 | 查看近期施工顺序 | [技术路线](docs/architecture/technical-route/08-roadmap.md) |
 | 查看长期研究方向 | [项目 Roadmap](ROADMAP.md) |
-| 运行测试或参与开发 | [贡献指南](CONTRIBUTING.md) |
 
 ## 精选可执行展示
 
@@ -44,13 +43,7 @@ flow gallery 观察 `ReadUnique`、`CleanUnique`、`MakeUnique`、`Evict` Retry 
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install -e .
-make smoke
-```
-
-运行完整维护基线：
-
-```bash
-make test
+python -c "import protocol_model as p; print(p.__version__)"
 ```
 
 重建 AXI4 Showcase 还需要 Node.js/npm 和 Graphviz：
@@ -58,10 +51,10 @@ make test
 ```bash
 npm ci
 dot -V
-make showcase-axi4
+python showcase/demos/axi4/run.py
 ```
 
-生成结果写入 [`showcase/generated/axi4`](showcase/generated/axi4/README.zh-CN.md)。普通测试和临时运行
+生成结果写入 [`showcase/generated/axi4`](showcase/generated/axi4/README.zh-CN.md)。普通运行和临时输出
 不会改写受版本控制的发布树；具名 Showcase 脚本会在显式调用时替换自己拥有的生成子树。
 
 ## 建模边界

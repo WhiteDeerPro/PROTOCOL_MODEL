@@ -1,5 +1,0 @@
-# Curated publication output is reproducible from the adjacent source IR.
-showcase/generated/** linguist-generated=true
-
-# Rendered SVG is noisy as a textual diff; DOT/WaveJSON/JSON remain reviewable.
-showcase/generated/**/*.svg -diff

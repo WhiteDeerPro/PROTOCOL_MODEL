@@ -64,6 +64,7 @@ from ..representation.req import (
     ChiReadUniqueMessage,
     ChiWriteBackFullMessage,
     ChiWriteEvictFullMessage,
+    ChiWriteEvictOrEvictMessage,
 )
 from ..representation.response import ChiRespCode, ChiRespErr
 from ..representation.rsp import (
@@ -146,6 +147,7 @@ class ChiRnCopyBackOutcome(str, Enum):
 
     LIVE_UD = "live_ud"
     LIVE_UC = "live_uc"
+    LIVE_SC = "live_sc"
     CANCELED_I = "canceled_i"
 
 
@@ -199,6 +201,45 @@ class ChiRnWriteEvictPending:
         ):
             raise ValueError(
                 "WriteEvictFull outcome must be LIVE_UC or CANCELED_I"
+            )
+        object.__setattr__(self, "outcome", outcome)
+
+    @property
+    def transaction_id(self) -> int:
+        return self.request.transaction_id
+
+    @property
+    def address(self) -> int:
+        return self.request.address
+
+
+@dataclass(frozen=True)
+class ChiRnWriteEvictOrEvictPending:
+    """Retain one clean victim while Home chooses data or no-data."""
+
+    request: ChiWriteEvictOrEvictMessage
+    outcome: ChiRnCopyBackOutcome
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, ChiWriteEvictOrEvictMessage):
+            raise TypeError(
+                "RN WriteEvictOrEvict pending record requires "
+                "WriteEvictOrEvict"
+            )
+        outcome = ChiRnCopyBackOutcome(self.outcome)
+        if outcome not in (
+            ChiRnCopyBackOutcome.LIVE_UC,
+            ChiRnCopyBackOutcome.LIVE_SC,
+        ):
+            raise ValueError(
+                "WriteEvictOrEvict outcome must be LIVE_UC or LIVE_SC"
+            )
+        if self.request.likely_shared != (
+            outcome is ChiRnCopyBackOutcome.LIVE_SC
+        ):
+            raise ValueError(
+                "WriteEvictOrEvict LikelyShared must encode its retained "
+                "UC/SC outcome"
             )
         object.__setattr__(self, "outcome", outcome)
 
@@ -431,6 +472,19 @@ class ChiRnIssueWriteEvictFull:
 
 
 @dataclass(frozen=True)
+class ChiRnIssueWriteEvictOrEvict:
+    """Offer one resident clean line while Home selects the terminal flow."""
+
+    request: ChiWriteEvictOrEvictMessage
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, ChiWriteEvictOrEvictMessage):
+            raise TypeError(
+                "RN WriteEvictOrEvict issue requires WriteEvictOrEvict"
+            )
+
+
+@dataclass(frozen=True)
 class ChiRnAcceptCompDBIDResp:
     """Accept the Home DBID allocation for one pending CopyBack request."""
 
@@ -459,6 +513,7 @@ ChiCoherentRnAction = (
     | ChiRnWriteCacheLine
     | ChiRnIssueWriteBackFull
     | ChiRnIssueWriteEvictFull
+    | ChiRnIssueWriteEvictOrEvict
     | ChiRnAcceptCompDBIDResp
 )
 
@@ -483,7 +538,9 @@ class ChiCoherentRnState:
     )
     pending_copybacks: Mapping[
         int,
-        ChiRnWriteBackPending | ChiRnWriteEvictPending,
+        ChiRnWriteBackPending
+        | ChiRnWriteEvictPending
+        | ChiRnWriteEvictOrEvictPending,
     ] = field(
         default_factory=dict
     )
@@ -571,7 +628,11 @@ class ChiCoherentRnState:
         if any(
             not isinstance(
                 item,
-                (ChiRnWriteBackPending, ChiRnWriteEvictPending),
+                (
+                    ChiRnWriteBackPending,
+                    ChiRnWriteEvictPending,
+                    ChiRnWriteEvictOrEvictPending,
+                ),
             )
             or transaction_id != item.transaction_id
             for transaction_id, item in writebacks.items()
@@ -596,6 +657,25 @@ class ChiCoherentRnState:
             )
         for pending_writeback in writebacks.values():
             address = pending_writeback.address
+            if isinstance(
+                pending_writeback,
+                ChiRnWriteEvictOrEvictPending,
+            ):
+                expected = (
+                    ChiCacheState.SC
+                    if pending_writeback.outcome
+                    is ChiRnCopyBackOutcome.LIVE_SC
+                    else ChiCacheState.UC
+                )
+                if (
+                    address not in resident
+                    or permissions.get(address) is not expected
+                ):
+                    raise ValueError(
+                        "live RN WriteEvictOrEvict requires the resident "
+                        f"{expected.value} line encoded by LikelyShared"
+                    )
+                continue
             if isinstance(
                 pending_writeback,
                 ChiRnWriteEvictPending,
@@ -747,7 +827,8 @@ class ChiCoherentRnState:
     ) -> tuple[
         ChiCoherenceRequestMessage
         | ChiWriteBackFullMessage
-        | ChiWriteEvictFullMessage,
+        | ChiWriteEvictFullMessage
+        | ChiWriteEvictOrEvictMessage,
         ...,
     ]:
         """Return local coherent transactions reserving one cache line."""
@@ -896,6 +977,11 @@ class ChiCoherentRnNode(
             return self._issue_writeback(state, action.request)
         if isinstance(action, ChiRnIssueWriteEvictFull):
             return self._issue_write_evict(state, action.request)
+        if isinstance(action, ChiRnIssueWriteEvictOrEvict):
+            return self._issue_write_evict_or_evict(
+                state,
+                action.request,
+            )
         if isinstance(action, ChiRnAcceptCompDBIDResp):
             return self._accept_comp_dbid_resp(state, action.packet)
         raise TypeError("unknown coherent RN action")
@@ -1939,6 +2025,76 @@ class ChiCoherentRnNode(
             )
         response = packet.message
         assert isinstance(response, ChiCompMessage)
+        pending_copyback = state.pending_copybacks.get(
+            response.transaction_id
+        )
+        if isinstance(
+            pending_copyback,
+            ChiRnWriteEvictOrEvictPending,
+        ):
+            if (
+                response.response_error is not ChiRespErr.OK
+                or response.response is not ChiRespCode.I
+                or response.tag_operation != 0
+                or response.trace_tag
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_completion_state",
+                    "WriteEvictOrEvict no-data completion requires "
+                    "Comp Resp=000 without error, tag operation, or "
+                    "TraceTag",
+                )
+            expected_state = (
+                ChiCacheState.SC
+                if pending_copyback.outcome
+                is ChiRnCopyBackOutcome.LIVE_SC
+                else ChiCacheState.UC
+            )
+            ack_response = (
+                ChiRespCode.SC
+                if expected_state is ChiCacheState.SC
+                else ChiRespCode.UC
+            )
+            line = state.line_at(pending_copyback.address)
+            if (
+                line is None
+                or line.state is not expected_state
+                or line.data is None
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_reserved_line",
+                    "WriteEvictOrEvict no-data completion lost its "
+                    f"reserved {expected_state.value} line",
+                )
+            cache = self.cache_store.remove(
+                state.cache,
+                pending_copyback.address,
+            ).state
+            permissions = dict(state.permissions)
+            permissions[pending_copyback.address] = ChiCacheState.I
+            copybacks = dict(state.pending_copybacks)
+            del copybacks[pending_copyback.transaction_id]
+            ack = ChiNetworkPacket.response(
+                ChiCompAckMessage(
+                    transaction_id=response.data_buffer_id,
+                    response=ack_response,
+                ),
+                source_id=self.node_id,
+                target_id=self.home_node_id,
+            )
+            return SemanticStep(
+                ChiCoherentRnState(
+                    cache,
+                    permissions,
+                    state.pending_transactions,
+                    copybacks,
+                    state.request_retry,
+                    state.make_unique_store_intents,
+                ),
+                (ack,),
+            )
         request = state.pending_transactions.get(response.transaction_id)
         if not isinstance(
             request,
@@ -2458,6 +2614,137 @@ class ChiCoherentRnNode(
             ),
         )
 
+    def _issue_write_evict_or_evict(
+        self,
+        state: ChiCoherentRnState,
+        request: ChiWriteEvictOrEvictMessage,
+    ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
+        """Reserve a clean victim until Home selects data or no-data."""
+
+        if request.size != 6 or request.address % _CACHE_LINE_BYTES:
+            return self._fault(
+                state,
+                "write_evict_or_evict_shape",
+                "WriteEvictOrEvict requires one aligned 64-byte line",
+            )
+        if (
+            not request.allow_retry
+            or request.protocol_credit_type != 0
+            or not request.expect_completion_ack
+            or request.memory_attributes != 0b1101
+            or request.copy_at_home
+        ):
+            return self._fault(
+                state,
+                "write_evict_or_evict_request_attributes",
+                "the first WriteEvictOrEvict profile requires Allocate "
+                "MemAttr=1101, CAH=0, AllowRetry=1, PCrdType=0, and "
+                "ExpCompAck=1",
+            )
+        unsupported = tuple(
+            name
+            for name, enabled in (
+                ("non-snoopable", not request.snoop_attribute),
+                ("exclusive", request.exclusive),
+                ("ordered", request.order != 0),
+                ("reserved PAS", request.pas >= 6),
+                ("tag operation", request.tag_operation != 0),
+                ("trace tag", request.trace_tag),
+            )
+            if enabled
+        )
+        if unsupported:
+            return self._fault(
+                state,
+                "write_evict_or_evict_request_attributes",
+                "the first WriteEvictOrEvict profile does not implement "
+                + ", ".join(unsupported),
+            )
+        if (
+            request.transaction_id in state.pending_transactions
+            or request.transaction_id in state.pending_copybacks
+        ):
+            return self._fault(
+                state,
+                "duplicate_transaction",
+                "RN already owns this coherent/CopyBack TxnID",
+            )
+        if state.pending_for_address(request.address):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    chi_line_resource_name(self.name, request.address),
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    capacity=1,
+                    reason=(
+                        "another RN-local coherent transaction reserves "
+                        "this cache line"
+                    ),
+                    location=self.name,
+                ),
+            )
+        if (
+            len(state.pending_transactions) + len(state.pending_copybacks)
+            >= self.outstanding_capacity
+        ):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    f"{self.name}.coherence_transaction_slot",
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    capacity=self.outstanding_capacity,
+                    reason="RN coherent transaction table is full",
+                    location=self.name,
+                ),
+            )
+        expected_state = (
+            ChiCacheState.SC
+            if request.likely_shared
+            else ChiCacheState.UC
+        )
+        outcome = (
+            ChiRnCopyBackOutcome.LIVE_SC
+            if request.likely_shared
+            else ChiRnCopyBackOutcome.LIVE_UC
+        )
+        line = state.line_at(request.address)
+        if (
+            line is None
+            or line.state is not expected_state
+            or line.data is None
+        ):
+            return self._fault(
+                state,
+                "write_evict_or_evict_permission",
+                "WriteEvictOrEvict LikelyShared must match a resident "
+                f"{expected_state.value} line",
+            )
+        pending = dict(state.pending_copybacks)
+        pending[request.transaction_id] = ChiRnWriteEvictOrEvictPending(
+            request,
+            outcome,
+        )
+        candidate = ChiCoherentRnState(
+            state.cache,
+            state.permissions,
+            state.pending_transactions,
+            pending,
+            state.request_retry,
+            state.make_unique_store_intents,
+        )
+        return SemanticStep(
+            candidate,
+            (
+                ChiNetworkPacket.request(
+                    request,
+                    source_id=self.node_id,
+                    target_id=self.home_node_id,
+                ),
+            ),
+        )
+
     def _accept_comp_dbid_resp(
         self,
         state: ChiCoherentRnState,
@@ -2519,6 +2806,44 @@ class ChiCoherentRnNode(
                 data_id=0,
                 byte_enable=0,
             )
+        elif isinstance(
+            pending_writeback,
+            ChiRnWriteEvictOrEvictPending,
+        ):
+            expected_state = (
+                ChiCacheState.SC
+                if pending_writeback.outcome
+                is ChiRnCopyBackOutcome.LIVE_SC
+                else ChiCacheState.UC
+            )
+            data_response = (
+                ChiRespCode.SC
+                if expected_state is ChiCacheState.SC
+                else ChiRespCode.UC
+            )
+            if (
+                line is None
+                or line.state is not expected_state
+                or line.data is None
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_reserved_line",
+                    "WriteEvictOrEvict line is no longer resident in "
+                    f"{expected_state.value}",
+                )
+            copyback = ChiCopyBackWrDataMessage(
+                transaction_id=response.data_buffer_id,
+                data=line.data,
+                response=data_response,
+                data_id=0,
+                byte_enable=(1 << _CACHE_LINE_BYTES) - 1,
+            )
+            cache = self.cache_store.remove(
+                state.cache,
+                request.address,
+            ).state
+            permissions[request.address] = ChiCacheState.I
         elif isinstance(pending_writeback, ChiRnWriteEvictPending):
             if (
                 line is None
@@ -2861,6 +3186,13 @@ class ChiHomeCopyBackAdmission(str, Enum):
     SNOOP_CANCELED = "snoop_canceled"
 
 
+class ChiWriteEvictOrEvictDecision(str, Enum):
+    """Home-owned outcome for one WriteEvictOrEvict request."""
+
+    REQUEST_DATA = "request_data"
+    COMPLETE_WITHOUT_DATA = "complete_without_data"
+
+
 @dataclass(frozen=True)
 class ChiHomeWriteBackPending:
     """Home reservation plus immutable authority evidence for CopyBack."""
@@ -2958,6 +3290,61 @@ class ChiHomeWriteEvictPending:
             self,
             "admission",
             ChiHomeCopyBackAdmission(self.admission),
+        )
+
+
+@dataclass(frozen=True)
+class ChiHomeWriteEvictOrEvictPending:
+    """Home reservation spanning one selected WEOE terminal flow."""
+
+    requester_id: int
+    request: ChiWriteEvictOrEvictMessage
+    data_buffer_id: int
+    directory_snapshot: ChiHomeDirectoryEntry
+    backing_version: int
+    decision: ChiWriteEvictOrEvictDecision
+
+    def __post_init__(self) -> None:
+        _require_node_id(
+            "WriteEvictOrEvict requester",
+            self.requester_id,
+        )
+        if not isinstance(self.request, ChiWriteEvictOrEvictMessage):
+            raise TypeError(
+                "Home WriteEvictOrEvict pending record requires "
+                "WriteEvictOrEvict"
+            )
+        if (
+            not isinstance(self.data_buffer_id, int)
+            or isinstance(self.data_buffer_id, bool)
+            or not 0 <= self.data_buffer_id < _TRANSACTION_ID_LIMIT
+        ):
+            raise ValueError(
+                "WriteEvictOrEvict data_buffer_id must be 12-bit"
+            )
+        if (
+            not isinstance(
+                self.directory_snapshot,
+                ChiHomeDirectoryEntry,
+            )
+            or self.directory_snapshot.address != self.request.address
+        ):
+            raise ValueError(
+                "WriteEvictOrEvict directory snapshot must match the "
+                "request line"
+            )
+        if (
+            not isinstance(self.backing_version, int)
+            or isinstance(self.backing_version, bool)
+            or self.backing_version < 0
+        ):
+            raise ValueError(
+                "WriteEvictOrEvict backing version must be non-negative"
+            )
+        object.__setattr__(
+            self,
+            "decision",
+            ChiWriteEvictOrEvictDecision(self.decision),
         )
 
 
@@ -3088,6 +3475,23 @@ class ChiHomeAcceptWriteEvictFull:
 
 
 @dataclass(frozen=True)
+class ChiHomeAcceptWriteEvictOrEvict:
+    """Accept one WEOE REQ and let the Home policy select its branch."""
+
+    packet: ChiNetworkPacket
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
+            self.packet.message,
+            ChiWriteEvictOrEvictMessage,
+        ):
+            raise TypeError(
+                "Home WriteEvictOrEvict action requires a "
+                "WriteEvictOrEvict packet"
+            )
+
+
+@dataclass(frozen=True)
 class ChiHomeAcceptCopyBackData:
     packet: ChiNetworkPacket
 
@@ -3114,6 +3518,7 @@ ChiCoherentHomeAction = (
     | ChiHomeAcceptCompAck
     | ChiHomeAcceptWriteBackFull
     | ChiHomeAcceptWriteEvictFull
+    | ChiHomeAcceptWriteEvictOrEvict
     | ChiHomeAcceptCopyBackData
     | ChiHomeGrantPCredit
 )
@@ -3130,7 +3535,9 @@ class ChiCoherentHomeState:
     next_data_buffer_id: int = 0x200
     pending_copybacks: Mapping[
         int,
-        ChiHomeWriteBackPending | ChiHomeWriteEvictPending,
+        ChiHomeWriteBackPending
+        | ChiHomeWriteEvictPending
+        | ChiHomeWriteEvictOrEvictPending,
     ] = field(
         default_factory=dict
     )
@@ -3188,7 +3595,11 @@ class ChiCoherentHomeState:
         if any(
             not isinstance(
                 item,
-                (ChiHomeWriteBackPending, ChiHomeWriteEvictPending),
+                (
+                    ChiHomeWriteBackPending,
+                    ChiHomeWriteEvictPending,
+                    ChiHomeWriteEvictOrEvictPending,
+                ),
             )
             or data_buffer_id != item.data_buffer_id
             for data_buffer_id, item in writebacks.items()
@@ -3217,6 +3628,25 @@ class ChiCoherentHomeState:
             )
         for item in writebacks.values():
             entry = directory[item.request.address]
+            if isinstance(
+                item,
+                ChiHomeWriteEvictOrEvictPending,
+            ):
+                if item.request.likely_shared:
+                    if (
+                        item.requester_id not in entry.sharers
+                        or entry.shared_dirty_owner == item.requester_id
+                    ):
+                        raise ValueError(
+                            "Home WriteEvictOrEvict LikelyShared=1 "
+                            "requester must remain one clean Shared holder"
+                        )
+                elif entry.unique_owner != item.requester_id:
+                    raise ValueError(
+                        "Home WriteEvictOrEvict LikelyShared=0 requester "
+                        "must remain the Unique owner"
+                    )
+                continue
             if (
                 item.admission
                 is ChiHomeCopyBackAdmission.CURRENT_OWNER
@@ -3288,6 +3718,10 @@ ChiReadUniqueNderrPolicy = Callable[
     [ChiReadUniqueMessage, ChiCoherentHomeState],
     bool,
 ]
+ChiWriteEvictOrEvictPolicy = Callable[
+    [ChiWriteEvictOrEvictMessage, ChiCoherentHomeState],
+    ChiWriteEvictOrEvictDecision,
+]
 
 
 class ChiCoherentHomeNode(
@@ -3324,6 +3758,9 @@ class ChiCoherentHomeNode(
         retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
         evict_retry_policy: ChiEvictRetryAdmissionPolicy | None = None,
         read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
+        write_evict_or_evict_policy: (
+            ChiWriteEvictOrEvictPolicy | None
+        ) = None,
     ) -> None:
         if not isinstance(name, str) or not name:
             raise ValueError("coherent Home requires a name")
@@ -3422,6 +3859,14 @@ class ChiCoherentHomeNode(
             raise TypeError(
                 "coherent Home read_unique_nderr_policy must be callable"
             )
+        if (
+            write_evict_or_evict_policy is not None
+            and not callable(write_evict_or_evict_policy)
+        ):
+            raise TypeError(
+                "coherent Home write_evict_or_evict_policy must be "
+                "callable"
+            )
         self.name = name
         self.node_id = node_id
         self.backing_core = backing_core
@@ -3435,6 +3880,9 @@ class ChiCoherentHomeNode(
         self.retry_policy = retry_policy
         self.evict_retry_policy = evict_retry_policy
         self.read_unique_nderr_policy = read_unique_nderr_policy
+        self.write_evict_or_evict_policy = (
+            write_evict_or_evict_policy
+        )
 
     def initial_state(self) -> ChiCoherentHomeState:
         return ChiCoherentHomeState(
@@ -3502,6 +3950,11 @@ class ChiCoherentHomeNode(
                 state,
                 action.packet,
                 action.admission,
+            )
+        if isinstance(action, ChiHomeAcceptWriteEvictOrEvict):
+            return self._accept_write_evict_or_evict(
+                state,
+                action.packet,
             )
         if isinstance(action, ChiHomeAcceptCopyBackData):
             return self._accept_copyback_data(state, action.packet)
@@ -4396,6 +4849,85 @@ class ChiCoherentHomeNode(
             )
         ack = packet.message
         assert isinstance(ack, ChiCompAckMessage)
+        copyback_pending = state.pending_copybacks.get(
+            ack.transaction_id
+        )
+        if isinstance(
+            copyback_pending,
+            ChiHomeWriteEvictOrEvictPending,
+        ):
+            if packet.source_id != copyback_pending.requester_id:
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_completion_ack_identity",
+                    "WriteEvictOrEvict CompAck does not match the Home "
+                    "DBID/requester pair",
+                )
+            if (
+                copyback_pending.decision
+                is not
+                ChiWriteEvictOrEvictDecision.COMPLETE_WITHOUT_DATA
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_terminal",
+                    "WriteEvictOrEvict data reservation cannot consume "
+                    "CompAck",
+                )
+            expected_response = (
+                ChiRespCode.SC
+                if copyback_pending.request.likely_shared
+                else ChiRespCode.UC
+            )
+            if (
+                ack.response != int(expected_response)
+                or ack.trace_tag
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_completion_ack_state",
+                    "WriteEvictOrEvict no-data outcome requires "
+                    f"CompAck_{expected_response.name} without TraceTag",
+                )
+            entry = state.directory[
+                copyback_pending.request.address
+            ]
+            backing_line = state.backing.line_at(
+                copyback_pending.request.address
+            )
+            if (
+                entry != copyback_pending.directory_snapshot
+                or backing_line is None
+                or backing_line.version
+                != copyback_pending.backing_version
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_reservation_changed",
+                    "directory or backing authority changed before "
+                    "WriteEvictOrEvict CompAck",
+                )
+            directory = dict(state.directory)
+            directory[entry.address] = self._remove_clean_holder(
+                entry,
+                copyback_pending.requester_id,
+            )
+            copybacks = dict(state.pending_copybacks)
+            del copybacks[copyback_pending.data_buffer_id]
+            return SemanticStep(
+                ChiCoherentHomeState(
+                    directory=directory,
+                    backing=state.backing,
+                    pending=state.pending,
+                    next_snoop_transaction_id=(
+                        state.next_snoop_transaction_id
+                    ),
+                    next_data_buffer_id=state.next_data_buffer_id,
+                    pending_copybacks=copybacks,
+                    request_retry=state.request_retry,
+                    clean_residency=state.clean_residency,
+                )
+            )
         pending_item = state.pending.get(ack.transaction_id)
         if (
             pending_item is None
@@ -4860,6 +5392,207 @@ class ChiCoherentHomeNode(
             (response,),
         )
 
+    def _accept_write_evict_or_evict(
+        self,
+        state: ChiCoherentHomeState,
+        packet: ChiNetworkPacket,
+    ) -> SemanticStep[ChiCoherentHomeState, ChiNetworkPacket]:
+        """Reserve one clean victim under an explicit Home outcome policy."""
+
+        if packet.target_id != self.node_id:
+            return self._fault(
+                state,
+                "write_evict_or_evict_target",
+                "WriteEvictOrEvict packet targets another Home",
+            )
+        request = packet.message
+        assert isinstance(request, ChiWriteEvictOrEvictMessage)
+        if (
+            request.size != 6
+            or request.address % _CACHE_LINE_BYTES
+            or not request.allow_retry
+            or request.protocol_credit_type != 0
+            or request.memory_attributes != 0b1101
+            or not request.expect_completion_ack
+            or request.copy_at_home
+            or not request.snoop_attribute
+            or request.exclusive
+            or request.order != 0
+            or request.pas >= 6
+            or request.tag_operation != 0
+            or request.trace_tag
+        ):
+            return self._fault(
+                state,
+                "write_evict_or_evict_profile",
+                "the first WriteEvictOrEvict profile requires an aligned "
+                "64-byte UC/SC CopyBack with Allocate MemAttr=1101, CAH=0, "
+                "AllowRetry=1, PCrdType=0, and ExpCompAck=1",
+            )
+        entry = state.directory.get(request.address)
+        backing_line = state.backing.line_at(request.address)
+        if entry is None or backing_line is None:
+            return self._fault(
+                state,
+                "write_evict_or_evict_address_home",
+                "Home has no directory/reference-backing entry for this "
+                "WriteEvictOrEvict address",
+            )
+        if request.likely_shared:
+            if (
+                packet.source_id not in entry.sharers
+                or entry.shared_dirty_owner == packet.source_id
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_shared_holder",
+                    "LikelyShared=1 WriteEvictOrEvict requires the source "
+                    "to be a clean Shared holder",
+                )
+        elif entry.unique_owner != packet.source_id:
+            return self._fault(
+                state,
+                "write_evict_or_evict_unique_holder",
+                "LikelyShared=0 WriteEvictOrEvict requires the source to be "
+                "the directory Unique owner",
+            )
+        if any(
+            item.request.address == request.address
+            for item in state.pending.values()
+        ) or any(
+            item.request.address == request.address
+            for item in state.pending_copybacks.values()
+        ):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    chi_line_resource_name(self.name, request.address),
+                    ConstraintScope.SYSTEM,
+                    available=0,
+                    capacity=1,
+                    reason="same-line coherent transaction is in progress",
+                    location=self.name,
+                ),
+            )
+        if any(
+            item.requester_id == packet.source_id
+            and item.request.transaction_id == request.transaction_id
+            for item in (
+                *state.pending.values(),
+                *state.pending_copybacks.values(),
+            )
+        ):
+            return self._fault(
+                state,
+                "duplicate_write_evict_or_evict",
+                "Home already owns this Requester/TxnID",
+            )
+        if (
+            len(state.pending)
+            + len(state.pending_copybacks)
+            + state.request_retry.reserved_count
+            >= self.transaction_capacity
+        ):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    f"{self.name}.coherence_transaction_slot",
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    capacity=self.transaction_capacity,
+                    reason="Home coherence transaction table is full",
+                    location=self.name,
+                ),
+            )
+        if self.write_evict_or_evict_policy is None:
+            return self._fault(
+                state,
+                "write_evict_or_evict_policy",
+                "Home WriteEvictOrEvict acceptance requires an explicit "
+                "outcome policy",
+            )
+        try:
+            decision = ChiWriteEvictOrEvictDecision(
+                self.write_evict_or_evict_policy(request, state)
+            )
+        except (TypeError, ValueError) as error:
+            return self._fault(
+                state,
+                "write_evict_or_evict_policy",
+                "Home WriteEvictOrEvict policy returned an unknown "
+                f"decision: {error}",
+            )
+        if (
+            decision is ChiWriteEvictOrEvictDecision.REQUEST_DATA
+            and self.clean_residency_core is None
+        ):
+            return self._fault(
+                state,
+                "write_evict_or_evict_data_disabled",
+                "Home cannot request WriteEvictOrEvict data without a "
+                "Snoop-domain clean residency core",
+            )
+        if (
+            decision is ChiWriteEvictOrEvictDecision.REQUEST_DATA
+            and request.likely_shared
+            and entry.shared_dirty_owner is not None
+        ):
+            return self._fault(
+                state,
+                "write_evict_or_evict_shared_dirty_data",
+                "the first WriteEvictOrEvict data branch does not install "
+                "an SC copy while another requester owns SharedDirty; "
+                "the Home policy must choose COMPLETE_WITHOUT_DATA",
+            )
+        data_buffer_id = self._allocate_identifier(
+            state.next_data_buffer_id,
+            set(state.pending) | set(state.pending_copybacks),
+        )
+        copybacks = dict(state.pending_copybacks)
+        copybacks[data_buffer_id] = ChiHomeWriteEvictOrEvictPending(
+            packet.source_id,
+            request,
+            data_buffer_id,
+            entry,
+            backing_line.version,
+            decision,
+        )
+        response: ChiCompMessage | ChiCompDBIDRespMessage
+        if decision is ChiWriteEvictOrEvictDecision.REQUEST_DATA:
+            response = ChiCompDBIDRespMessage(
+                transaction_id=request.transaction_id,
+                data_buffer_id=data_buffer_id,
+            )
+        else:
+            response = ChiCompMessage(
+                transaction_id=request.transaction_id,
+                data_buffer_id=data_buffer_id,
+                response=ChiRespCode.I,
+            )
+        return SemanticStep(
+            ChiCoherentHomeState(
+                directory=state.directory,
+                backing=state.backing,
+                pending=state.pending,
+                next_snoop_transaction_id=(
+                    state.next_snoop_transaction_id
+                ),
+                next_data_buffer_id=(
+                    (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT
+                ),
+                pending_copybacks=copybacks,
+                request_retry=state.request_retry,
+                clean_residency=state.clean_residency,
+            ),
+            (
+                ChiNetworkPacket.response(
+                    response,
+                    source_id=self.node_id,
+                    target_id=packet.source_id,
+                ),
+            ),
+        )
+
     def _accept_copyback_data(
         self,
         state: ChiCoherentHomeState,
@@ -4904,6 +5637,82 @@ class ChiCoherentHomeNode(
                 state,
                 "copyback_disabled",
                 "Home profile does not enable dirty-data transfer",
+            )
+        if isinstance(
+            pending,
+            ChiHomeWriteEvictOrEvictPending,
+        ):
+            if (
+                pending.decision
+                is not ChiWriteEvictOrEvictDecision.REQUEST_DATA
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_terminal",
+                    "WriteEvictOrEvict no-data reservation cannot consume "
+                    "CopyBackWrData",
+                )
+            expected_response = (
+                ChiRespCode.SC
+                if pending.request.likely_shared
+                else ChiRespCode.UC
+            )
+            if (
+                message.response is not expected_response
+                or message.response_error is not ChiRespErr.OK
+                or message.data_id != 0
+                or message.byte_enable
+                != (1 << _CACHE_LINE_BYTES) - 1
+                or message.data >= _CACHE_LINE_DATA_LIMIT
+                or message.data != backing_line.data
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_copyback_profile",
+                    "WriteEvictOrEvict data outcome requires one full-line "
+                    f"CopyBackWrData_{expected_response.name} matching the "
+                    "unchanged clean reference copy",
+                )
+            if self.clean_residency_core is None:
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_data_disabled",
+                    "Home lost its Snoop-domain clean residency core",
+                )
+            if (
+                pending.request.likely_shared
+                and entry.shared_dirty_owner is not None
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_shared_dirty_data",
+                    "the first WriteEvictOrEvict data branch cannot install "
+                    "SC while another requester owns SharedDirty",
+                )
+            directory = dict(state.directory)
+            directory[entry.address] = self._remove_clean_holder(
+                entry,
+                pending.requester_id,
+            )
+            clean_residency = (
+                self.clean_residency_core.line_store.install(
+                    state.clean_residency,
+                    CacheLinePayload(entry.address, message.data),
+                ).state
+            )
+            return SemanticStep(
+                ChiCoherentHomeState(
+                    directory=directory,
+                    backing=state.backing,
+                    pending=state.pending,
+                    next_snoop_transaction_id=(
+                        state.next_snoop_transaction_id
+                    ),
+                    next_data_buffer_id=state.next_data_buffer_id,
+                    pending_copybacks=writebacks,
+                    request_retry=state.request_retry,
+                    clean_residency=clean_residency,
+                )
             )
         if (
             pending.admission
@@ -5048,6 +5857,26 @@ class ChiCoherentHomeNode(
                 request_retry=state.request_retry,
                 clean_residency=clean_residency,
             )
+        )
+
+    @staticmethod
+    def _remove_clean_holder(
+        entry: ChiHomeDirectoryEntry,
+        requester_id: int,
+    ) -> ChiHomeDirectoryEntry:
+        """Remove only the clean WEOE source while preserving peer facts."""
+
+        sharers = set(entry.sharers)
+        sharers.discard(requester_id)
+        return ChiHomeDirectoryEntry(
+            entry.address,
+            sharers=frozenset(sharers),
+            unique_owner=(
+                None
+                if entry.unique_owner == requester_id
+                else entry.unique_owner
+            ),
+            shared_dirty_owner=entry.shared_dirty_owner,
         )
 
     def _discard_clean_residency(
@@ -5195,6 +6024,7 @@ __all__ = [
     "ChiHomeCopyBackAdmission",
     "ChiHomeWriteBackPending",
     "ChiHomeWriteEvictPending",
+    "ChiHomeWriteEvictOrEvictPending",
     "ChiCoherentHomeAction",
     "ChiCoherentHomeNode",
     "ChiCoherentHomeState",
@@ -5206,6 +6036,8 @@ __all__ = [
     "ChiCoherentRetryRequestMessage",
     "ChiEvictRetryAdmissionPolicy",
     "ChiReadUniqueNderrPolicy",
+    "ChiWriteEvictOrEvictDecision",
+    "ChiWriteEvictOrEvictPolicy",
     "ChiHomeAcceptCompAck",
     "ChiHomeAcceptCleanUnique",
     "ChiHomeAcceptMakeUnique",
@@ -5215,6 +6047,7 @@ __all__ = [
     "ChiHomeAcceptSnoopResponse",
     "ChiHomeAcceptWriteBackFull",
     "ChiHomeAcceptWriteEvictFull",
+    "ChiHomeAcceptWriteEvictOrEvict",
     "ChiHomeGrantPCredit",
     "ChiHomeDirectoryEntry",
     "ChiRnAcceptComp",
@@ -5229,10 +6062,12 @@ __all__ = [
     "ChiRnIssueMakeUnique",
     "ChiRnIssueWriteBackFull",
     "ChiRnIssueWriteEvictFull",
+    "ChiRnIssueWriteEvictOrEvict",
     "ChiRnRetryCoherentRequest",
     "ChiRnCopyBackOutcome",
     "ChiRnWriteBackPending",
     "ChiRnWriteEvictPending",
+    "ChiRnWriteEvictOrEvictPending",
     "ChiRnWriteCacheLine",
     "ChiSnoopResult",
 ]

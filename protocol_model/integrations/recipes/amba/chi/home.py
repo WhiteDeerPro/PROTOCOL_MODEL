@@ -26,6 +26,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiParticipantBinding,
     ChiParticipantPortBinding,
     ChiReadUniqueNderrPolicy,
+    ChiWriteEvictOrEvictPolicy,
     ChiVirtualDutFacets,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation import (
@@ -132,6 +133,9 @@ def bind_chi_issue_h_home_vdut(
     retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
     evict_retry_policy: ChiEvictRetryAdmissionPolicy | None = None,
     read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
+    write_evict_or_evict_policy: (
+        ChiWriteEvictOrEvictPolicy | None
+    ) = None,
 ) -> ChiIssueHHomeVdutAssembly:
     """Bind coherent Home behavior to one existing canonical VirtualDut.
 
@@ -244,6 +248,7 @@ def bind_chi_issue_h_home_vdut(
         retry_policy=retry_policy,
         evict_retry_policy=evict_retry_policy,
         read_unique_nderr_policy=read_unique_nderr_policy,
+        write_evict_or_evict_policy=write_evict_or_evict_policy,
     )
     binding = ChiParticipantBinding(
         (
@@ -284,6 +289,9 @@ def attach_chi_issue_h_home(
     retry_policy: ChiCoherentRetryAdmissionPolicy | None = None,
     evict_retry_policy: ChiEvictRetryAdmissionPolicy | None = None,
     read_unique_nderr_policy: ChiReadUniqueNderrPolicy | None = None,
+    write_evict_or_evict_policy: (
+        ChiWriteEvictOrEvictPolicy | None
+    ) = None,
     transmit_port_name: str = "chi_tx",
     receive_port_name: str = "chi_rx",
     clock_domain: str | None = None,
@@ -371,6 +379,7 @@ def attach_chi_issue_h_home(
         retry_policy=retry_policy,
         evict_retry_policy=evict_retry_policy,
         read_unique_nderr_policy=read_unique_nderr_policy,
+        write_evict_or_evict_policy=write_evict_or_evict_policy,
     )
 
 

@@ -325,7 +325,15 @@ WEF 已可接纳 pre-DBID `SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`，保�
 再以零 payload 的 `CopyBackWrData_I` 退休；SNP flow 仍归触发 Snoop 的 feature。Home 对 cancel
 只释放 DBID，不改 directory、backing 或 clean residency。当前固定 sparse retain，不包含自动
 victim/replacement、容量策略、下游 read hit、`CAH=1`、post-DBID Snoop、Retry/error 或
-`WriteEvictOrEvict`。
+级联 eviction。
+
+`WriteEvictOrEvict(CAH=0)` 也已作为独立 feature 闭合。Requester 从 resident `UC` 或 clean `SC`
+发起，`LikelyShared` 与 participant permission/directory holder 必须一致；显式 Home policy 可选择
+`CompDBIDResp→CopyBackWrData_{UC,SC}` data outcome，或 `Comp_I→CompAck` no-data outcome。前者安装
+Snoop-domain clean residency，后者不搬运数据；两者都只删除 requester authority、使 RN 进入 `I`，
+并保持 reference backing payload/version 不变。resolver 同时闭合 REQ、Home→Requester RSP、
+Requester→Home DAT 与 CompAck RSP 四条 flow，`UC/SC × data/no-data` resolved witness 各恰好运输三个
+packet。该 base 当前不含 same-line Snoop、Retry/error、CAH=1、容量驱动 outcome policy 或自动 replacement。
 
 clean `Evict` 已作为独立 REQ/RSP-only feature 闭合：RN 从 `UC/UCE/SC` 先转 `I`，Home 只条件删除
 matching clean holder 并返回 `Comp_I`；stale 或目录明确标记为 shared-dirty responsibility 的 hint
@@ -379,7 +387,9 @@ transport projection；其余 property 仍未闭合：
   no-SD `ReadNotSharedDirty` 也已闭合，其中后者以 CompAck 后的 Home backing/directory commit 结束
   dirty responsibility；clean/shared-dirty-peer `CleanUnique` 与显式 `UD` writeback 已闭合经 XP 的
   REQ/SNP/RSP/DAT route 和相应提交结果；clean `WriteEvictFull(CAH=0)` 则经 RN↔Home direct
-  topology 闭合 REQ/RSP/DAT，使用独立 clean residency core 且不提交 reference backing。
+  topology 闭合 REQ/RSP/DAT，使用独立 clean residency core 且不提交 reference backing；
+  `WriteEvictOrEvict(CAH=0)` 另闭合四条 capability flow、Home-selected data/no-data outcome 与四个
+  `UC/SC × outcome` 三 packet witness，同样不提交 reference backing。
   clean ReadUnique Retry modifier 复用 transaction-local
   Request-Retry/P-Credit 合同，Home grant 与 requester reissue 由同一 composition scheduler 自主推进；
   clean Evict Retry 以独立 feature/policy gate 复用同一 ledger，并闭合 exact RetryAck/P-Credit
@@ -395,7 +405,8 @@ transport projection；其余 property 仍未闭合：
   或超出该窄 witness 的 Retry/Snoop 到达次序。通用 participant plan、
   multi-Home/SAM authority、
   MakeUnique Retry/error/MTE Update/partial-write 扩展、自动 dirty victim/writeback scheduling、
-  deliberate dirty invalidate、`WriteEvictFull` CAH/post-DBID-Snoop/Retry/error modifier、`WriteEvictOrEvict`、
+  deliberate dirty invalidate、`WriteEvictFull` CAH/post-DBID-Snoop/Retry/error modifier、
+  `WriteEvictOrEvict` same-line-Snoop/Retry/error、CAH=1 与容量驱动 outcome policy、
   一般 same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；

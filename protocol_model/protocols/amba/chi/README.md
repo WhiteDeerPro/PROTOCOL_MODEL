@@ -142,7 +142,14 @@ evidence 区分原 TxnID 与 Home DBID。pre-DBID invalidating Snoop 已可把 p
 `LIVE_UC` 转为 `CANCELED_I`，保留 correlation 后以零 data/BE 的 `CopyBackWrData_I` 退休；Home 不
 覆盖新 directory owner、backing 或 clean residency。当前 retain policy 是 fixed-resident sparse
 cache，不包含容量、替换或自动 victim；`CAH=1`、post-DBID Snoop、Retry/error 与
-`WriteEvictOrEvict` 仍未闭合。
+级联 eviction 仍未闭合。
+`WriteEvictOrEvict(0x42, CAH=0)` 的双 outcome base 也已闭合。Requester 可从 resident `UC` 或
+clean `SC` 发起，并以 `LikelyShared` 区分；Home 的显式 policy 可以选择
+`CompDBIDResp→CopyBackWrData_{UC,SC}` data outcome，或 `Comp_I→CompAck` no-data outcome。两条路径
+都使 requester 进入 `I` 并只移除其 directory authority；前者安装 Snoop-domain clean residency，
+后者不搬运数据。四种 `UC/SC × data/no-data` resolved witness 都保持 reference backing
+payload/version 不变。该能力是受限模型 profile，不代表完整 CHI allocation/replacement policy；
+same-line Snoop、Retry/error、CAH=1 和容量驱动 outcome 尚未闭合。
 当前仍未实现 packed bit/raw pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty
 victim/writeback scheduling、coherent DERR/同一 accepted request 已发出 Snoop 后的 error、
 MakeUnique Retry/error/MTE Update/partial write、coherent Retry cancel/multi-waiter
@@ -151,9 +158,10 @@ facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，�
 `SystemSession` action loop；有界 scheduler budget 耗尽给出 inconclusive，不作为 network deadlock
 证明。
 
-后续扩展继续以可执行 lifecycle 为单位增加，不把此处建议固化成永久顺序。若继续扩展
-opcode/lifecycle，可比较 `WriteEvictOrEvict`、`WriteEvictFull` 的 CAH/post-DBID-Snoop/Retry/error modifier、
-deliberate dirty invalidate 与其他未闭合 operation；若下一场景首先受
+后续扩展继续以可执行 lifecycle 为单位增加，不把此处建议固化成永久顺序。当前相邻候选先闭合
+pending `WriteEvictOrEvict` 的 same-line invalidating-Snoop outcome/correlation；再比较
+`WriteEvictFull` 的 CAH/post-DBID-Snoop/Retry/error modifier、deliberate dirty invalidate 与其他未闭合
+operation。若下一场景首先受
 并发资源阻塞，则先闭合同一 Home/type 下多个 waiter 的具名选择、释放与公平性 witness。
 `PCrdGrant`、`RetryAck` 仍走 Home→Requester 的 RSP 路径；`PCrdReturn` 根据 CHI Issue H B2.5.6 走
 Requester→Home 的 REQ 路径，router 继续只按 `channel + TgtID` 透明转发。NodeID ownership 与首条

@@ -49,6 +49,7 @@ from .req import (
     ChiReqOpcode,
     ChiWriteBackFullMessage,
     ChiWriteEvictFullMessage,
+    ChiWriteEvictOrEvictMessage,
 )
 from .rsp import (
     ChiCompAckMessage,
@@ -448,6 +449,13 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
         ChiReqOpcode.WRITE_EVICT_FULL,
         7,
         ChiWriteEvictFullMessage,
+        _COPYBACK_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
+        ChiReqOpcode.WRITE_EVICT_OR_EVICT,
+        7,
+        ChiWriteEvictOrEvictMessage,
         _COPYBACK_FIELDS,
     ),
     _schema(

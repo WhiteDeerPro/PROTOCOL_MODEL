@@ -11,7 +11,8 @@ The profile is intentionally narrow.  It closes clean ``ReadShared`` and
 ``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
 clean ``Evict``, explicit ``UD`` ``WriteBackFull``, a
 ``WriteEvictFull(CAH=0)`` transfer into Snoop-domain clean residency and its
-pre-DBID invalidating-Snoop cancellation, one
+pre-DBID invalidating-Snoop cancellation, the two Home-selected
+``WriteEvictOrEvict(CAH=0)`` completion branches, one
 successful clean ``ReadUnique`` or clean ``Evict`` Request-Retry cycle, a
 pre-snoop ``ReadUnique`` NDERR completion, and their
 narrow composition with an independent same-line Snoop while the Requester
@@ -51,9 +52,11 @@ from ..participants.coherence import (
     ChiHomeAcceptMakeUnique,
     ChiHomeAcceptSnoopResponse,
     ChiHomeAcceptWriteEvictFull,
+    ChiHomeAcceptWriteEvictOrEvict,
     ChiHomeAcceptWriteBackFull,
     ChiHomeGrantPCredit,
     ChiHomeWriteEvictPending,
+    ChiHomeWriteEvictOrEvictPending,
     ChiHomeCopyBackAdmission,
     ChiHomeWriteBackPending,
     ChiRnAcceptComp,
@@ -67,12 +70,15 @@ from ..participants.coherence import (
     ChiRnIssueEvict,
     ChiRnIssueMakeUnique,
     ChiRnIssueWriteEvictFull,
+    ChiRnIssueWriteEvictOrEvict,
     ChiRnIssueWriteBackFull,
     ChiRnRetryCoherentRequest,
     ChiRnCopyBackOutcome,
     ChiRnWriteEvictPending,
+    ChiRnWriteEvictOrEvictPending,
     ChiRnWriteBackPending,
     ChiRnWriteCacheLine,
+    ChiWriteEvictOrEvictDecision,
 )
 from ..participants.progress import chi_line_resource_name
 from ..representation.dat import (
@@ -90,6 +96,7 @@ from ..representation.req import (
     ChiReadUniqueMessage,
     ChiWriteBackFullMessage,
     ChiWriteEvictFullMessage,
+    ChiWriteEvictOrEvictMessage,
 )
 from ..representation.response import ChiRespCode, ChiRespErr
 from ..representation.rsp import (
@@ -121,6 +128,7 @@ from .capability import (
     CHI_FEATURE_MAKE_UNIQUE,
     CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
     CHI_FEATURE_WRITE_EVICT_FULL,
+    CHI_FEATURE_WRITE_EVICT_OR_EVICT,
     ChiFeatureKey,
 )
 
@@ -145,6 +153,7 @@ _COHERENCE_FEATURES = frozenset(
         CHI_FEATURE_MAKE_UNIQUE,
         CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
         CHI_FEATURE_WRITE_EVICT_FULL,
+        CHI_FEATURE_WRITE_EVICT_OR_EVICT,
     )
 )
 _COHERENCE_RETRY_FEATURES = frozenset(
@@ -344,6 +353,29 @@ class ChiSubmitWriteEvictFull:
 
 
 @dataclass(frozen=True)
+class ChiSubmitWriteEvictOrEvict:
+    """Ask one Request Node to evict a clean UC or SC line."""
+
+    requester_node_id: int
+    request: ChiWriteEvictOrEvictMessage
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.requester_node_id, int)
+            or isinstance(self.requester_node_id, bool)
+            or self.requester_node_id < 0
+        ):
+            raise ValueError(
+                "CHI WriteEvictOrEvict requester NodeID must be non-negative"
+            )
+        if not isinstance(self.request, ChiWriteEvictOrEvictMessage):
+            raise TypeError(
+                "WriteEvictOrEvict submission requires "
+                "WriteEvictOrEvict"
+            )
+
+
+@dataclass(frozen=True)
 class ChiGrantCoherentHomePCredit:
     """Give the Home one opportunity to reserve a retry slot."""
 
@@ -377,6 +409,7 @@ ChiCoherenceAction = (
     | ChiSubmitEvict
     | ChiSubmitWriteBackFull
     | ChiSubmitWriteEvictFull
+    | ChiSubmitWriteEvictOrEvict
     | ChiDeliverCoherencePacket
     | ChiWriteUniqueCacheLine
     | ChiGrantCoherentHomePCredit
@@ -414,7 +447,15 @@ class ChiCoherenceState:
         tuple[int, int],
         ChiNetworkPacket,
     ] = field(default_factory=dict)
+    expected_write_evict_or_evict_responses: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
     expected_copyback_data: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
+    expected_write_evict_or_evict_acks: Mapping[
         tuple[int, int],
         ChiNetworkPacket,
     ] = field(default_factory=dict)
@@ -922,12 +963,111 @@ class ChiCoherenceState:
             "expected_write_evict_dbid_responses",
             MappingProxyType(write_evict_dbid_responses),
         )
-        if set(writeback_dbid_responses) & set(
-            write_evict_dbid_responses
+
+        write_evict_or_evict_responses = dict(
+            self.expected_write_evict_or_evict_responses
+        )
+        for key, response_packet in (
+            write_evict_or_evict_responses.items()
+        ):
+            response = (
+                response_packet.message
+                if isinstance(response_packet, ChiNetworkPacket)
+                else None
+            )
+            valid_key = (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and all(
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                    for value in key
+                )
+                and key[1] < (1 << 12)
+                and key[0] in request_nodes
+            )
+            data_buffer_id = (
+                response.data_buffer_id
+                if isinstance(
+                    response,
+                    (ChiCompMessage, ChiCompDBIDRespMessage),
+                )
+                else None
+            )
+            home_pending = (
+                self.home.pending_copybacks.get(data_buffer_id)
+                if data_buffer_id is not None
+                else None
+            )
+            rn_pending = (
+                request_nodes[key[0]].pending_copybacks.get(key[1])
+                if valid_key
+                else None
+            )
+            expects_data = (
+                isinstance(
+                    home_pending,
+                    ChiHomeWriteEvictOrEvictPending,
+                )
+                and home_pending.decision
+                is ChiWriteEvictOrEvictDecision.REQUEST_DATA
+            )
+            if (
+                not valid_key
+                or not isinstance(
+                    response,
+                    (ChiCompMessage, ChiCompDBIDRespMessage),
+                )
+                or response_packet.target_id != key[0]
+                or response_packet.packet_index != 0
+                or response_packet.packet_count != 1
+                or response.transaction_id != key[1]
+                or response.qos != 0
+                or response.response_error is not ChiRespErr.OK
+                or response.response != 0
+                or response.completer_busy != 0
+                or response.trace_tag
+                or (
+                    isinstance(response, ChiCompMessage)
+                    and response.tag_operation != 0
+                )
+                or not isinstance(
+                    home_pending,
+                    ChiHomeWriteEvictOrEvictPending,
+                )
+                or home_pending.requester_id != key[0]
+                or home_pending.request.transaction_id != key[1]
+                or expects_data
+                != isinstance(response, ChiCompDBIDRespMessage)
+                or not isinstance(
+                    rn_pending,
+                    ChiRnWriteEvictOrEvictPending,
+                )
+                or rn_pending.request != home_pending.request
+            ):
+                raise ValueError(
+                    "expected WriteEvictOrEvict response requires one exact "
+                    "Home-selected Comp or CompDBIDResp and matching Home/RN "
+                    "state"
+                )
+        object.__setattr__(
+            self,
+            "expected_write_evict_or_evict_responses",
+            MappingProxyType(write_evict_or_evict_responses),
+        )
+        response_key_sets = (
+            set(writeback_dbid_responses),
+            set(write_evict_dbid_responses),
+            set(write_evict_or_evict_responses),
+        )
+        if (
+            len(set().union(*response_key_sets))
+            != sum(len(items) for items in response_key_sets)
         ):
             raise ValueError(
-                "one Requester/TxnID cannot await dirty and clean "
-                "CompDBIDResp evidence simultaneously"
+                "one Requester/TxnID cannot await multiple CopyBack response "
+                "forms simultaneously"
             )
 
         copyback_data = dict(self.expected_copyback_data)
@@ -963,7 +1103,11 @@ class ChiCoherenceState:
                 is ChiHomeCopyBackAdmission.SNOOP_CANCELED
             )
             clean_evict = isinstance(
-                home_pending, ChiHomeWriteEvictPending
+                home_pending,
+                (
+                    ChiHomeWriteEvictPending,
+                    ChiHomeWriteEvictOrEvictPending,
+                ),
             )
             clean_backing_line = (
                 self.home.backing.line_at(
@@ -992,13 +1136,30 @@ class ChiCoherenceState:
                     clean_evict
                     and not canceled
                     and (
-                        message.response is not ChiRespCode.UC
+                        message.response
+                        is not (
+                            ChiRespCode.SC
+                            if isinstance(
+                                home_pending,
+                                ChiHomeWriteEvictOrEvictPending,
+                            )
+                            and home_pending.request.likely_shared
+                            else ChiRespCode.UC
+                        )
                         or not 0 <= message.data < (1 << 512)
                         or message.byte_enable != (1 << 64) - 1
                         or clean_backing_line is None
                         or message.data != clean_backing_line.data
                         or clean_backing_line.version
                         != home_pending.backing_version
+                        or (
+                            isinstance(
+                                home_pending,
+                                ChiHomeWriteEvictOrEvictPending,
+                            )
+                            and home_pending.decision
+                            is not ChiWriteEvictOrEvictDecision.REQUEST_DATA
+                        )
                     )
                 )
                 or (
@@ -1029,6 +1190,97 @@ class ChiCoherenceState:
             MappingProxyType(copyback_data),
         )
 
+        write_evict_or_evict_acks = dict(
+            self.expected_write_evict_or_evict_acks
+        )
+        for key, ack_packet in write_evict_or_evict_acks.items():
+            ack = (
+                ack_packet.message
+                if isinstance(ack_packet, ChiNetworkPacket)
+                else None
+            )
+            valid_key = (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and all(
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                    for value in key
+                )
+                and key[1] < (1 << 12)
+                and key[0] in request_nodes
+            )
+            home_pending = (
+                self.home.pending_copybacks.get(key[1])
+                if valid_key
+                else None
+            )
+            requester_state = (
+                request_nodes[key[0]] if valid_key else None
+            )
+            requester_pending = (
+                requester_state.pending_copybacks.get(
+                    home_pending.request.transaction_id
+                )
+                if (
+                    requester_state is not None
+                    and isinstance(
+                        home_pending,
+                        ChiHomeWriteEvictOrEvictPending,
+                    )
+                )
+                else None
+            )
+            line = (
+                requester_state.line_at(home_pending.request.address)
+                if (
+                    requester_state is not None
+                    and isinstance(
+                        home_pending,
+                        ChiHomeWriteEvictOrEvictPending,
+                    )
+                )
+                else None
+            )
+            if (
+                not valid_key
+                or not isinstance(ack, ChiCompAckMessage)
+                or ack_packet.source_id != key[0]
+                or ack_packet.packet_index != 0
+                or ack_packet.packet_count != 1
+                or ack.transaction_id != key[1]
+                or ack.qos != 0
+                or ack.trace_tag
+                or not isinstance(
+                    home_pending,
+                    ChiHomeWriteEvictOrEvictPending,
+                )
+                or home_pending.requester_id != key[0]
+                or home_pending.decision
+                is not ChiWriteEvictOrEvictDecision.COMPLETE_WITHOUT_DATA
+                or ack.response
+                != (
+                    ChiRespCode.SC
+                    if home_pending.request.likely_shared
+                    else ChiRespCode.UC
+                )
+                or requester_pending is not None
+                or line is None
+                or line.state is not ChiCacheState.I
+                or line.data is not None
+            ):
+                raise ValueError(
+                    "expected WriteEvictOrEvict CompAck requires one exact "
+                    "RN-produced UC/SC acknowledgement and matching Home "
+                    "no-data reservation"
+                )
+        object.__setattr__(
+            self,
+            "expected_write_evict_or_evict_acks",
+            MappingProxyType(write_evict_or_evict_acks),
+        )
+
         for pending in self.home.pending_copybacks.values():
             if pending.requester_id not in request_nodes:
                 raise ValueError(
@@ -1043,9 +1295,16 @@ class ChiCoherenceState:
                 pending.data_buffer_id,
             )
             response_evidence = (
-                write_evict_dbid_responses
-                if isinstance(pending, ChiHomeWriteEvictPending)
-                else writeback_dbid_responses
+                write_evict_or_evict_responses
+                if isinstance(
+                    pending,
+                    ChiHomeWriteEvictOrEvictPending,
+                )
+                else (
+                    write_evict_dbid_responses
+                    if isinstance(pending, ChiHomeWriteEvictPending)
+                    else writeback_dbid_responses
+                )
             )
             response_packet = response_evidence.get(response_key)
             response_message = (
@@ -1054,15 +1313,21 @@ class ChiCoherenceState:
                 else None
             )
             awaits_response = (
-                isinstance(response_message, ChiCompDBIDRespMessage)
+                isinstance(
+                    response_message,
+                    (ChiCompMessage, ChiCompDBIDRespMessage),
+                )
                 and response_message.data_buffer_id
                 == pending.data_buffer_id
             )
             awaits_copyback = copyback_key in copyback_data
-            if awaits_response == awaits_copyback:
+            awaits_ack = (
+                copyback_key in write_evict_or_evict_acks
+            )
+            if sum((awaits_response, awaits_copyback, awaits_ack)) != 1:
                 raise ValueError(
                     "one Home CopyBack reservation requires exactly "
-                    "one response or data delivery phase"
+                    "one response, data, or acknowledgement delivery phase"
                 )
             if awaits_response:
                 requester_pending = request_nodes[
@@ -1623,6 +1888,30 @@ class ChiCoherenceSession(
                 "residency core"
             )
         if (
+            CHI_FEATURE_WRITE_EVICT_OR_EVICT in features
+            and home.clean_residency_core is None
+        ):
+            raise ValueError(
+                "WriteEvictOrEvict requires a Home Snoop-domain clean "
+                "residency core for its data-accepting outcome"
+            )
+        if (
+            home.write_evict_or_evict_policy is not None
+            and CHI_FEATURE_WRITE_EVICT_OR_EVICT not in features
+        ):
+            raise ValueError(
+                "a configured Home WriteEvictOrEvict policy requires the "
+                "WriteEvictOrEvict feature"
+            )
+        if (
+            CHI_FEATURE_WRITE_EVICT_OR_EVICT in features
+            and home.write_evict_or_evict_policy is None
+        ):
+            raise ValueError(
+                "the WriteEvictOrEvict feature requires an explicit Home "
+                "outcome policy"
+            )
+        if (
             CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER in features
             and CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS not in features
         ):
@@ -1937,7 +2226,9 @@ class ChiCoherenceSession(
             and not state.expected_coherent_read_completions
             and not state.expected_writeback_dbid_responses
             and not state.expected_write_evict_dbid_responses
+            and not state.expected_write_evict_or_evict_responses
             and not state.expected_copyback_data
+            and not state.expected_write_evict_or_evict_acks
             and not state.expected_retry_acks
             and not state.expected_pcredit_grants
             and not state.expected_snoop_deliveries
@@ -1968,6 +2259,8 @@ class ChiCoherenceSession(
             return self._issue_writeback(state, action)
         if isinstance(action, ChiSubmitWriteEvictFull):
             return self._issue_write_evict(state, action)
+        if isinstance(action, ChiSubmitWriteEvictOrEvict):
+            return self._issue_write_evict_or_evict(state, action)
         if isinstance(action, ChiDeliverCoherencePacket):
             return self._deliver(state, action.packet)
         if isinstance(action, ChiWriteUniqueCacheLine):
@@ -1992,6 +2285,7 @@ class ChiCoherenceSession(
                 *state.expected_coherent_read_completions.values(),
                 *state.expected_writeback_dbid_responses.values(),
                 *state.expected_write_evict_dbid_responses.values(),
+                *state.expected_write_evict_or_evict_responses.values(),
                 *state.expected_retry_acks.values(),
                 *state.expected_pcredit_grants,
             )
@@ -2006,7 +2300,10 @@ class ChiCoherenceSession(
         if any(
             packet.source_id not in self.requester_node_ids
             or packet.target_id != self.home.node_id
-            for packet in state.expected_copyback_data.values()
+            for packet in (
+                *state.expected_copyback_data.values(),
+                *state.expected_write_evict_or_evict_acks.values(),
+            )
         ):
             return SemanticFault(
                 f"{self.name}.copyback_endpoint",
@@ -2171,7 +2468,13 @@ class ChiCoherenceSession(
             expected_write_evict_dbid_responses=(
                 state.expected_write_evict_dbid_responses
             ),
+            expected_write_evict_or_evict_responses=(
+                state.expected_write_evict_or_evict_responses
+            ),
             expected_copyback_data=state.expected_copyback_data,
+            expected_write_evict_or_evict_acks=(
+                state.expected_write_evict_or_evict_acks
+            ),
             expected_retry_acks=state.expected_retry_acks,
             expected_pcredit_grants=expected_pcredit_grants,
             expected_snoop_deliveries=(
@@ -2403,6 +2706,74 @@ class ChiCoherenceSession(
         transition = node.step(
             state.request_nodes[action.requester_node_id],
             ChiRnIssueWriteEvictFull(action.request),
+        )
+        return self._replace_request_node(
+            state,
+            action.requester_node_id,
+            transition,
+        )
+
+    def _issue_write_evict_or_evict(
+        self,
+        state: ChiCoherenceState,
+        action: ChiSubmitWriteEvictOrEvict,
+    ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        authority_fault = self._address_authority_fault(
+            action.request.address,
+            1 << action.request.size,
+        )
+        if authority_fault is not None:
+            return SemanticStep(state, fault=authority_fault)
+        node = self.request_nodes.get(action.requester_node_id)
+        if node is None:
+            return self._fault(
+                state,
+                "write_evict_or_evict_identity",
+                f"NodeID {action.requester_node_id} is not a registered RN",
+            )
+        if action.requester_node_id not in self.requester_node_ids:
+            return self._fault(
+                state,
+                "requester_authority",
+                f"NodeID {action.requester_node_id} cannot issue "
+                "WriteEvictOrEvict in this construction",
+            )
+        if (
+            CHI_FEATURE_WRITE_EVICT_OR_EVICT
+            not in self.enabled_features
+        ):
+            return self._fault(
+                state,
+                "write_evict_or_evict_feature",
+                "WriteEvictOrEvict is not enabled by the feature contract",
+            )
+        if any(
+            pending.request.address == action.request.address
+            for pending in state.home.pending.values()
+        ) or any(
+            pending.request.address == action.request.address
+            for pending in state.home.pending_copybacks.values()
+        ):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    chi_line_resource_name(
+                        self.home.name,
+                        action.request.address,
+                    ),
+                    ConstraintScope.SYSTEM,
+                    available=0,
+                    capacity=1,
+                    reason=(
+                        "WriteEvictOrEvict waits for the same-line Home "
+                        "transaction"
+                    ),
+                    location=self.name,
+                ),
+            )
+        transition = node.step(
+            state.request_nodes[action.requester_node_id],
+            ChiRnIssueWriteEvictOrEvict(action.request),
         )
         return self._replace_request_node(
             state,
@@ -2801,6 +3172,81 @@ class ChiCoherenceSession(
                     if retry_fault is not None:
                         return SemanticStep(state, fault=retry_fault)
                 action = ChiHomeAcceptCoherentRead(packet)
+            elif isinstance(message, ChiWriteEvictOrEvictMessage):
+                if packet.source_id not in self.requester_node_ids:
+                    return self._fault(
+                        state,
+                        "requester_authority",
+                        f"NodeID {packet.source_id} cannot issue "
+                        "WriteEvictOrEvict in this construction",
+                    )
+                if (
+                    CHI_FEATURE_WRITE_EVICT_OR_EVICT
+                    not in self.enabled_features
+                ):
+                    return self._fault(
+                        state,
+                        "feature_enablement",
+                        "WriteEvictOrEvict is not enabled by the resolved "
+                        "feature contract",
+                    )
+                response_key = (
+                    packet.source_id,
+                    message.transaction_id,
+                )
+                if (
+                    response_key
+                    in state.expected_write_evict_or_evict_responses
+                ):
+                    return self._fault(
+                        state,
+                        "write_evict_or_evict_request_replay",
+                        "WriteEvictOrEvict already selected a Home outcome "
+                        "for this Requester/TxnID",
+                    )
+                requester_state = state.request_nodes[packet.source_id]
+                pending_write_evict_or_evict = (
+                    requester_state.pending_copybacks.get(
+                        message.transaction_id
+                    )
+                )
+                entry = state.home.directory.get(message.address)
+                line = requester_state.line_at(message.address)
+                expected_state = (
+                    ChiCacheState.SC
+                    if message.likely_shared
+                    else ChiCacheState.UC
+                )
+                authority_matches = (
+                    entry is not None
+                    and (
+                        packet.source_id in entry.sharers
+                        and entry.shared_dirty_owner
+                        != packet.source_id
+                        if message.likely_shared
+                        else entry.unique_owner == packet.source_id
+                    )
+                )
+                if (
+                    packet.packet_index != 0
+                    or packet.packet_count != 1
+                    or not isinstance(
+                        pending_write_evict_or_evict,
+                        ChiRnWriteEvictOrEvictPending,
+                    )
+                    or pending_write_evict_or_evict.request != message
+                    or line is None
+                    or line.state is not expected_state
+                    or line.data is None
+                    or not authority_matches
+                ):
+                    return self._fault(
+                        state,
+                        "write_evict_or_evict_admission_evidence",
+                        "WriteEvictOrEvict does not match one canonical RN "
+                        "pending line and its encoded UC/SC Home authority",
+                    )
+                action = ChiHomeAcceptWriteEvictOrEvict(packet)
             elif isinstance(message, ChiWriteEvictFullMessage):
                 if packet.source_id not in self.requester_node_ids:
                     return self._fault(
@@ -3056,6 +3502,47 @@ class ChiCoherenceSession(
                 pending = state.home.pending.get(
                     message.transaction_id
                 )
+                write_evict_or_evict_pending = (
+                    state.home.pending_copybacks.get(
+                        message.transaction_id
+                    )
+                )
+                if (
+                    pending is None
+                    and not isinstance(
+                        write_evict_or_evict_pending,
+                        ChiHomeWriteEvictOrEvictPending,
+                    )
+                ):
+                    return self._fault(
+                        state,
+                        "completion_ack_correlation",
+                        "CompAck does not select one retained Home "
+                        "completion or WriteEvictOrEvict acknowledgement",
+                    )
+                if isinstance(
+                    write_evict_or_evict_pending,
+                    ChiHomeWriteEvictOrEvictPending,
+                ):
+                    if (
+                        CHI_FEATURE_WRITE_EVICT_OR_EVICT
+                        not in self.enabled_features
+                        or write_evict_or_evict_pending.decision
+                        is not (
+                            ChiWriteEvictOrEvictDecision
+                            .COMPLETE_WITHOUT_DATA
+                        )
+                        or state.expected_write_evict_or_evict_acks.get(
+                            (packet.source_id, message.transaction_id)
+                        )
+                        != packet
+                    ):
+                        return self._fault(
+                            state,
+                            "write_evict_or_evict_ack_correlation",
+                            "CompAck does not exactly match one Home "
+                            "no-data WriteEvictOrEvict outcome",
+                        )
                 if (
                     pending is not None
                     and isinstance(
@@ -3180,11 +3667,19 @@ class ChiCoherenceSession(
                     message.transaction_id
                 )
                 copyback_feature = (
-                    CHI_FEATURE_WRITE_EVICT_FULL
+                    CHI_FEATURE_WRITE_EVICT_OR_EVICT
                     if isinstance(
-                        home_pending, ChiHomeWriteEvictPending
+                        home_pending,
+                        ChiHomeWriteEvictOrEvictPending,
                     )
-                    else CHI_FEATURE_DIRTY_WRITEBACK
+                    else (
+                        CHI_FEATURE_WRITE_EVICT_FULL
+                        if isinstance(
+                            home_pending,
+                            ChiHomeWriteEvictPending,
+                        )
+                        else CHI_FEATURE_DIRTY_WRITEBACK
+                    )
                 )
                 if copyback_feature not in self.enabled_features:
                     return self._fault(
@@ -3219,7 +3714,13 @@ class ChiCoherenceSession(
             expected_write_evict_dbid_responses = (
                 state.expected_write_evict_dbid_responses
             )
+            expected_write_evict_or_evict_responses = (
+                state.expected_write_evict_or_evict_responses
+            )
             expected_copyback_data = state.expected_copyback_data
+            expected_write_evict_or_evict_acks = (
+                state.expected_write_evict_or_evict_acks
+            )
             expected_retry_acks = state.expected_retry_acks
             expected_pcredit_grants = state.expected_pcredit_grants
             expected_snoop_deliveries = (
@@ -3273,7 +3774,62 @@ class ChiCoherenceSession(
                 transition.fault is None
                 and transition.blocked is None
             ):
-                if isinstance(
+                if isinstance(message, ChiWriteEvictOrEvictMessage):
+                    if (
+                        len(transition.emissions) != 1
+                        or not isinstance(
+                            transition.emissions[0].message,
+                            (ChiCompMessage, ChiCompDBIDRespMessage),
+                        )
+                    ):
+                        return self._fault(
+                            state,
+                            "write_evict_or_evict_response_shape",
+                            "Home WriteEvictOrEvict acceptance must emit "
+                            "exactly one Comp or CompDBIDResp",
+                        )
+                    response_packet = transition.emissions[0]
+                    response = response_packet.message
+                    pending = transition.state.pending_copybacks.get(
+                        response.data_buffer_id
+                    )
+                    key = (
+                        response_packet.target_id,
+                        response.transaction_id,
+                    )
+                    if (
+                        response_packet.source_id != self.home.node_id
+                        or response_packet.target_id != packet.source_id
+                        or response_packet.packet_index != 0
+                        or response_packet.packet_count != 1
+                        or response.transaction_id
+                        != message.transaction_id
+                        or not isinstance(
+                            pending,
+                            ChiHomeWriteEvictOrEvictPending,
+                        )
+                        or pending.requester_id != packet.source_id
+                        or pending.request != message
+                        or (
+                            pending.decision
+                            is ChiWriteEvictOrEvictDecision.REQUEST_DATA
+                        )
+                        != isinstance(response, ChiCompDBIDRespMessage)
+                        or key
+                        in state.expected_write_evict_or_evict_responses
+                    ):
+                        return self._fault(
+                            state,
+                            "write_evict_or_evict_response_evidence",
+                            "Home response does not select one new "
+                            "WriteEvictOrEvict reservation and outcome",
+                        )
+                    responses = dict(
+                        state.expected_write_evict_or_evict_responses
+                    )
+                    responses[key] = response_packet
+                    expected_write_evict_or_evict_responses = responses
+                elif isinstance(
                     message,
                     (ChiWriteBackFullMessage, ChiWriteEvictFullMessage),
                 ):
@@ -3353,6 +3909,14 @@ class ChiCoherenceSession(
                         (packet.source_id, message.transaction_id)
                     ]
                     expected_copyback_data = copyback
+                elif isinstance(message, ChiCompAckMessage):
+                    key = (packet.source_id, message.transaction_id)
+                    if key in state.expected_write_evict_or_evict_acks:
+                        acks = dict(
+                            state.expected_write_evict_or_evict_acks
+                        )
+                        del acks[key]
+                        expected_write_evict_or_evict_acks = acks
                 retry_ack_emissions = tuple(
                     emission
                     for emission in transition.emissions
@@ -3630,7 +4194,13 @@ class ChiCoherenceSession(
                 expected_write_evict_dbid_responses=(
                     expected_write_evict_dbid_responses
                 ),
+                expected_write_evict_or_evict_responses=(
+                    expected_write_evict_or_evict_responses
+                ),
                 expected_copyback_data=expected_copyback_data,
+                expected_write_evict_or_evict_acks=(
+                    expected_write_evict_or_evict_acks
+                ),
                 expected_retry_acks=expected_retry_acks,
                 expected_pcredit_grants=expected_pcredit_grants,
                 expected_snoop_deliveries=(
@@ -3770,7 +4340,13 @@ class ChiCoherenceSession(
                 expected_write_evict_dbid_responses=(
                     state.expected_write_evict_dbid_responses
                 ),
+                expected_write_evict_or_evict_responses=(
+                    state.expected_write_evict_or_evict_responses
+                ),
                 expected_copyback_data=state.expected_copyback_data,
+                expected_write_evict_or_evict_acks=(
+                    state.expected_write_evict_or_evict_acks
+                ),
                 expected_retry_acks=state.expected_retry_acks,
                 expected_pcredit_grants=(
                     state.expected_pcredit_grants
@@ -3858,6 +4434,146 @@ class ChiCoherenceSession(
                     f"NodeID {packet.target_id} cannot receive Comp "
                     "in this construction",
                 )
+            write_evict_or_evict_pending = state.request_nodes[
+                packet.target_id
+            ].pending_copybacks.get(message.transaction_id)
+            home_write_evict_or_evict_pending = (
+                state.home.pending_copybacks.get(
+                    message.data_buffer_id
+                )
+            )
+            if isinstance(
+                write_evict_or_evict_pending,
+                ChiRnWriteEvictOrEvictPending,
+            ):
+                response_key = (
+                    packet.target_id,
+                    message.transaction_id,
+                )
+                if (
+                    CHI_FEATURE_WRITE_EVICT_OR_EVICT
+                    not in self.enabled_features
+                    or packet.source_id != self.home.node_id
+                    or state.expected_write_evict_or_evict_responses.get(
+                        response_key
+                    )
+                    != packet
+                ):
+                    return self._fault(
+                        state,
+                        "write_evict_or_evict_completion_correlation",
+                        "Comp does not exactly match one Home-produced "
+                        "WriteEvictOrEvict no-data outcome",
+                    )
+                transition = node.step(
+                    state.request_nodes[packet.target_id],
+                    ChiRnAcceptComp(packet),
+                )
+                responses = dict(
+                    state.expected_write_evict_or_evict_responses
+                )
+                acks = dict(
+                    state.expected_write_evict_or_evict_acks
+                )
+                if (
+                    transition.fault is None
+                    and transition.blocked is None
+                ):
+                    if (
+                        len(transition.emissions) != 1
+                        or not isinstance(
+                            transition.emissions[0].message,
+                            ChiCompAckMessage,
+                        )
+                    ):
+                        return self._fault(
+                            state,
+                            "write_evict_or_evict_ack_shape",
+                            "RN no-data completion must emit exactly one "
+                            "CompAck",
+                        )
+                    ack_packet = transition.emissions[0]
+                    ack = ack_packet.message
+                    ack_key = (
+                        ack_packet.source_id,
+                        ack.transaction_id,
+                    )
+                    if (
+                        ack_packet.source_id != packet.target_id
+                        or ack_packet.target_id != self.home.node_id
+                        or ack_packet.packet_index != 0
+                        or ack_packet.packet_count != 1
+                        or ack.transaction_id != message.data_buffer_id
+                        or ack.response
+                        != (
+                            ChiRespCode.SC
+                            if write_evict_or_evict_pending
+                            .request.likely_shared
+                            else ChiRespCode.UC
+                        )
+                        or ack_key in acks
+                    ):
+                        return self._fault(
+                            state,
+                            "write_evict_or_evict_ack_evidence",
+                            "RN CompAck does not select the consumed Home "
+                            "DBID and encoded UC/SC outcome",
+                        )
+                    del responses[response_key]
+                    acks[ack_key] = ack_packet
+                states = dict(state.request_nodes)
+                states[packet.target_id] = transition.state
+                candidate = ChiCoherenceState(
+                    home=state.home,
+                    request_nodes=states,
+                    expected_evict_completions=(
+                        state.expected_evict_completions
+                    ),
+                    expected_clean_unique_completions=(
+                        state.expected_clean_unique_completions
+                    ),
+                    expected_make_unique_completions=(
+                        state.expected_make_unique_completions
+                    ),
+                    expected_coherent_read_completions=(
+                        state.expected_coherent_read_completions
+                    ),
+                    expected_writeback_dbid_responses=(
+                        state.expected_writeback_dbid_responses
+                    ),
+                    expected_write_evict_dbid_responses=(
+                        state.expected_write_evict_dbid_responses
+                    ),
+                    expected_write_evict_or_evict_responses=responses,
+                    expected_copyback_data=state.expected_copyback_data,
+                    expected_write_evict_or_evict_acks=acks,
+                    expected_retry_acks=state.expected_retry_acks,
+                    expected_pcredit_grants=(
+                        state.expected_pcredit_grants
+                    ),
+                    expected_snoop_deliveries=(
+                        state.expected_snoop_deliveries
+                    ),
+                    expected_snoop_responses=(
+                        state.expected_snoop_responses
+                    ),
+                )
+                return self._finish(candidate, transition)
+            if isinstance(
+                home_write_evict_or_evict_pending,
+                ChiHomeWriteEvictOrEvictPending,
+            ) and (
+                home_write_evict_or_evict_pending.requester_id
+                == packet.target_id
+                and home_write_evict_or_evict_pending.request.transaction_id
+                == message.transaction_id
+            ):
+                return self._fault(
+                    state,
+                    "write_evict_or_evict_completion_correlation",
+                    "Comp replays a Home WriteEvictOrEvict outcome whose "
+                    "Requester response phase already completed",
+                )
             pending_request = state.request_nodes[
                 packet.target_id
             ].pending_transactions.get(message.transaction_id)
@@ -3915,7 +4631,13 @@ class ChiCoherenceSession(
                     expected_write_evict_dbid_responses=(
                         state.expected_write_evict_dbid_responses
                     ),
+                    expected_write_evict_or_evict_responses=(
+                        state.expected_write_evict_or_evict_responses
+                    ),
                     expected_copyback_data=state.expected_copyback_data,
+                    expected_write_evict_or_evict_acks=(
+                        state.expected_write_evict_or_evict_acks
+                    ),
                     expected_retry_acks=state.expected_retry_acks,
                     expected_pcredit_grants=(
                         state.expected_pcredit_grants
@@ -3984,7 +4706,13 @@ class ChiCoherenceSession(
                     expected_write_evict_dbid_responses=(
                         state.expected_write_evict_dbid_responses
                     ),
+                    expected_write_evict_or_evict_responses=(
+                        state.expected_write_evict_or_evict_responses
+                    ),
                     expected_copyback_data=state.expected_copyback_data,
+                    expected_write_evict_or_evict_acks=(
+                        state.expected_write_evict_or_evict_acks
+                    ),
                     expected_retry_acks=state.expected_retry_acks,
                     expected_pcredit_grants=(
                         state.expected_pcredit_grants
@@ -4060,7 +4788,13 @@ class ChiCoherenceSession(
                 expected_write_evict_dbid_responses=(
                     state.expected_write_evict_dbid_responses
                 ),
+                expected_write_evict_or_evict_responses=(
+                    state.expected_write_evict_or_evict_responses
+                ),
                 expected_copyback_data=state.expected_copyback_data,
+                expected_write_evict_or_evict_acks=(
+                    state.expected_write_evict_or_evict_acks
+                ),
                 expected_retry_acks=state.expected_retry_acks,
                 expected_pcredit_grants=(
                     state.expected_pcredit_grants
@@ -4153,7 +4887,13 @@ class ChiCoherenceSession(
                 expected_write_evict_dbid_responses=(
                     state.expected_write_evict_dbid_responses
                 ),
+                expected_write_evict_or_evict_responses=(
+                    state.expected_write_evict_or_evict_responses
+                ),
                 expected_copyback_data=state.expected_copyback_data,
+                expected_write_evict_or_evict_acks=(
+                    state.expected_write_evict_or_evict_acks
+                ),
                 expected_retry_acks=state.expected_retry_acks,
                 expected_pcredit_grants=(
                     state.expected_pcredit_grants
@@ -4186,59 +4926,113 @@ class ChiCoherenceSession(
                 response_key
                 in state.expected_writeback_dbid_responses
             )
-            write_evict_only = (
-                CHI_FEATURE_WRITE_EVICT_FULL
-                in self.enabled_features
-                and CHI_FEATURE_DIRTY_WRITEBACK
-                not in self.enabled_features
+            write_evict_or_evict_key = (
+                response_key
+                in state.expected_write_evict_or_evict_responses
             )
-            writeback_only = (
-                CHI_FEATURE_DIRTY_WRITEBACK
-                in self.enabled_features
-                and CHI_FEATURE_WRITE_EVICT_FULL
-                not in self.enabled_features
+            response_kinds = (
+                write_evict_key,
+                writeback_key,
+                write_evict_or_evict_key,
             )
-            write_evict_response = (
-                write_evict_key
-                or (not writeback_key and write_evict_only)
+            requester_copyback = state.request_nodes[
+                packet.target_id
+            ].pending_copybacks.get(message.transaction_id)
+            home_copyback = state.home.pending_copybacks.get(
+                message.data_buffer_id
             )
-            expected_response = (
-                state.expected_write_evict_dbid_responses.get(
-                    response_key
-                )
-                if write_evict_key
-                else state.expected_writeback_dbid_responses.get(
-                    response_key
-                )
+            enabled_copyback_features = self.enabled_features & {
+                CHI_FEATURE_DIRTY_WRITEBACK,
+                CHI_FEATURE_WRITE_EVICT_FULL,
+                CHI_FEATURE_WRITE_EVICT_OR_EVICT,
+            }
+            sole_copyback_feature = (
+                next(iter(enabled_copyback_features))
+                if len(enabled_copyback_features) == 1
+                else None
             )
-            if expected_response != packet:
-                if write_evict_key or (
-                    not writeback_key and write_evict_only
-                ):
-                    correlation_rule = (
-                        "write_evict_dbid_response_correlation"
+            correlation_rule = (
+                "write_evict_or_evict_response_correlation"
+                if (
+                    write_evict_or_evict_key
+                    or isinstance(
+                        requester_copyback,
+                        ChiRnWriteEvictOrEvictPending,
                     )
-                elif writeback_key or (
-                    not write_evict_key and writeback_only
-                ):
-                    correlation_rule = (
+                    or isinstance(
+                        home_copyback,
+                        ChiHomeWriteEvictOrEvictPending,
+                    )
+                    and sole_copyback_feature
+                    is CHI_FEATURE_WRITE_EVICT_OR_EVICT
+                )
+                else (
+                    "write_evict_dbid_response_correlation"
+                    if (
+                        write_evict_key
+                        or isinstance(
+                            requester_copyback,
+                            ChiRnWriteEvictPending,
+                        )
+                        or isinstance(
+                            home_copyback,
+                            ChiHomeWriteEvictPending,
+                        )
+                        and sole_copyback_feature
+                        is CHI_FEATURE_WRITE_EVICT_FULL
+                    )
+                    else (
                         "writeback_dbid_response_correlation"
+                        if (
+                            writeback_key
+                            or isinstance(
+                                requester_copyback,
+                                ChiRnWriteBackPending,
+                            )
+                            or isinstance(
+                                home_copyback,
+                                ChiHomeWriteBackPending,
+                            )
+                            and sole_copyback_feature
+                            is CHI_FEATURE_DIRTY_WRITEBACK
+                        )
+                        else "copyback_dbid_response_correlation"
                     )
-                else:
-                    correlation_rule = (
-                        "copyback_dbid_response_correlation"
-                    )
+                )
+            )
+            if sum(response_kinds) != 1:
                 return self._fault(
                     state,
                     correlation_rule,
-                    "CompDBIDResp does not exactly match one Home-produced "
+                    "CompDBIDResp does not select exactly one pending "
+                    "CopyBack response class",
+                )
+            if write_evict_or_evict_key:
+                expected_response = (
+                    state.expected_write_evict_or_evict_responses[
+                        response_key
+                    ]
+                )
+                response_feature = CHI_FEATURE_WRITE_EVICT_OR_EVICT
+            elif write_evict_key:
+                expected_response = (
+                    state.expected_write_evict_dbid_responses[
+                        response_key
+                    ]
+                )
+                response_feature = CHI_FEATURE_WRITE_EVICT_FULL
+            else:
+                expected_response = (
+                    state.expected_writeback_dbid_responses[response_key]
+                )
+                response_feature = CHI_FEATURE_DIRTY_WRITEBACK
+            if expected_response != packet:
+                return self._fault(
+                    state,
+                    correlation_rule,
+                    "CompDBIDResp does not exactly match the Home-produced "
                     "response",
                 )
-            response_feature = (
-                CHI_FEATURE_WRITE_EVICT_FULL
-                if write_evict_response
-                else CHI_FEATURE_DIRTY_WRITEBACK
-            )
             if response_feature not in self.enabled_features:
                 return self._fault(
                     state,
@@ -4260,7 +5054,13 @@ class ChiCoherenceSession(
         expected_write_evict_dbid_responses = (
             state.expected_write_evict_dbid_responses
         )
+        expected_write_evict_or_evict_responses = (
+            state.expected_write_evict_or_evict_responses
+        )
         expected_copyback_data = state.expected_copyback_data
+        expected_write_evict_or_evict_acks = (
+            state.expected_write_evict_or_evict_acks
+        )
         expected_retry_acks = state.expected_retry_acks
         expected_pcredit_grants = state.expected_pcredit_grants
         if (
@@ -4299,15 +5099,22 @@ class ChiCoherenceSession(
                     "RN CopyBackWrData does not select the consumed Home "
                     "DBID response",
                 )
-            dbid_responses = dict(
-                state.expected_write_evict_dbid_responses
-                if write_evict_response
-                else state.expected_writeback_dbid_responses
-            )
-            del dbid_responses[
-                (packet.target_id, message.transaction_id)
-            ]
-            if write_evict_response:
+            if write_evict_or_evict_key:
+                dbid_responses = dict(
+                    state.expected_write_evict_or_evict_responses
+                )
+            elif write_evict_key:
+                dbid_responses = dict(
+                    state.expected_write_evict_dbid_responses
+                )
+            else:
+                dbid_responses = dict(
+                    state.expected_writeback_dbid_responses
+                )
+            del dbid_responses[response_key]
+            if write_evict_or_evict_key:
+                expected_write_evict_or_evict_responses = dbid_responses
+            elif write_evict_key:
                 expected_write_evict_dbid_responses = dbid_responses
             else:
                 expected_writeback_dbid_responses = dbid_responses
@@ -4361,7 +5168,13 @@ class ChiCoherenceSession(
                 expected_write_evict_dbid_responses=(
                     expected_write_evict_dbid_responses
                 ),
+                expected_write_evict_or_evict_responses=(
+                    expected_write_evict_or_evict_responses
+                ),
                 expected_copyback_data=expected_copyback_data,
+                expected_write_evict_or_evict_acks=(
+                    expected_write_evict_or_evict_acks
+                ),
                 expected_retry_acks=expected_retry_acks,
                 expected_pcredit_grants=expected_pcredit_grants,
                 expected_snoop_deliveries=(
@@ -4519,7 +5332,13 @@ class ChiCoherenceSession(
             expected_write_evict_dbid_responses=(
                 state.expected_write_evict_dbid_responses
             ),
+            expected_write_evict_or_evict_responses=(
+                state.expected_write_evict_or_evict_responses
+            ),
             expected_copyback_data=state.expected_copyback_data,
+            expected_write_evict_or_evict_acks=(
+                state.expected_write_evict_or_evict_acks
+            ),
             expected_retry_acks=state.expected_retry_acks,
             expected_pcredit_grants=state.expected_pcredit_grants,
             expected_snoop_deliveries=(

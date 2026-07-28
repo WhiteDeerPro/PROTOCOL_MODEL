@@ -36,6 +36,8 @@ from ..participants.capability import (
     CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+    CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+    CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
     CHI_MAKE_UNIQUE_HOME_CAPABILITIES,
     CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES,
     CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES,
@@ -113,6 +115,9 @@ CHI_FEATURE_DIRTY_WRITEBACK = ChiFeatureKey(
 CHI_FEATURE_WRITE_EVICT_FULL = ChiFeatureKey(
     "chi.feature.write_evict_full"
 )
+CHI_FEATURE_WRITE_EVICT_OR_EVICT = ChiFeatureKey(
+    "chi.feature.write_evict_or_evict"
+)
 CHI_FEATURE_CLEAN_EVICT = ChiFeatureKey(
     "chi.feature.clean_evict"
 )
@@ -170,6 +175,9 @@ CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE = ChiCapabilityKey(
 )
 CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE = ChiCapabilityKey(
     "chi.system.write_evict_full.lifecycle"
+)
+CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.write_evict_or_evict.lifecycle"
 )
 CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE = ChiCapabilityKey(
     "chi.system.clean_evict.lifecycle"
@@ -937,6 +945,50 @@ CHI_WRITE_EVICT_FULL_DEFINITION = ChiFeatureDefinition(
     requires_coherence_domain=True,
 )
 
+CHI_WRITE_EVICT_OR_EVICT_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_WRITE_EVICT_OR_EVICT,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "write_evict_or_evict_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "write_evict_or_evict_response",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "write_evict_or_evict_copyback_data",
+            "requester",
+            "home",
+            ChiChannelKind.DAT,
+        ),
+        ChiFlowRequirement(
+            "write_evict_or_evict_completion_ack",
+            "requester",
+            "home",
+            ChiChannelKind.RSP,
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE,)
+    ),
+    requires_coherence_domain=True,
+)
+
 CHI_CLEAN_EVICT_DEFINITION = ChiFeatureDefinition(
     CHI_FEATURE_CLEAN_EVICT,
     roles=(
@@ -1090,6 +1142,9 @@ CHI_BUILTIN_FEATURE_CATALOG = ChiFeatureCatalog(
         ),
         CHI_FEATURE_DIRTY_WRITEBACK: CHI_DIRTY_WRITEBACK_DEFINITION,
         CHI_FEATURE_WRITE_EVICT_FULL: CHI_WRITE_EVICT_FULL_DEFINITION,
+        CHI_FEATURE_WRITE_EVICT_OR_EVICT: (
+            CHI_WRITE_EVICT_OR_EVICT_DEFINITION
+        ),
         CHI_FEATURE_CLEAN_EVICT: CHI_CLEAN_EVICT_DEFINITION,
         CHI_FEATURE_CLEAN_EVICT_RETRY: CHI_CLEAN_EVICT_RETRY_DEFINITION,
         CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY: (
@@ -1706,6 +1761,7 @@ __all__ = [
     "CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION",
     "CHI_DIRTY_WRITEBACK_DEFINITION",
     "CHI_WRITE_EVICT_FULL_DEFINITION",
+    "CHI_WRITE_EVICT_OR_EVICT_DEFINITION",
     "CHI_MAKE_UNIQUE_DEFINITION",
     "CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION",
     "CHI_FEATURE_READ_NO_SNP_NDERR",
@@ -1720,6 +1776,7 @@ __all__ = [
     "CHI_FEATURE_DIRTY_UNIQUE_TRANSFER",
     "CHI_FEATURE_DIRTY_WRITEBACK",
     "CHI_FEATURE_WRITE_EVICT_FULL",
+    "CHI_FEATURE_WRITE_EVICT_OR_EVICT",
     "CHI_FEATURE_MAKE_UNIQUE",
     "CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY",
     "CHI_MESI_NO_SD_REQUIRED_FEATURES",
@@ -1741,6 +1798,7 @@ __all__ = [
     "CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE",
     "CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE",
     "CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE",
+    "CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE",
     "CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE",
     "CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE",
     "ChiBoundFlowRequirement",

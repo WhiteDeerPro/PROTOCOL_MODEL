@@ -32,6 +32,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
     ChiWriteBackFullMessage,
+    ChiWriteEvictOrEvictMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.req import (
     ChiCleanUniqueMessage,
@@ -66,6 +67,15 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                     0xE000,
                     qos=3,
                     trace_tag=True,
+                ),
+                None,
+            ),
+            (
+                ChiWriteEvictOrEvictMessage(
+                    0x13,
+                    0xE040,
+                    likely_shared=True,
+                    qos=4,
                 ),
                 None,
             ),
@@ -986,6 +996,75 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                 )
                 with self.assertRaises(ChiLogicalCodecError):
                     self.codec.encode(message, profile)
+
+    def test_write_evict_or_evict_encodes_both_clean_permissions(self) -> None:
+        cases = (
+            ("UC", ChiWriteEvictOrEvictMessage(0x21, 0x9000), False),
+            (
+                "SC",
+                ChiWriteEvictOrEvictMessage(
+                    0x22,
+                    0x9040,
+                    likely_shared=True,
+                ),
+                True,
+            ),
+        )
+
+        for permission, request, likely_shared in cases:
+            with self.subTest(permission=permission):
+                record = self.codec.encode(request)
+
+                self.assertEqual(
+                    0x42,
+                    int(ChiReqOpcode.WRITE_EVICT_OR_EVICT),
+                )
+                self.assertIs(
+                    ChiReqOpcode.WRITE_EVICT_OR_EVICT,
+                    request.opcode,
+                )
+                self.assertEqual(likely_shared, record.fields["LikelyShared"])
+                self.assertEqual(0b1101, record.fields["MemAttr"])
+                self.assertIs(True, record.fields["ExpCompAck"])
+                self.assertIs(False, record.fields["CAH"])
+                self.assertEqual(request, self.codec.decode(record))
+
+        invalid_cases = (
+            (
+                ChiWriteEvictOrEvictMessage(
+                    0x23,
+                    0x9080,
+                    memory_attributes=0b0101,
+                ),
+                "MemAttr",
+            ),
+            (
+                ChiWriteEvictOrEvictMessage(
+                    0x24,
+                    0x90C0,
+                    expect_completion_ack=False,
+                ),
+                "ExpCompAck=1",
+            ),
+            (
+                ChiWriteEvictOrEvictMessage(
+                    0x25,
+                    0x9100,
+                    copy_at_home=True,
+                ),
+                "CAH=0",
+            ),
+        )
+        for request, expected in invalid_cases:
+            with self.subTest(expected=expected):
+                reasons = ChiIssueHReqProfile().explain(request)
+
+                self.assertTrue(
+                    any(expected in reason for reason in reasons),
+                    reasons,
+                )
+                with self.assertRaises(ChiLogicalCodecError):
+                    self.codec.encode(request)
 
     def test_unknown_opcode_is_a_codec_coverage_gap(self) -> None:
         record = ChiLogicalFieldRecord(

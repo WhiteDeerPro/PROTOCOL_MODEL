@@ -57,7 +57,8 @@ class ChiCopyBackWrDataMessage:
     information is imprecise and ignored.  The current participant
     lifecycles accept full-line ``UD_PD`` for live dirty WriteBack,
     ``I`` with zero data/byte-enable for its invalidating-Snoop cancellation,
-    or full-line ``UC`` for ``WriteEvictFull(CAH=0)``.
+    full-line ``UC`` for ``WriteEvictFull(CAH=0)``, or full-line ``UC``/``SC``
+    for the data outcome of ``WriteEvictOrEvict(CAH=0)``.
     """
 
     chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.DAT

@@ -15,8 +15,11 @@ from protocol_model.semantics import ConstraintScope, ResourceDemand
 
 from ..participants.coherence import (
     ChiCoherentTransactionPending,
+    ChiHomeWriteEvictOrEvictPending,
     ChiHomeWriteEvictPending,
     ChiHomeWriteBackPending,
+    ChiRnWriteEvictOrEvictPending,
+    ChiWriteEvictOrEvictDecision,
 )
 from ..participants.progress import chi_line_resource_name
 from ..representation.domain import ChiChannelKind
@@ -25,6 +28,7 @@ from ..representation.req import (
     ChiCleanUniqueMessage,
     ChiEvictMessage,
     ChiMakeUniqueMessage,
+    ChiWriteEvictOrEvictMessage,
     ChiWriteEvictFullMessage,
     ChiWriteBackFullMessage,
 )
@@ -58,6 +62,7 @@ class ChiLineRelease(str, Enum):
     COMP_ACK = "CompAck"
     COMP_DATA = "CompData"
     COMP_DBID_RESP = "CompDBIDResp"
+    COMP_OR_COMP_DBID_RESP = "Comp|CompDBIDResp"
     COPY_BACK_WR_DATA = "CopyBackWrData"
 
 
@@ -294,7 +299,11 @@ def _held_lines(
     for pending in state.coherence.home.pending_copybacks.values():
         assert isinstance(
             pending,
-            (ChiHomeWriteBackPending, ChiHomeWriteEvictPending),
+            (
+                ChiHomeWriteBackPending,
+                ChiHomeWriteEvictPending,
+                ChiHomeWriteEvictOrEvictPending,
+            ),
         )
         held.append(
             ChiHeldLine(
@@ -309,7 +318,18 @@ def _held_lines(
                     pending.requester_id,
                     pending.request.transaction_id,
                 ),
-                ChiLineRelease.COPY_BACK_WR_DATA,
+                (
+                    ChiLineRelease.COMP_ACK
+                    if (
+                        isinstance(
+                            pending,
+                            ChiHomeWriteEvictOrEvictPending,
+                        )
+                        and pending.decision
+                        is ChiWriteEvictOrEvictDecision.COMPLETE_WITHOUT_DATA
+                    )
+                    else ChiLineRelease.COPY_BACK_WR_DATA
+                ),
                 pending.data_buffer_id,
             )
         )
@@ -345,7 +365,11 @@ def _held_lines(
             request = pending.request
             assert isinstance(
                 request,
-                (ChiWriteBackFullMessage, ChiWriteEvictFullMessage),
+                (
+                    ChiWriteBackFullMessage,
+                    ChiWriteEvictFullMessage,
+                    ChiWriteEvictOrEvictMessage,
+                ),
             )
             held.append(
                 ChiHeldLine(
@@ -356,7 +380,14 @@ def _held_lines(
                     ChiCoherenceTxnRef(
                         home.node_id, node_id, request.transaction_id
                     ),
-                    ChiLineRelease.COMP_DBID_RESP,
+                    (
+                        ChiLineRelease.COMP_OR_COMP_DBID_RESP
+                        if isinstance(
+                            pending,
+                            ChiRnWriteEvictOrEvictPending,
+                        )
+                        else ChiLineRelease.COMP_DBID_RESP
+                    ),
                     request.transaction_id,
                 )
             )

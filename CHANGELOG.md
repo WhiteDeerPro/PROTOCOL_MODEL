@@ -4,6 +4,11 @@
 
 - 将回归入口分为 smoke、职责 target、integration、迁移哨兵和 full baseline，增加 suite manifest 自检与
   Python 3.10/3.13 最小 CI；同时收敛仓库工作约定，并让根 Roadmap 只维护长期依赖和 canonical 施工入口。
+- 扩展 CHI Issue H 模型切片：补齐 canonical cache/Home binding、CleanUnique、Evict、
+  MakeUnique、WriteBackFull、WriteEvictFull/WriteEvictOrEvict、Retry/error 与同地址 Snoop 的受限可执行
+  生命周期，并保持实现范围和完整 CHI profile 的边界可见。
+- 整理公开 Showcase 为可执行 Gallery：保留 2×2 clean-coherence mesh 作为协议语义案例，增加异构
+  ring/star 与 4×4 mesh 的拓扑形态/规模案例，退役浅层 routed-read 和内部宣传素材。
 
 ## 0.4.0 — interface scopes, executable fabrics, and CHI network slices (2026-07-27)
 

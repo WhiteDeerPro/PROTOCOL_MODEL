@@ -1,0 +1,205 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "chi-issue-h-topology-shapes",
+  "run_id": "chi-issue-h-topology-shapes",
+  "generated_at": "2026-07-28T17:32:17.008178+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "interface",
+      "identity": "chi.issue_h.restricted_direct_read",
+      "definition": "ReadNoSnp to one correlated CompData completion",
+      "parameters": {
+        "issue": "H",
+        "operation": "ReadNoSnp -> CompData",
+        "data_width": 128,
+        "requester_node_id": 7,
+        "home_node_id": 33,
+        "outstanding_capacity": 2,
+        "home_request_capacity": 1,
+        "router_queue_capacity": 1,
+        "link_credit_capacity": 1,
+        "channels": [
+          "REQ",
+          "DAT"
+        ]
+      }
+    },
+    {
+      "scope": "transport",
+      "identity": "chi.issue_h.caller_built_topology_shapes",
+      "definition": "finite directed REQ/DAT hops and exact-NodeID store-forward routers",
+      "parameters": {
+        "heterogeneous-ring-star": {
+          "router_count": 4,
+          "physical_backbone_edge_count": 4,
+          "directed_hop_count": 16,
+          "exact_route_count": 16
+        },
+        "four-by-four-mesh": {
+          "router_count": 16,
+          "physical_backbone_edge_count": 24,
+          "directed_hop_count": 56,
+          "exact_route_count": 64
+        }
+      }
+    },
+    {
+      "scope": "system",
+      "identity": "chi.issue_h.topology_shape_witnesses",
+      "definition": "one operation executed over two explicitly elaborated caller-owned SystemProtocol topologies",
+      "parameters": {
+        "cases": [
+          "heterogeneous-ring-star",
+          "four-by-four-mesh"
+        ],
+        "topology_in_protocol_core": false
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "heterogeneous-ring-star",
+      "expected": "REQ and DAT take opposite halves of a bidirectional ring while uneven leaf attachments remain explicit",
+      "observed": "PASS",
+      "artifacts": []
+    },
+    {
+      "name": "four-by-four-mesh",
+      "expected": "a corner read completes over deterministic routes in a generated 4x4 bidirectional mesh",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "heterogeneous-ring-star": {
+      "committed_microsteps": 111,
+      "request_route": [
+        "rn_to_r0",
+        "r0_to_r1",
+        "r1_to_r2",
+        "r2_to_hn"
+      ],
+      "data_route": [
+        "hn_to_r2",
+        "r2_to_r3",
+        "r3_to_r0",
+        "r0_to_rn"
+      ],
+      "assertions": {
+        "verdict_is_pass": true,
+        "one_completion": true,
+        "read_value_matches": true,
+        "router_accept_count_matches_routes": true,
+        "router_forward_count_matches_routes": true,
+        "lineage_covers_every_executed_hop": true,
+        "session_is_quiescent": true
+      }
+    },
+    "four-by-four-mesh": {
+      "committed_microsteps": 351,
+      "request_route": [
+        "rn_to_r00",
+        "r00_to_r10",
+        "r10_to_r20",
+        "r20_to_r30",
+        "r30_to_r31",
+        "r31_to_r32",
+        "r32_to_r33",
+        "r33_to_hn"
+      ],
+      "data_route": [
+        "hn_to_r33",
+        "r33_to_r23",
+        "r23_to_r13",
+        "r13_to_r03",
+        "r03_to_r02",
+        "r02_to_r01",
+        "r01_to_r00",
+        "r00_to_rn"
+      ],
+      "assertions": {
+        "verdict_is_pass": true,
+        "one_completion": true,
+        "read_value_matches": true,
+        "router_accept_count_matches_routes": true,
+        "router_forward_count_matches_routes": true,
+        "lineage_covers_every_executed_hop": true,
+        "session_is_quiescent": true
+      }
+    }
+  },
+  "metadata": {
+    "publication": "showcase/generated/system/chi-issue-h-topology-shapes",
+    "scope": "caller_built_chi_topology_shape_witnesses",
+    "raw_waveform": false,
+    "runtime_executable": true,
+    "topology_source": "SystemProtocol"
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "system_topology_and_route",
+      "path": "four-by-four-mesh.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "system_topology_and_route",
+      "path": "heterogeneous-ring-star.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "scenario_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "route_and_scope_comparison",
+      "path": "route-comparison.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "system_topology_and_route_source",
+      "path": "sources/four-by-four-mesh.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "system_topology_and_route_source",
+      "path": "sources/heterogeneous-ring-star.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "route_and_scope_comparison_source",
+      "path": "sources/route-comparison.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    }
+  ]
+}

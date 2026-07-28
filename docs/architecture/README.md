@@ -29,7 +29,7 @@ Observation / Session / Trace / Artifact 横向服务上述对象
 
 | 概念 | Canonical 文档 | 相邻导读或实例 |
 |---|---|---|
-| 工程术语、亲缘关系与命名后缀 | [术语体系与词典](terminology.md) | 本索引、[全书术语卡片](../../book/glossary.md) |
+| 工程术语、亲缘关系与命名后缀 | [术语体系与词典](terminology.md) | 本索引、各专题首次定义 |
 | 基础语义 | [基础语义](technical-route/01-semantic-foundation.md) | [术语表](terminology.md) |
 | Pattern、InterfaceProtocol、InterfaceSession | [Pattern 与 InterfaceProtocol](technical-route/02-patterns-and-interface-protocol.md) | 各协议专题 |
 | observation、AtomicFrame | [Observation 层](observation-layer.md) | [执行与证据](technical-route/06-observation-execution-evidence.md) |

@@ -64,5 +64,5 @@ body:
           required: true
         - label: The proposal keeps expected and observed verdicts distinct.
           required: true
-        - label: The completed public case will generate both waveform and causal-graph evidence through `showcase/demos/axi4/run.py`.
+        - label: The completed public case will generate its declared views and machine evidence through the matching named Showcase generator.
           required: true

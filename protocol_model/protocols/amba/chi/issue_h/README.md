@@ -4,10 +4,6 @@
 builder；调用方先用 SystemProtocol 声明 VirtualDut、TransportPort 和有向 hop，再选择这里的 family
 component/session 执行相应 profile。
 
-一次用户注入的第三方流程图材料已经提炼为
-[`CHI 注入流程资料摘录与建模映射`](../../../../../docs/reviews/chi-injected-flow-digest.md)。该文档只作
-功能发现与方法比较，不是规范、实现状态或第二份 roadmap。
-
 ## 源码切面
 
 ```text

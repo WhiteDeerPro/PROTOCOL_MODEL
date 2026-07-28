@@ -8,8 +8,7 @@ UNITTEST_FLAGS ?= -q
 	test-integration \
 	test-sentinels \
 	test-release \
-	showcase-axi4 \
-	showcase-overview
+	showcase-axi4
 
 smoke:
 	$(PYTHON) -m unittest $(UNITTEST_FLAGS) tests.suites.smoke
@@ -34,7 +33,3 @@ test-release:
 
 showcase-axi4:
 	$(PYTHON) showcase/demos/axi4/run.py
-
-showcase-overview:
-	$(PYTHON) showcase/materials/assets/overview/render_png.py
-	$(PYTHON) -m protocol_model

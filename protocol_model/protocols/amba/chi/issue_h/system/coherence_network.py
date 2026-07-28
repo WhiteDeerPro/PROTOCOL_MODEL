@@ -48,6 +48,7 @@ from .coherence import (
     ChiSubmitCleanUnique,
     ChiSubmitCoherentRead,
     ChiSubmitEvict,
+    ChiSubmitMakeUnique,
     ChiSubmitWriteBackFull,
     ChiWriteUniqueCacheLine,
 )
@@ -78,6 +79,7 @@ class ChiAdvanceCoherenceNetwork:
 ChiCoherenceNetworkAction = (
     ChiSubmitCoherentRead
     | ChiSubmitCleanUnique
+    | ChiSubmitMakeUnique
     | ChiSubmitEvict
     | ChiSubmitWriteBackFull
     | ChiWriteUniqueCacheLine
@@ -472,6 +474,7 @@ class ChiCoherenceNetworkSession(
             (
                 ChiSubmitCoherentRead,
                 ChiSubmitCleanUnique,
+                ChiSubmitMakeUnique,
                 ChiSubmitEvict,
                 ChiSubmitWriteBackFull,
             ),

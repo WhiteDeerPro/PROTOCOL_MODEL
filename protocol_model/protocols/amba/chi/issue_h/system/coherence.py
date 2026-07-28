@@ -45,6 +45,7 @@ from ..participants.coherence import (
     ChiHomeAcceptCopyBackData,
     ChiHomeAcceptCoherentRead,
     ChiHomeAcceptEvict,
+    ChiHomeAcceptMakeUnique,
     ChiHomeAcceptSnoopResponse,
     ChiHomeAcceptWriteBackFull,
     ChiHomeGrantPCredit,
@@ -58,6 +59,7 @@ from ..participants.coherence import (
     ChiRnIssueCleanUnique,
     ChiRnIssueCoherentRead,
     ChiRnIssueEvict,
+    ChiRnIssueMakeUnique,
     ChiRnIssueWriteBackFull,
     ChiRnRetryCoherentRequest,
     ChiRnWriteBackOutcome,
@@ -73,6 +75,7 @@ from ..representation.packet import ChiNetworkPacket
 from ..representation.req import (
     ChiCleanUniqueMessage,
     ChiEvictMessage,
+    ChiMakeUniqueMessage,
     ChiReadNotSharedDirtyMessage,
     ChiReadSharedMessage,
     ChiReadUniqueMessage,
@@ -89,6 +92,7 @@ from ..representation.rsp import (
 )
 from ..representation.snp import (
     ChiSnpCleanInvalidMessage,
+    ChiSnpMakeInvalidMessage,
     ChiSnpNotSharedDirtyMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
@@ -103,6 +107,7 @@ from .capability import (
     CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
     CHI_FEATURE_DIRTY_WRITEBACK,
+    CHI_FEATURE_MAKE_UNIQUE,
     CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
     ChiFeatureKey,
 )
@@ -124,8 +129,25 @@ _COHERENCE_FEATURES = frozenset(
         CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
         CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
         CHI_FEATURE_DIRTY_WRITEBACK,
+        CHI_FEATURE_MAKE_UNIQUE,
         CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
     )
+)
+_COHERENCE_SNOOP_TYPES = (
+    ChiSnpCleanInvalidMessage,
+    ChiSnpMakeInvalidMessage,
+    ChiSnpNotSharedDirtyMessage,
+    ChiSnpSharedMessage,
+    ChiSnpUniqueMessage,
+)
+_COHERENCE_SNOOP_RESPONSE_TYPES = (
+    ChiSnpRespMessage,
+    ChiSnpRespDataMessage,
+)
+_COHERENT_READ_TYPES = (
+    ChiReadSharedMessage,
+    ChiReadNotSharedDirtyMessage,
+    ChiReadUniqueMessage,
 )
 
 
@@ -178,6 +200,33 @@ class ChiSubmitCleanUnique:
         if not isinstance(self.request, ChiCleanUniqueMessage):
             raise TypeError(
                 "CleanUnique submission requires CleanUnique"
+            )
+
+
+@dataclass(frozen=True)
+class ChiSubmitMakeUnique:
+    """Issue MakeUnique with one RN-local full-line store intent."""
+
+    requester_node_id: int
+    request: ChiMakeUniqueMessage
+    data: int
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.requester_node_id, int)
+            or isinstance(self.requester_node_id, bool)
+            or self.requester_node_id < 0
+        ):
+            raise ValueError("CHI requester NodeID must be non-negative")
+        if not isinstance(self.request, ChiMakeUniqueMessage):
+            raise TypeError("MakeUnique submission requires MakeUnique")
+        if (
+            not isinstance(self.data, int)
+            or isinstance(self.data, bool)
+            or not 0 <= self.data < (1 << 512)
+        ):
+            raise ValueError(
+                "MakeUnique store intent must fit one 512-bit cache line"
             )
 
 
@@ -282,6 +331,7 @@ class ChiRetryCoherentRequest:
 ChiCoherenceAction = (
     ChiSubmitCoherentRead
     | ChiSubmitCleanUnique
+    | ChiSubmitMakeUnique
     | ChiSubmitEvict
     | ChiSubmitWriteBackFull
     | ChiDeliverCoherencePacket
@@ -299,7 +349,27 @@ class ChiCoherenceState:
     request_nodes: Mapping[int, ChiCoherentRnState]
     expected_evict_completions: Mapping[
         tuple[int, int],
-        ChiCompMessage,
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
+    expected_clean_unique_completions: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
+    expected_make_unique_completions: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
+    expected_coherent_read_completions: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
+    expected_snoop_deliveries: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
+    expected_snoop_responses: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
     ] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -310,36 +380,442 @@ class ChiCoherenceState:
             MappingProxyType(request_nodes),
         )
         expected = dict(self.expected_evict_completions)
-        if any(
-            not isinstance(key, tuple)
-            or len(key) != 2
-            or any(
-                not isinstance(value, int)
-                or isinstance(value, bool)
-                or value < 0
-                for value in key
+        for key, completion_packet in expected.items():
+            completion = (
+                completion_packet.message
+                if isinstance(completion_packet, ChiNetworkPacket)
+                else None
             )
-            or key[1] >= (1 << 12)
-            or not isinstance(completion, ChiCompMessage)
-            or completion.transaction_id != key[1]
-            or completion.response is not ChiRespCode.I
-            or completion.response_error is not ChiRespErr.OK
-            or completion.tag_operation != 0
-            or key[0] not in request_nodes
-            or not isinstance(
-                request_nodes[key[0]].pending_transactions.get(key[1]),
-                ChiEvictMessage,
-            )
-            for key, completion in expected.items()
-        ):
-            raise ValueError(
-                "expected Evict completions require "
-                "(requester, TxnID)->Comp_I correlation"
-            )
+            if (
+                not isinstance(key, tuple)
+                or len(key) != 2
+                or any(
+                    not isinstance(value, int)
+                    or isinstance(value, bool)
+                    or value < 0
+                    for value in key
+                )
+                or key[1] >= (1 << 12)
+                or not isinstance(completion, ChiCompMessage)
+                or completion_packet.target_id != key[0]
+                or completion_packet.packet_index != 0
+                or completion_packet.packet_count != 1
+                or completion.transaction_id != key[1]
+                or completion.response is not ChiRespCode.I
+                or completion.response_error is not ChiRespErr.OK
+                or completion.tag_operation != 0
+                or key[0] not in request_nodes
+                or not isinstance(
+                    request_nodes[
+                        key[0]
+                    ].pending_transactions.get(key[1]),
+                    ChiEvictMessage,
+                )
+            ):
+                raise ValueError(
+                    "expected Evict completions require one exact "
+                    "(requester, TxnID)->Comp_I packet"
+                )
         object.__setattr__(
             self,
             "expected_evict_completions",
             MappingProxyType(expected),
+        )
+        clean_unique_expected = dict(
+            self.expected_clean_unique_completions
+        )
+        for key, completion_packet in clean_unique_expected.items():
+            completion = (
+                completion_packet.message
+                if isinstance(completion_packet, ChiNetworkPacket)
+                else None
+            )
+            valid_key = (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and all(
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                    for value in key
+                )
+                and key[1] < (1 << 12)
+                and key[0] in request_nodes
+            )
+            pending_request = (
+                request_nodes[key[0]].pending_transactions.get(key[1])
+                if valid_key
+                else None
+            )
+            matching_home_pending = (
+                tuple(
+                    pending
+                    for pending in self.home.pending.values()
+                    if (
+                        pending.data_buffer_id
+                        == completion.data_buffer_id
+                        and pending.requester_id == key[0]
+                        and isinstance(
+                            pending.request,
+                            ChiCleanUniqueMessage,
+                        )
+                        and pending.request == pending_request
+                        and pending.request.transaction_id == key[1]
+                        and pending.completion_sent
+                    )
+                )
+                if (
+                    valid_key
+                    and isinstance(completion, ChiCompMessage)
+                )
+                else ()
+            )
+            if (
+                not valid_key
+                or not isinstance(completion, ChiCompMessage)
+                or completion_packet.target_id != key[0]
+                or completion_packet.packet_index != 0
+                or completion_packet.packet_count != 1
+                or completion.transaction_id != key[1]
+                or completion.response is not ChiRespCode.UC
+                or completion.response_error is not ChiRespErr.OK
+                or completion.tag_operation != 0
+                or not isinstance(
+                    pending_request,
+                    ChiCleanUniqueMessage,
+                )
+                or len(matching_home_pending) != 1
+            ):
+                raise ValueError(
+                    "expected CleanUnique completions require one exact "
+                    "(requester, TxnID)->Home Comp_UC packet and "
+                    "reservation"
+                )
+        object.__setattr__(
+            self,
+            "expected_clean_unique_completions",
+            MappingProxyType(clean_unique_expected),
+        )
+        required_clean_unique_completions = {
+            (
+                pending.requester_id,
+                pending.request.transaction_id,
+            )
+            for pending in self.home.pending.values()
+            if (
+                isinstance(pending.request, ChiCleanUniqueMessage)
+                and pending.completion_sent
+                and pending.requester_id in request_nodes
+                and request_nodes[
+                    pending.requester_id
+                ].pending_transactions.get(
+                    pending.request.transaction_id
+                )
+                == pending.request
+            )
+        }
+        if (
+            set(clean_unique_expected)
+            != required_clean_unique_completions
+        ):
+            raise ValueError(
+                "Home-completed CleanUnique with a matching RN pending "
+                "request requires exactly one expected Comp_UC"
+            )
+
+        make_unique_expected = dict(
+            self.expected_make_unique_completions
+        )
+        for key, completion_packet in make_unique_expected.items():
+            completion = (
+                completion_packet.message
+                if isinstance(completion_packet, ChiNetworkPacket)
+                else None
+            )
+            if (
+                not isinstance(key, tuple)
+                or len(key) != 2
+                or any(
+                    not isinstance(value, int)
+                    or isinstance(value, bool)
+                    or value < 0
+                    for value in key
+                )
+                or key[1] >= (1 << 12)
+                or not isinstance(completion, ChiCompMessage)
+                or completion_packet.target_id != key[0]
+                or completion_packet.packet_index != 0
+                or completion_packet.packet_count != 1
+                or completion.transaction_id != key[1]
+                or completion.response is not ChiRespCode.UC
+                or completion.response_error is not ChiRespErr.OK
+                or completion.tag_operation != 0
+                or completion.trace_tag
+                or key[0] not in request_nodes
+                or not isinstance(
+                    request_nodes[
+                        key[0]
+                    ].pending_transactions.get(key[1]),
+                    ChiMakeUniqueMessage,
+                )
+                or len(
+                    tuple(
+                        pending
+                        for pending in self.home.pending.values()
+                        if (
+                            pending.requester_id == key[0]
+                            and isinstance(
+                                pending.request,
+                                ChiMakeUniqueMessage,
+                            )
+                            and pending.request.transaction_id == key[1]
+                            and pending.data_buffer_id
+                            == completion.data_buffer_id
+                            and pending.completion_sent
+                        )
+                    )
+                )
+                != 1
+            ):
+                raise ValueError(
+                    "expected MakeUnique completions require one exact "
+                    "(requester, TxnID)->Home Comp_UC packet and reservation"
+                )
+        object.__setattr__(
+            self,
+            "expected_make_unique_completions",
+            MappingProxyType(make_unique_expected),
+        )
+        required_make_unique_completions = {
+            (
+                pending.requester_id,
+                pending.request.transaction_id,
+            )
+            for pending in self.home.pending.values()
+            if (
+                isinstance(pending.request, ChiMakeUniqueMessage)
+                and pending.completion_sent
+                and pending.requester_id in request_nodes
+                and request_nodes[
+                    pending.requester_id
+                ].pending_transactions.get(
+                    pending.request.transaction_id
+                )
+                == pending.request
+            )
+        }
+        if set(make_unique_expected) != required_make_unique_completions:
+            raise ValueError(
+                "Home-completed MakeUnique with a matching RN pending "
+                "request requires exactly one expected Comp_UC"
+            )
+
+        coherent_read_expected = dict(
+            self.expected_coherent_read_completions
+        )
+        for key, completion_packet in coherent_read_expected.items():
+            completion = (
+                completion_packet.message
+                if isinstance(completion_packet, ChiNetworkPacket)
+                else None
+            )
+            valid_key = (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and all(
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                    for value in key
+                )
+                and key[1] < (1 << 12)
+                and key[0] in request_nodes
+            )
+            pending_request = (
+                request_nodes[key[0]].pending_transactions.get(key[1])
+                if valid_key
+                else None
+            )
+            matching_home_pending = (
+                tuple(
+                    pending
+                    for pending in self.home.pending.values()
+                    if (
+                        pending.data_buffer_id
+                        == completion.data_buffer_id
+                        and pending.requester_id == key[0]
+                        and isinstance(
+                            pending.request,
+                            _COHERENT_READ_TYPES,
+                        )
+                        and pending.request == pending_request
+                        and pending.request.transaction_id == key[1]
+                        and pending.completion_sent
+                        and pending.completion_response_error
+                        is completion.response_error
+                    )
+                )
+                if (
+                    valid_key
+                    and isinstance(completion, ChiCompDataMessage)
+                )
+                else ()
+            )
+            if (
+                not valid_key
+                or not isinstance(completion, ChiCompDataMessage)
+                or completion_packet.target_id != key[0]
+                or completion_packet.packet_index != 0
+                or completion_packet.packet_count != 1
+                or completion.transaction_id != key[1]
+                or completion.home_node_id
+                != completion_packet.source_id
+                or not isinstance(
+                    pending_request,
+                    _COHERENT_READ_TYPES,
+                )
+                or len(matching_home_pending) != 1
+            ):
+                raise ValueError(
+                    "expected coherent-read completions require one exact "
+                    "(requester, TxnID)->Home CompData packet and "
+                    "reservation"
+                )
+        object.__setattr__(
+            self,
+            "expected_coherent_read_completions",
+            MappingProxyType(coherent_read_expected),
+        )
+        required_coherent_read_completions = {
+            (
+                pending.requester_id,
+                pending.request.transaction_id,
+            )
+            for pending in self.home.pending.values()
+            if (
+                isinstance(pending.request, _COHERENT_READ_TYPES)
+                and pending.completion_sent
+                and pending.requester_id in request_nodes
+                and request_nodes[
+                    pending.requester_id
+                ].pending_transactions.get(
+                    pending.request.transaction_id
+                )
+                == pending.request
+            )
+        }
+        if (
+            set(coherent_read_expected)
+            != required_coherent_read_completions
+        ):
+            raise ValueError(
+                "Home-completed coherent read with a matching RN pending "
+                "request requires exactly one expected CompData"
+            )
+
+        snoop_deliveries = dict(self.expected_snoop_deliveries)
+        snoop_responses = dict(self.expected_snoop_responses)
+
+        def valid_snoop_key(key: object) -> bool:
+            return (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and all(
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                    for value in key
+                )
+                and key[1] < (1 << 12)
+            )
+
+        def matching_pending(
+            key: tuple[int, int],
+            packet: ChiNetworkPacket,
+        ):
+            packet_address = getattr(packet.message, "address", None)
+            return tuple(
+                pending
+                for pending in self.home.pending.values()
+                if (
+                    pending.snoop_transaction_id == key[1]
+                    and key[0] in pending.snoop_targets
+                    and (
+                        packet_address is None
+                        or pending.request.address == packet_address
+                    )
+                    and not pending.completion_sent
+                )
+            )
+
+        if any(
+            not valid_snoop_key(key)
+            or not isinstance(packet, ChiNetworkPacket)
+            or not isinstance(
+                packet.message,
+                _COHERENCE_SNOOP_TYPES,
+            )
+            or packet.target_id != key[0]
+            or packet.message.transaction_id != key[1]
+            or len(matching_pending(key, packet)) != 1
+            or key[0]
+            in matching_pending(key, packet)[0].snoop_results
+            for key, packet in snoop_deliveries.items()
+        ):
+            raise ValueError(
+                "expected Snoop delivery requires one exact unresolved "
+                "Home-produced SNP target"
+            )
+        if any(
+            not valid_snoop_key(key)
+            or not isinstance(packet, ChiNetworkPacket)
+            or not isinstance(
+                packet.message,
+                _COHERENCE_SNOOP_RESPONSE_TYPES,
+            )
+            or packet.source_id != key[0]
+            or packet.message.transaction_id != key[1]
+            or len(matching_pending(key, packet)) != 1
+            or key[0]
+            in matching_pending(key, packet)[0].snoop_results
+            for key, packet in snoop_responses.items()
+        ):
+            raise ValueError(
+                "expected Snoop response requires one exact unresolved "
+                "RN-produced RSP or DAT packet"
+            )
+        if set(snoop_deliveries) & set(snoop_responses):
+            raise ValueError(
+                "one Snoop target cannot await delivery and response "
+                "simultaneously"
+            )
+        unresolved_snoop_targets = {
+            (target, pending.snoop_transaction_id)
+            for pending in self.home.pending.values()
+            if (
+                pending.snoop_transaction_id is not None
+                and not pending.completion_sent
+            )
+            for target in pending.snoop_targets
+            if target not in pending.snoop_results
+        }
+        if (
+            set(snoop_deliveries) | set(snoop_responses)
+            != unresolved_snoop_targets
+        ):
+            raise ValueError(
+                "every unresolved Home Snoop target requires exactly one "
+                "delivery or response phase evidence"
+            )
+        object.__setattr__(
+            self,
+            "expected_snoop_deliveries",
+            MappingProxyType(snoop_deliveries),
+        )
+        object.__setattr__(
+            self,
+            "expected_snoop_responses",
+            MappingProxyType(snoop_responses),
         )
 
 
@@ -638,11 +1114,49 @@ class ChiCoherenceSession(
                 "accept PassDirty snoop data"
             )
         if (
+            {
+                CHI_FEATURE_MAKE_UNIQUE,
+                CHI_FEATURE_CLEAN_READ_UNIQUE,
+            }
+            <= features
+            and CHI_FEATURE_DIRTY_UNIQUE_TRANSFER not in features
+        ):
+            raise ValueError(
+                "the current staged CHI profile combines MakeUnique and "
+                "ReadUnique only with dirty Unique transfer enabled"
+            )
+        if (
+            {
+                CHI_FEATURE_MAKE_UNIQUE,
+                CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+            }
+            <= features
+            and CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            not in features
+        ):
+            raise ValueError(
+                "the current staged CHI profile combines MakeUnique and "
+                "CleanUnique only with shared-dirty peer handling enabled"
+            )
+        if (
+            {
+                CHI_FEATURE_MAKE_UNIQUE,
+                CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
+            }
+            <= features
+        ):
+            raise ValueError(
+                "the current staged CHI profile does not combine MakeUnique "
+                "with MESI ReadNotSharedDirty until both same-line transient "
+                "Snoop directions are implemented"
+            )
+        if (
             CHI_FEATURE_CLEAN_READ_SHARED in features
             and {
                 CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
                 CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
                 CHI_FEATURE_DIRTY_WRITEBACK,
+                CHI_FEATURE_MAKE_UNIQUE,
                 CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
             }
             & features
@@ -873,8 +1387,8 @@ class ChiCoherenceSession(
 
     def _make_initial_state(self) -> ChiCoherenceState:
         return ChiCoherenceState(
-            self.home.initial_state(),
-            {
+            home=self.home.initial_state(),
+            request_nodes={
                 node_id: node.initial_state()
                 for node_id, node in self.request_nodes.items()
             },
@@ -893,6 +1407,11 @@ class ChiCoherenceSession(
                 for node_id, item in state.request_nodes.items()
             )
             and not state.expected_evict_completions
+            and not state.expected_clean_unique_completions
+            and not state.expected_make_unique_completions
+            and not state.expected_coherent_read_completions
+            and not state.expected_snoop_deliveries
+            and not state.expected_snoop_responses
         )
 
     def step(
@@ -911,6 +1430,8 @@ class ChiCoherenceSession(
             return self._issue(state, action)
         if isinstance(action, ChiSubmitCleanUnique):
             return self._issue_clean_unique(state, action)
+        if isinstance(action, ChiSubmitMakeUnique):
+            return self._issue_make_unique(state, action)
         if isinstance(action, ChiSubmitEvict):
             return self._issue_evict(state, action)
         if isinstance(action, ChiSubmitWriteBackFull):
@@ -929,24 +1450,70 @@ class ChiCoherenceSession(
         self,
         state: ChiCoherenceState,
     ) -> SemanticFault | None:
+        if any(
+            packet.source_id != self.home.node_id
+            or packet.target_id not in self.requester_node_ids
+            for packet in (
+                *state.expected_evict_completions.values(),
+                *state.expected_clean_unique_completions.values(),
+                *state.expected_make_unique_completions.values(),
+                *state.expected_coherent_read_completions.values(),
+            )
+        ):
+            return SemanticFault(
+                f"{self.name}.completion_endpoint",
+                "expected completion has another Home or Requester "
+                "endpoint",
+                ConstraintScope.SYSTEM,
+                self.name,
+            )
+        if any(
+            packet.source_id != self.home.node_id
+            or packet.target_id not in self.snoopee_node_ids
+            for packet in state.expected_snoop_deliveries.values()
+        ):
+            return SemanticFault(
+                f"{self.name}.snoop_delivery_endpoint",
+                "expected Snoop delivery has another Home or Snoopee "
+                "endpoint",
+                ConstraintScope.SYSTEM,
+                self.name,
+            )
+        if any(
+            packet.target_id != self.home.node_id
+            or packet.source_id not in self.snoopee_node_ids
+            for packet in state.expected_snoop_responses.values()
+        ):
+            return SemanticFault(
+                f"{self.name}.snoop_response_endpoint",
+                "expected Snoop response has another Snoopee or Home "
+                "endpoint",
+                ConstraintScope.SYSTEM,
+                self.name,
+            )
         allows_unique_dirty = bool(
             {
                 CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
                 CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
                 CHI_FEATURE_DIRTY_WRITEBACK,
+                CHI_FEATURE_MAKE_UNIQUE,
                 CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
             }
             & self.enabled_features
         )
-        allows_shared_dirty = (
-            CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
-            in self.enabled_features
+        allows_shared_dirty = bool(
+            {
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
+                CHI_FEATURE_MAKE_UNIQUE,
+            }
+            & self.enabled_features
         )
         allows_empty_unique = (
             bool(
                 {
                     CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
                     CHI_FEATURE_CLEAN_EVICT,
+                    CHI_FEATURE_MAKE_UNIQUE,
                 }
                 & self.enabled_features
             )
@@ -975,7 +1542,8 @@ class ChiCoherenceSession(
                         f"{self.name}.shared_dirty_state_profile",
                         (
                             f"RN {node_id} line {address:#x} is SD but the "
-                            "shared-dirty CleanUnique feature is not enabled"
+                            "selected coherence features cannot consume a "
+                            "shared-dirty owner"
                         ),
                         ConstraintScope.SYSTEM,
                         self.name,
@@ -1014,9 +1582,24 @@ class ChiCoherenceSession(
             ChiHomeGrantPCredit(),
         )
         candidate = ChiCoherenceState(
-            transition.state,
-            state.request_nodes,
-            state.expected_evict_completions,
+            home=transition.state,
+            request_nodes=state.request_nodes,
+            expected_evict_completions=(
+                state.expected_evict_completions
+            ),
+            expected_clean_unique_completions=(
+                state.expected_clean_unique_completions
+            ),
+            expected_make_unique_completions=(
+                state.expected_make_unique_completions
+            ),
+            expected_coherent_read_completions=(
+                state.expected_coherent_read_completions
+            ),
+            expected_snoop_deliveries=(
+                state.expected_snoop_deliveries
+            ),
+            expected_snoop_responses=state.expected_snoop_responses,
         )
         return self._finish(candidate, transition)
 
@@ -1080,6 +1663,7 @@ class ChiCoherenceSession(
             CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
             CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
             CHI_FEATURE_DIRTY_WRITEBACK,
+            CHI_FEATURE_MAKE_UNIQUE,
         } & self.enabled_features:
             return self._fault(
                 state,
@@ -1265,6 +1849,47 @@ class ChiCoherenceSession(
             transition,
         )
 
+    def _issue_make_unique(
+        self,
+        state: ChiCoherenceState,
+        action: ChiSubmitMakeUnique,
+    ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        authority_fault = self._address_authority_fault(
+            action.request.address,
+            1 << action.request.size,
+        )
+        if authority_fault is not None:
+            return SemanticStep(state, fault=authority_fault)
+        node = self.request_nodes.get(action.requester_node_id)
+        if node is None:
+            return self._fault(
+                state,
+                "requester_identity",
+                f"NodeID {action.requester_node_id} is not a registered RN",
+            )
+        if action.requester_node_id not in self.requester_node_ids:
+            return self._fault(
+                state,
+                "requester_authority",
+                f"NodeID {action.requester_node_id} is registered only as "
+                "a Snoopee in this construction",
+            )
+        if CHI_FEATURE_MAKE_UNIQUE not in self.enabled_features:
+            return self._fault(
+                state,
+                "feature_enablement",
+                "MakeUnique is not enabled by the resolved feature contract",
+            )
+        transition = node.step(
+            state.request_nodes[action.requester_node_id],
+            ChiRnIssueMakeUnique(action.request, action.data),
+        )
+        return self._replace_request_node(
+            state,
+            action.requester_node_id,
+            transition,
+        )
+
     def _issue_evict(
         self,
         state: ChiCoherenceState,
@@ -1372,6 +1997,7 @@ class ChiCoherenceSession(
             if authority_fault is not None:
                 return SemanticStep(state, fault=authority_fault)
         if packet.target_id == self.home.node_id:
+            consumed_snoop_response_key: tuple[int, int] | None = None
             if isinstance(message, ChiEvictMessage):
                 if packet.source_id not in self.requester_node_ids:
                     return self._fault(
@@ -1415,6 +2041,39 @@ class ChiCoherenceSession(
                         "this Evict request already produced its completion",
                     )
                 action = ChiHomeAcceptEvict(packet)
+            elif isinstance(message, ChiMakeUniqueMessage):
+                if packet.source_id not in self.requester_node_ids:
+                    return self._fault(
+                        state,
+                        "requester_authority",
+                        f"NodeID {packet.source_id} is not the requester "
+                        "of this construction",
+                    )
+                if CHI_FEATURE_MAKE_UNIQUE not in self.enabled_features:
+                    return self._fault(
+                        state,
+                        "feature_enablement",
+                        "MakeUnique is not enabled by the resolved feature "
+                        "contract",
+                    )
+                requester_state = state.request_nodes[packet.source_id]
+                pending_request = (
+                    requester_state.pending_transactions.get(
+                        message.transaction_id
+                    )
+                )
+                if (
+                    pending_request != message
+                    or message.transaction_id
+                    not in requester_state.make_unique_store_intents
+                ):
+                    return self._fault(
+                        state,
+                        "make_unique_admission_evidence",
+                        "MakeUnique lacks the issuing RN's matching pending "
+                        "request and 512-bit store intent",
+                    )
+                action = ChiHomeAcceptMakeUnique(packet)
             elif isinstance(message, ChiCleanUniqueMessage):
                 if packet.source_id not in self.requester_node_ids:
                     return self._fault(
@@ -1546,6 +2205,19 @@ class ChiCoherenceSession(
                         len(matches) == 1
                         and isinstance(
                             matches[0].request,
+                            ChiMakeUniqueMessage,
+                        )
+                    ):
+                        return self._fault(
+                            state,
+                            "make_unique_snoop_data",
+                            "MakeUnique SnpMakeInvalid accepts only a "
+                            "data-less SnpResp_I",
+                        )
+                    if (
+                        len(matches) == 1
+                        and isinstance(
+                            matches[0].request,
                             ChiCleanUniqueMessage,
                         )
                         and CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
@@ -1557,6 +2229,21 @@ class ChiCoherenceSession(
                             "CleanUnique SnpRespData requires the "
                             "shared-dirty peer feature",
                         )
+                response_key = (
+                    packet.source_id,
+                    message.transaction_id,
+                )
+                if (
+                    state.expected_snoop_responses.get(response_key)
+                    != packet
+                ):
+                    return self._fault(
+                        state,
+                        "snoop_response_correlation",
+                        "Snoop response does not exactly match one "
+                        "RN-produced response after SNP delivery",
+                    )
+                consumed_snoop_response_key = response_key
                 action = ChiHomeAcceptSnoopResponse(packet)
             elif isinstance(message, ChiCompAckMessage):
                 if packet.source_id not in self.requester_node_ids:
@@ -1566,6 +2253,108 @@ class ChiCoherenceSession(
                         f"NodeID {packet.source_id} cannot return CompAck "
                         "in this construction",
                     )
+                pending = state.home.pending.get(
+                    message.transaction_id
+                )
+                if (
+                    pending is not None
+                    and isinstance(
+                        pending.request,
+                        ChiCleanUniqueMessage,
+                    )
+                ):
+                    key = (
+                        pending.requester_id,
+                        pending.request.transaction_id,
+                    )
+                    requester_state = state.request_nodes[
+                        pending.requester_id
+                    ]
+                    if (
+                        packet.source_id != pending.requester_id
+                        or key
+                        in state.expected_clean_unique_completions
+                        or (
+                            requester_state.pending_transactions.get(
+                                pending.request.transaction_id
+                            )
+                            == pending.request
+                        )
+                    ):
+                        return self._fault(
+                            state,
+                            "clean_unique_completion_ack_sequence",
+                            "CleanUnique CompAck requires the retained Home "
+                            "reservation and a completed RN Comp_UC",
+                        )
+                if (
+                    pending is not None
+                    and isinstance(
+                        pending.request,
+                        _COHERENT_READ_TYPES,
+                    )
+                ):
+                    key = (
+                        pending.requester_id,
+                        pending.request.transaction_id,
+                    )
+                    requester_state = state.request_nodes[
+                        pending.requester_id
+                    ]
+                    if (
+                        packet.source_id != pending.requester_id
+                        or key
+                        in state.expected_coherent_read_completions
+                        or (
+                            requester_state.pending_transactions.get(
+                                pending.request.transaction_id
+                            )
+                            == pending.request
+                        )
+                    ):
+                        return self._fault(
+                            state,
+                            "coherent_read_completion_ack_sequence",
+                            "coherent-read CompAck requires the retained "
+                            "Home reservation and a completed RN CompData",
+                        )
+                if (
+                    pending is not None
+                    and isinstance(
+                        pending.request,
+                        ChiMakeUniqueMessage,
+                    )
+                ):
+                    key = (
+                        pending.requester_id,
+                        pending.request.transaction_id,
+                    )
+                    requester_state = state.request_nodes[
+                        pending.requester_id
+                    ]
+                    line = requester_state.line_at(
+                        pending.request.address
+                    )
+                    if (
+                        packet.source_id != pending.requester_id
+                        or key
+                        in state.expected_make_unique_completions
+                        or isinstance(
+                            requester_state.pending_transactions.get(
+                                pending.request.transaction_id
+                            ),
+                            ChiMakeUniqueMessage,
+                        )
+                        or line is None
+                        or line.state is not ChiCacheState.UD
+                        or line.data is None
+                    ):
+                        return self._fault(
+                            state,
+                            "make_unique_completion_ack_sequence",
+                            "MakeUnique CompAck requires the retained Home "
+                            "reservation and a completed RN Comp_UC store",
+                        )
                 action = ChiHomeAcceptCompAck(packet)
             elif isinstance(message, ChiCopyBackWrDataMessage):
                 if packet.source_id not in self.requester_node_ids:
@@ -1593,6 +2382,19 @@ class ChiCoherenceSession(
             expected_evict_completions = (
                 state.expected_evict_completions
             )
+            expected_clean_unique_completions = (
+                state.expected_clean_unique_completions
+            )
+            expected_make_unique_completions = (
+                state.expected_make_unique_completions
+            )
+            expected_coherent_read_completions = (
+                state.expected_coherent_read_completions
+            )
+            expected_snoop_deliveries = (
+                state.expected_snoop_deliveries
+            )
+            expected_snoop_responses = state.expected_snoop_responses
             if (
                 isinstance(message, ChiEvictMessage)
                 and transition.fault is None
@@ -1613,12 +2415,241 @@ class ChiCoherenceSession(
                 expected = dict(state.expected_evict_completions)
                 expected[
                     (packet.source_id, message.transaction_id)
-                ] = transition.emissions[0].message
+                ] = transition.emissions[0]
                 expected_evict_completions = expected
+            if (
+                transition.fault is None
+                and transition.blocked is None
+            ):
+                if consumed_snoop_response_key is not None:
+                    responses = dict(state.expected_snoop_responses)
+                    del responses[consumed_snoop_response_key]
+                    expected_snoop_responses = responses
+                snoop_emissions = tuple(
+                    emission
+                    for emission in transition.emissions
+                    if isinstance(
+                        emission.message,
+                        _COHERENCE_SNOOP_TYPES,
+                    )
+                )
+                if snoop_emissions:
+                    deliveries = dict(
+                        state.expected_snoop_deliveries
+                    )
+                    for emission in snoop_emissions:
+                        snoop = emission.message
+                        key = (
+                            emission.target_id,
+                            snoop.transaction_id,
+                        )
+                        matches = tuple(
+                            pending
+                            for pending in transition.state.pending.values()
+                            if (
+                                pending.snoop_transaction_id
+                                == snoop.transaction_id
+                                and emission.target_id
+                                in pending.snoop_targets
+                                and pending.request.address
+                                == snoop.address
+                                and not pending.completion_sent
+                                and emission.target_id
+                                not in pending.snoop_results
+                            )
+                        )
+                        if (
+                            emission.source_id != self.home.node_id
+                            or emission.target_id
+                            not in self.snoopee_node_ids
+                            or len(matches) != 1
+                            or key in deliveries
+                            or key in expected_snoop_responses
+                        ):
+                            return self._fault(
+                                state,
+                                "snoop_emission_evidence",
+                                "Home SNP emission does not select one new "
+                                "unresolved Snoopee target",
+                            )
+                        deliveries[key] = emission
+                    expected_snoop_deliveries = deliveries
+                make_unique_completions = tuple(
+                    emission
+                    for emission in transition.emissions
+                    if isinstance(emission.message, ChiCompMessage)
+                    and emission.source_id == self.home.node_id
+                    and (
+                        pending := transition.state.pending.get(
+                            emission.message.data_buffer_id
+                        )
+                    )
+                    is not None
+                    and isinstance(
+                        pending.request,
+                        ChiMakeUniqueMessage,
+                    )
+                    and pending.completion_sent
+                    and pending.requester_id == emission.target_id
+                    and pending.request.transaction_id
+                    == emission.message.transaction_id
+                )
+                if len(make_unique_completions) > 1:
+                    return self._fault(
+                        state,
+                        "make_unique_completion_shape",
+                        "one Home transition emitted multiple MakeUnique "
+                        "completions",
+                    )
+                if make_unique_completions:
+                    completion_packet = make_unique_completions[0]
+                    completion = completion_packet.message
+                    assert isinstance(completion, ChiCompMessage)
+                    key = (
+                        completion_packet.target_id,
+                        completion.transaction_id,
+                    )
+                    if key in expected_make_unique_completions:
+                        return self._fault(
+                            state,
+                            "duplicate_make_unique_completion",
+                            "Home produced a second completion for one "
+                            "MakeUnique transaction",
+                        )
+                    expected = dict(
+                        state.expected_make_unique_completions
+                    )
+                    expected[key] = completion_packet
+                    expected_make_unique_completions = expected
+                clean_unique_completions = tuple(
+                    emission
+                    for emission in transition.emissions
+                    if isinstance(emission.message, ChiCompMessage)
+                    and emission.source_id == self.home.node_id
+                    and (
+                        pending := transition.state.pending.get(
+                            emission.message.data_buffer_id
+                        )
+                    )
+                    is not None
+                    and isinstance(
+                        pending.request,
+                        ChiCleanUniqueMessage,
+                    )
+                    and pending.completion_sent
+                    and pending.requester_id == emission.target_id
+                    and pending.request.transaction_id
+                    == emission.message.transaction_id
+                )
+                if len(clean_unique_completions) > 1:
+                    return self._fault(
+                        state,
+                        "clean_unique_completion_shape",
+                        "one Home transition emitted multiple CleanUnique "
+                        "completions",
+                    )
+                if clean_unique_completions:
+                    completion_packet = clean_unique_completions[0]
+                    completion = completion_packet.message
+                    assert isinstance(completion, ChiCompMessage)
+                    key = (
+                        completion_packet.target_id,
+                        completion.transaction_id,
+                    )
+                    if key in expected_clean_unique_completions:
+                        return self._fault(
+                            state,
+                            "duplicate_clean_unique_completion",
+                            "Home produced a second completion for one "
+                            "CleanUnique transaction",
+                        )
+                    expected = dict(
+                        state.expected_clean_unique_completions
+                    )
+                    expected[key] = completion_packet
+                    expected_clean_unique_completions = expected
+                coherent_read_completions = tuple(
+                    emission
+                    for emission in transition.emissions
+                    if isinstance(
+                        emission.message,
+                        ChiCompDataMessage,
+                    )
+                )
+                if len(coherent_read_completions) > 1:
+                    return self._fault(
+                        state,
+                        "coherent_read_completion_shape",
+                        "one Home transition emitted multiple coherent-read "
+                        "completions",
+                    )
+                if coherent_read_completions:
+                    completion_packet = coherent_read_completions[0]
+                    completion = completion_packet.message
+                    assert isinstance(completion, ChiCompDataMessage)
+                    pending = transition.state.pending.get(
+                        completion.data_buffer_id
+                    )
+                    if (
+                        completion_packet.source_id != self.home.node_id
+                        or completion_packet.target_id
+                        not in self.requester_node_ids
+                        or pending is None
+                        or not isinstance(
+                            pending.request,
+                            _COHERENT_READ_TYPES,
+                        )
+                        or not pending.completion_sent
+                        or pending.requester_id
+                        != completion_packet.target_id
+                        or pending.request.transaction_id
+                        != completion.transaction_id
+                        or pending.completion_response_error
+                        is not completion.response_error
+                    ):
+                        return self._fault(
+                            state,
+                            "coherent_read_completion_evidence",
+                            "Home CompData emission does not select one "
+                            "completed coherent-read reservation",
+                        )
+                    key = (
+                        completion_packet.target_id,
+                        completion.transaction_id,
+                    )
+                    if key in expected_coherent_read_completions:
+                        return self._fault(
+                            state,
+                            "duplicate_coherent_read_completion",
+                            "Home produced a second completion for one "
+                            "coherent-read transaction",
+                        )
+                    expected = dict(
+                        state.expected_coherent_read_completions
+                    )
+                    expected[key] = completion_packet
+                    expected_coherent_read_completions = expected
             candidate = ChiCoherenceState(
-                transition.state,
-                state.request_nodes,
-                expected_evict_completions,
+                home=transition.state,
+                request_nodes=state.request_nodes,
+                expected_evict_completions=(
+                    expected_evict_completions
+                ),
+                expected_clean_unique_completions=(
+                    expected_clean_unique_completions
+                ),
+                expected_make_unique_completions=(
+                    expected_make_unique_completions
+                ),
+                expected_coherent_read_completions=(
+                    expected_coherent_read_completions
+                ),
+                expected_snoop_deliveries=(
+                    expected_snoop_deliveries
+                ),
+                expected_snoop_responses=(
+                    expected_snoop_responses
+                ),
             )
             return self._finish(candidate, transition)
 
@@ -1633,6 +2664,7 @@ class ChiCoherenceSession(
             message,
             (
                 ChiSnpCleanInvalidMessage,
+                ChiSnpMakeInvalidMessage,
                 ChiSnpSharedMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
@@ -1660,15 +2692,93 @@ class ChiCoherenceSession(
                     == message.transaction_id
                     and packet.target_id in pending.snoop_targets
                     and pending.request.address == message.address
+                    and not pending.completion_sent
+                    and packet.target_id
+                    not in pending.snoop_results
                 )
             )
-            if len(matches) != 1:
+            snoop_key = (
+                packet.target_id,
+                message.transaction_id,
+            )
+            if (
+                len(matches) != 1
+                or state.expected_snoop_deliveries.get(snoop_key)
+                != packet
+            ):
                 return self._fault(
                     state,
-                    "snoop_correlation",
-                    "Snoop packet does not match one Home-issued target",
+                    "snoop_delivery_correlation",
+                    "Snoop packet does not exactly match one pending "
+                    "Home-issued target delivery",
                 )
-            action = ChiRnAcceptSnoop(packet)
+            transition = node.step(
+                state.request_nodes[packet.target_id],
+                ChiRnAcceptSnoop(packet),
+            )
+            deliveries = state.expected_snoop_deliveries
+            responses = state.expected_snoop_responses
+            if (
+                transition.fault is None
+                and transition.blocked is None
+            ):
+                if (
+                    len(transition.emissions) != 1
+                    or not isinstance(
+                        transition.emissions[0].message,
+                        _COHERENCE_SNOOP_RESPONSE_TYPES,
+                    )
+                    or transition.emissions[0].source_id
+                    != packet.target_id
+                    or transition.emissions[0].target_id
+                    != self.home.node_id
+                    or transition.emissions[0].message.transaction_id
+                    != message.transaction_id
+                ):
+                    return self._fault(
+                        state,
+                        "snoop_response_emission",
+                        "RN Snoop acceptance must emit one exactly "
+                        "correlated RSP or DAT packet",
+                    )
+                updated_deliveries = dict(
+                    state.expected_snoop_deliveries
+                )
+                del updated_deliveries[snoop_key]
+                updated_responses = dict(
+                    state.expected_snoop_responses
+                )
+                if snoop_key in updated_responses:
+                    return self._fault(
+                        state,
+                        "duplicate_snoop_response",
+                        "Snoopee already has an expected response for "
+                        "this Snoop identity",
+                    )
+                updated_responses[snoop_key] = transition.emissions[0]
+                deliveries = updated_deliveries
+                responses = updated_responses
+            states = dict(state.request_nodes)
+            states[packet.target_id] = transition.state
+            candidate = ChiCoherenceState(
+                home=state.home,
+                request_nodes=states,
+                expected_evict_completions=(
+                    state.expected_evict_completions
+                ),
+                expected_clean_unique_completions=(
+                    state.expected_clean_unique_completions
+                ),
+                expected_make_unique_completions=(
+                    state.expected_make_unique_completions
+                ),
+                expected_coherent_read_completions=(
+                    state.expected_coherent_read_completions
+                ),
+                expected_snoop_deliveries=deliveries,
+                expected_snoop_responses=responses,
+            )
+            return self._finish(candidate, transition)
         elif isinstance(message, ChiRetryAckMessage):
             if packet.target_id not in self.requester_node_ids:
                 return self._fault(
@@ -1740,7 +2850,7 @@ class ChiCoherenceSession(
                 )
                 if (
                     packet.source_id != self.home.node_id
-                    or expected != message
+                    or expected != packet
                 ):
                     return self._fault(
                         state,
@@ -1764,9 +2874,82 @@ class ChiCoherenceSession(
                         (packet.target_id, message.transaction_id)
                     ]
                 candidate = ChiCoherenceState(
-                    state.home,
-                    states,
-                    completions,
+                    home=state.home,
+                    request_nodes=states,
+                    expected_evict_completions=completions,
+                    expected_clean_unique_completions=(
+                        state.expected_clean_unique_completions
+                    ),
+                    expected_make_unique_completions=(
+                        state.expected_make_unique_completions
+                    ),
+                    expected_coherent_read_completions=(
+                        state.expected_coherent_read_completions
+                    ),
+                    expected_snoop_deliveries=(
+                        state.expected_snoop_deliveries
+                    ),
+                    expected_snoop_responses=(
+                        state.expected_snoop_responses
+                    ),
+                )
+                return self._finish(candidate, transition)
+            if isinstance(pending_request, ChiMakeUniqueMessage):
+                if CHI_FEATURE_MAKE_UNIQUE not in self.enabled_features:
+                    return self._fault(
+                        state,
+                        "feature_enablement",
+                        "MakeUnique Comp_UC is not enabled by the resolved "
+                        "feature contract",
+                    )
+                expected = state.expected_make_unique_completions.get(
+                    (packet.target_id, message.transaction_id)
+                )
+                if (
+                    packet.source_id != self.home.node_id
+                    or expected != packet
+                ):
+                    return self._fault(
+                        state,
+                        "make_unique_completion_correlation",
+                        "Comp_UC does not exactly match the Home-produced "
+                        "MakeUnique completion",
+                    )
+                transition = node.step(
+                    state.request_nodes[packet.target_id],
+                    ChiRnAcceptComp(packet),
+                )
+                states = dict(state.request_nodes)
+                states[packet.target_id] = transition.state
+                completions = dict(
+                    state.expected_make_unique_completions
+                )
+                if (
+                    transition.fault is None
+                    and transition.blocked is None
+                ):
+                    del completions[
+                        (packet.target_id, message.transaction_id)
+                    ]
+                candidate = ChiCoherenceState(
+                    home=state.home,
+                    request_nodes=states,
+                    expected_evict_completions=(
+                        state.expected_evict_completions
+                    ),
+                    expected_clean_unique_completions=(
+                        state.expected_clean_unique_completions
+                    ),
+                    expected_make_unique_completions=completions,
+                    expected_coherent_read_completions=(
+                        state.expected_coherent_read_completions
+                    ),
+                    expected_snoop_deliveries=(
+                        state.expected_snoop_deliveries
+                    ),
+                    expected_snoop_responses=(
+                        state.expected_snoop_responses
+                    ),
                 )
                 return self._finish(candidate, transition)
             if not isinstance(pending_request, ChiCleanUniqueMessage):
@@ -1784,7 +2967,56 @@ class ChiCoherenceSession(
                     "feature_enablement",
                     "Comp_UC is not enabled by the resolved feature contract",
                 )
-            action = ChiRnAcceptComp(packet)
+            expected = state.expected_clean_unique_completions.get(
+                (packet.target_id, message.transaction_id)
+            )
+            if (
+                packet.source_id != self.home.node_id
+                or expected != packet
+            ):
+                return self._fault(
+                    state,
+                    "clean_unique_completion_correlation",
+                    "Comp_UC does not exactly match the Home-produced "
+                    "CleanUnique completion",
+                )
+            transition = node.step(
+                state.request_nodes[packet.target_id],
+                ChiRnAcceptComp(packet),
+            )
+            states = dict(state.request_nodes)
+            states[packet.target_id] = transition.state
+            completions = dict(
+                state.expected_clean_unique_completions
+            )
+            if (
+                transition.fault is None
+                and transition.blocked is None
+            ):
+                del completions[
+                    (packet.target_id, message.transaction_id)
+                ]
+            candidate = ChiCoherenceState(
+                home=state.home,
+                request_nodes=states,
+                expected_evict_completions=(
+                    state.expected_evict_completions
+                ),
+                expected_clean_unique_completions=completions,
+                expected_make_unique_completions=(
+                    state.expected_make_unique_completions
+                ),
+                expected_coherent_read_completions=(
+                    state.expected_coherent_read_completions
+                ),
+                expected_snoop_deliveries=(
+                    state.expected_snoop_deliveries
+                ),
+                expected_snoop_responses=(
+                    state.expected_snoop_responses
+                ),
+            )
+            return self._finish(candidate, transition)
         elif isinstance(message, ChiCompDataMessage):
             if packet.target_id not in self.requester_node_ids:
                 return self._fault(
@@ -1792,6 +3024,15 @@ class ChiCoherenceSession(
                     "requester_authority",
                     f"NodeID {packet.target_id} cannot receive CompData "
                     "in this construction",
+                )
+            pending_request = state.request_nodes[
+                packet.target_id
+            ].pending_transactions.get(message.transaction_id)
+            if isinstance(pending_request, ChiMakeUniqueMessage):
+                return self._fault(
+                    state,
+                    "make_unique_completion_data",
+                    "MakeUnique is Dataless and cannot complete on DAT",
                 )
             if (
                 message.response_error is ChiRespErr.NDERR
@@ -1804,23 +3045,60 @@ class ChiCoherenceSession(
                     "ReadUnique NDERR completion is not enabled by the "
                     "resolved feature contract",
                 )
-            pending = state.home.pending.get(message.data_buffer_id)
+            expected = state.expected_coherent_read_completions.get(
+                (packet.target_id, message.transaction_id)
+            )
             if (
                 packet.source_id != self.home.node_id
-                or pending is None
-                or pending.requester_id != packet.target_id
-                or pending.request.transaction_id != message.transaction_id
-                or not pending.completion_sent
-                or pending.completion_response_error
-                is not message.response_error
+                or not isinstance(
+                    pending_request,
+                    _COHERENT_READ_TYPES,
+                )
+                or expected != packet
             ):
                 return self._fault(
                     state,
                     "completion_correlation",
-                    "CompData does not match one completed Home "
-                    "Requester/TxnID/DBID/RespErr reservation",
+                    "CompData does not exactly match one Home-produced "
+                    "Requester/TxnID/DBID/RespErr completion packet",
                 )
-            action = ChiRnAcceptCompData(packet)
+            transition = node.step(
+                state.request_nodes[packet.target_id],
+                ChiRnAcceptCompData(packet),
+            )
+            states = dict(state.request_nodes)
+            states[packet.target_id] = transition.state
+            completions = dict(
+                state.expected_coherent_read_completions
+            )
+            if (
+                transition.fault is None
+                and transition.blocked is None
+            ):
+                del completions[
+                    (packet.target_id, message.transaction_id)
+                ]
+            candidate = ChiCoherenceState(
+                home=state.home,
+                request_nodes=states,
+                expected_evict_completions=(
+                    state.expected_evict_completions
+                ),
+                expected_clean_unique_completions=(
+                    state.expected_clean_unique_completions
+                ),
+                expected_make_unique_completions=(
+                    state.expected_make_unique_completions
+                ),
+                expected_coherent_read_completions=completions,
+                expected_snoop_deliveries=(
+                    state.expected_snoop_deliveries
+                ),
+                expected_snoop_responses=(
+                    state.expected_snoop_responses
+                ),
+            )
+            return self._finish(candidate, transition)
         elif isinstance(message, ChiCompDBIDRespMessage):
             if packet.target_id not in self.requester_node_ids:
                 return self._fault(
@@ -1871,11 +3149,14 @@ class ChiCoherenceSession(
     @staticmethod
     def _request_feature(
         request: (
-            ChiReadSharedMessage
+            ChiMakeUniqueMessage
+            | ChiReadSharedMessage
             | ChiReadNotSharedDirtyMessage
             | ChiReadUniqueMessage
         ),
     ) -> ChiFeatureKey:
+        if isinstance(request, ChiMakeUniqueMessage):
+            return CHI_FEATURE_MAKE_UNIQUE
         if isinstance(request, ChiReadUniqueMessage):
             return CHI_FEATURE_CLEAN_READ_UNIQUE
         if isinstance(request, ChiReadNotSharedDirtyMessage):
@@ -1886,11 +3167,14 @@ class ChiCoherenceSession(
     def _snoop_feature(
         snoop: (
             ChiSnpCleanInvalidMessage
+            | ChiSnpMakeInvalidMessage
             | ChiSnpSharedMessage
             | ChiSnpNotSharedDirtyMessage
             | ChiSnpUniqueMessage
         ),
     ) -> ChiFeatureKey:
+        if isinstance(snoop, ChiSnpMakeInvalidMessage):
+            return CHI_FEATURE_MAKE_UNIQUE
         if isinstance(snoop, ChiSnpCleanInvalidMessage):
             return CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
         if isinstance(snoop, ChiSnpUniqueMessage):
@@ -1908,9 +3192,24 @@ class ChiCoherenceSession(
         states = dict(state.request_nodes)
         states[node_id] = transition.state
         candidate = ChiCoherenceState(
-            state.home,
-            states,
-            state.expected_evict_completions,
+            home=state.home,
+            request_nodes=states,
+            expected_evict_completions=(
+                state.expected_evict_completions
+            ),
+            expected_clean_unique_completions=(
+                state.expected_clean_unique_completions
+            ),
+            expected_make_unique_completions=(
+                state.expected_make_unique_completions
+            ),
+            expected_coherent_read_completions=(
+                state.expected_coherent_read_completions
+            ),
+            expected_snoop_deliveries=(
+                state.expected_snoop_deliveries
+            ),
+            expected_snoop_responses=state.expected_snoop_responses,
         )
         return self._finish(candidate, transition)
 
@@ -1972,6 +3271,7 @@ __all__ = [
     "ChiSubmitCleanUnique",
     "ChiSubmitCoherentRead",
     "ChiSubmitEvict",
+    "ChiSubmitMakeUnique",
     "ChiSubmitWriteBackFull",
     "ChiWriteUniqueCacheLine",
 ]

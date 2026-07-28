@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from protocol_model.integrations.recipes.amba.chi import (
@@ -48,6 +49,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation.snp import (
 from protocol_model.protocols.amba.chi.issue_h.system.coherence import (
     ChiCoherenceInvariantMonitor,
     ChiCoherenceSession,
+    ChiCoherenceState,
     ChiDeliverCoherencePacket,
     ChiSubmitCoherentRead,
 )
@@ -710,6 +712,13 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
         self.assertEqual(0, completion.message.data)
         self.assertEqual(0, completion.message.data_id)
         self.assertEqual(0x200, completion.message.data_buffer_id)
+        completion_key = (self.REQUESTER, request.transaction_id)
+        self.assertEqual(
+            completion,
+            accepted.state.expected_coherent_read_completions[
+                completion_key
+            ],
+        )
         self.assertEqual(initial_directory, accepted.state.home.directory)
         self.assertEqual(initial_backing, accepted.state.home.backing)
         self.assertEqual(
@@ -728,6 +737,25 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
         self.assertIsNone(pending.prepared_backing_write)
         for node_id, peer in initial_peers.items():
             self.assertEqual(peer, accepted.state.request_nodes[node_id])
+
+        early_ack = session.step(
+            accepted.state,
+            ChiDeliverCoherencePacket(
+                ChiNetworkPacket.response(
+                    ChiCompAckMessage(transaction_id=0x200),
+                    source_id=self.REQUESTER,
+                    target_id=self.HOME,
+                )
+            ),
+        )
+        self.assertIsNotNone(early_ack.fault)
+        assert early_ack.fault is not None
+        self.assertTrue(
+            early_ack.fault.rule.endswith(
+                "coherent_read_completion_ack_sequence"
+            )
+        )
+        self.assertIs(accepted.state, early_ack.state)
 
         contender_issued = self.apply(
             session,
@@ -754,6 +782,9 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
             session,
             accepted.state,
             ChiDeliverCoherencePacket(completion),
+        )
+        self.assertFalse(
+            completed.state.expected_coherent_read_completions
         )
         requester = completed.state.request_nodes[self.REQUESTER]
         self.assertEqual(initial_requester.cache, requester.cache)
@@ -908,35 +939,52 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
             issued.state,
             ChiDeliverCoherencePacket(issued.emissions[0]),
         )
+        completion = accepted.emissions[0]
+        self.assertEqual(
+            completion,
+            accepted.state.expected_coherent_read_completions[
+                (self.REQUESTER, request.transaction_id)
+            ],
+        )
         cases = (
-            ChiCompDataMessage(
-                transaction_id=request.transaction_id,
-                data=0,
-                home_node_id=self.HOME,
-                response_error=ChiRespErr.NDERR,
-                response=ChiRespCode.I,
-                data_buffer_id=0x201,
+            ChiNetworkPacket.data(
+                ChiCompDataMessage(
+                    transaction_id=request.transaction_id,
+                    data=0,
+                    home_node_id=self.HOME,
+                    response_error=ChiRespErr.NDERR,
+                    response=ChiRespCode.I,
+                    data_buffer_id=0x201,
+                ),
+                source_id=self.HOME,
+                target_id=self.REQUESTER,
             ),
-            ChiCompDataMessage(
-                transaction_id=request.transaction_id,
-                data=self.DATA,
-                home_node_id=self.HOME,
-                response_error=ChiRespErr.OK,
-                response=ChiRespCode.UC,
-                data_buffer_id=0x200,
+            ChiNetworkPacket.data(
+                ChiCompDataMessage(
+                    transaction_id=request.transaction_id,
+                    data=self.DATA,
+                    home_node_id=self.HOME,
+                    response_error=ChiRespErr.OK,
+                    response=ChiRespCode.UC,
+                    data_buffer_id=0x200,
+                ),
+                source_id=self.HOME,
+                target_id=self.REQUESTER,
+            ),
+            replace(
+                completion,
+                packet_index=1,
+                packet_count=2,
             ),
         )
 
-        for forged_message in cases:
+        for forged in cases:
             with self.subTest(
-                data_buffer_id=forged_message.data_buffer_id,
-                response_error=forged_message.response_error,
+                data_buffer_id=forged.message.data_buffer_id,
+                response_error=forged.message.response_error,
+                packet_index=forged.packet_index,
+                packet_count=forged.packet_count,
             ):
-                forged = ChiNetworkPacket.data(
-                    forged_message,
-                    source_id=self.HOME,
-                    target_id=self.REQUESTER,
-                )
                 rejected = session.step(
                     accepted.state,
                     ChiDeliverCoherencePacket(forged),
@@ -956,6 +1004,48 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
                         self.REQUESTER
                     ].pending_transactions,
                 )
+
+    def test_completed_home_read_requires_expected_packet_evidence(
+        self,
+    ) -> None:
+        session = self.build_session(
+            read_unique_nderr_policy=lambda _request, _state: True,
+        )
+        request = ChiReadUniqueMessage(0x17, self.ADDRESS)
+        issued = self.apply(
+            session,
+            session.initial_state(),
+            ChiSubmitCoherentRead(self.REQUESTER, request),
+        )
+        accepted = self.apply(
+            session,
+            issued.state,
+            ChiDeliverCoherencePacket(issued.emissions[0]),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "requires exactly one expected CompData",
+        ):
+            ChiCoherenceState(
+                home=accepted.state.home,
+                request_nodes=accepted.state.request_nodes,
+                expected_evict_completions=(
+                    accepted.state.expected_evict_completions
+                ),
+                expected_clean_unique_completions=(
+                    accepted.state.expected_clean_unique_completions
+                ),
+                expected_make_unique_completions=(
+                    accepted.state.expected_make_unique_completions
+                ),
+                expected_snoop_deliveries=(
+                    accepted.state.expected_snoop_deliveries
+                ),
+                expected_snoop_responses=(
+                    accepted.state.expected_snoop_responses
+                ),
+            )
 
     def test_nderr_policy_and_feature_must_be_enabled_together(self) -> None:
         configured = self.build_session(

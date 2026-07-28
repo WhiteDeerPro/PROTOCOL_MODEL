@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from protocol_model.integrations.recipes.amba.chi import (
@@ -187,11 +188,62 @@ class ChiIssueHDirtyUniqueCoherenceTest(unittest.TestCase):
         )
         self.assertTrue(completion_packet.message.passes_dirty)
         self.assertEqual(self.DIRTY_DATA, completion_packet.message.data)
+        completion_key = (self.REQUESTER, request.transaction_id)
+        self.assertEqual(
+            completion_packet,
+            collected.state.expected_coherent_read_completions[
+                completion_key
+            ],
+        )
+
+        forged_packets = {
+            "data": replace(
+                completion_packet,
+                message=replace(
+                    completion_packet.message,
+                    data=self.BACKING_DATA,
+                ),
+            ),
+            "response": replace(
+                completion_packet,
+                message=replace(
+                    completion_packet.message,
+                    response=ChiRespCode.UC,
+                ),
+            ),
+            "packet_metadata": replace(
+                completion_packet,
+                packet_index=1,
+                packet_count=2,
+            ),
+        }
+        for field, forged_packet in forged_packets.items():
+            with self.subTest(forged_field=field):
+                rejected = session.step(
+                    collected.state,
+                    ChiDeliverCoherencePacket(forged_packet),
+                )
+                self.assertIsNotNone(rejected.fault)
+                assert rejected.fault is not None
+                self.assertIn(
+                    "exactly match one Home-produced",
+                    rejected.fault.reason,
+                )
+                self.assertIs(collected.state, rejected.state)
+                self.assertEqual(
+                    completion_packet,
+                    rejected.state.expected_coherent_read_completions[
+                        completion_key
+                    ],
+                )
 
         installed = self.apply(
             session,
             collected.state,
             ChiDeliverCoherencePacket(completion_packet),
+        )
+        self.assertFalse(
+            installed.state.expected_coherent_read_completions
         )
         requester_line = installed.state.request_nodes[
             self.REQUESTER

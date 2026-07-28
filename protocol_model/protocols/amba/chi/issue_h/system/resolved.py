@@ -33,7 +33,11 @@ from ..participants import (
 from .capability import (
     CHI_BUILTIN_FEATURE_CATALOG,
     CHI_FEATURE_CLEAN_READ_SHARED,
+    CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+    CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
+    CHI_FEATURE_MAKE_UNIQUE,
     CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
     ChiCapabilityKey,
     ChiFeatureCatalog,
@@ -245,18 +249,73 @@ def resolve_chi_system(
         raise ValueError(
             "CHI system resolution requires a feature address claim"
         )
+    if not isinstance(catalog, ChiFeatureCatalog):
+        raise TypeError("CHI system resolution requires a feature catalog")
+    feature_closure: set[ChiFeatureKey] = set()
+
+    def add_feature(feature: ChiFeatureKey) -> None:
+        if feature in feature_closure:
+            return
+        definition = catalog.definitions.get(feature)
+        if definition is None:
+            return
+        feature_closure.add(feature)
+        for dependency in definition.dependencies:
+            add_feature(dependency)
+
+    for required in feature_contract.required:
+        add_feature(required)
     if (
-        CHI_FEATURE_CLEAN_READ_SHARED in feature_contract.required
+        CHI_FEATURE_CLEAN_READ_SHARED in feature_closure
         and {
             CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
+            CHI_FEATURE_MAKE_UNIQUE,
             CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
         }
-        & feature_contract.required
+        & feature_closure
     ):
         raise ValueError(
             "the current CHI coherence runtime cannot combine ReadShared "
             "with a dirty-owner feature; select the MESI "
             "ReadNotSharedDirty policy preset instead"
+        )
+    if (
+        {
+            CHI_FEATURE_MAKE_UNIQUE,
+            CHI_FEATURE_CLEAN_READ_UNIQUE,
+        }
+        <= feature_closure
+        and CHI_FEATURE_DIRTY_UNIQUE_TRANSFER
+        not in feature_closure
+    ):
+        raise ValueError(
+            "the current staged CHI system profile combines MakeUnique and "
+            "ReadUnique only with dirty Unique transfer enabled"
+        )
+    if (
+        {
+            CHI_FEATURE_MAKE_UNIQUE,
+            CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+        }
+        <= feature_closure
+        and CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+        not in feature_closure
+    ):
+        raise ValueError(
+            "the current staged CHI system profile combines MakeUnique and "
+            "CleanUnique only with shared-dirty peer handling enabled"
+        )
+    if (
+        {
+            CHI_FEATURE_MAKE_UNIQUE,
+            CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
+        }
+        <= feature_closure
+    ):
+        raise ValueError(
+            "the current staged CHI system profile does not combine "
+            "MakeUnique with MESI ReadNotSharedDirty until both same-line "
+            "transient Snoop directions are implemented"
         )
     facet_items = tuple(facets)
     if any(not isinstance(item, ChiBehaviorFacet) for item in facet_items):

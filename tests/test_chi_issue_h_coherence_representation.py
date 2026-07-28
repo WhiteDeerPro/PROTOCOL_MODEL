@@ -12,6 +12,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation.dat import (
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.req import (
     ChiIssueHReqProfile,
+    ChiMakeUniqueMessage,
     ChiReadNotSharedDirtyMessage,
     ChiReadSharedMessage,
     ChiReadUniqueMessage,
@@ -28,6 +29,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation.rsp import (
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.snp import (
     ChiIssueHSnpProfile,
+    ChiSnpMakeInvalidMessage,
     ChiSnpNotSharedDirtyMessage,
     ChiSnpOpcode,
     ChiSnpUniqueMessage,
@@ -113,6 +115,37 @@ class ChiIssueHCoherenceRepresentationTest(unittest.TestCase):
             "DoNotGoToSD",
             ChiIssueHSnpProfile().explain(message)[0],
         )
+
+    def test_make_unique_forms_are_typed_routable_messages(self) -> None:
+        request = ChiMakeUniqueMessage(
+            transaction_id=0x15,
+            address=0x9000,
+        )
+        snoop = ChiSnpMakeInvalidMessage(
+            transaction_id=0x103,
+            address=0x9000,
+        )
+        request_packet = ChiNetworkPacket.request(
+            request,
+            source_id=0x07,
+            target_id=0x21,
+        )
+        snoop_packet = ChiNetworkPacket.snoop(
+            snoop,
+            source_id=0x21,
+            target_id=0x08,
+        )
+
+        self.assertEqual(0x0C, int(ChiReqOpcode.MAKE_UNIQUE))
+        self.assertIs(ChiReqOpcode.MAKE_UNIQUE, request.opcode)
+        self.assertTrue(ChiIssueHReqProfile().contains(request))
+        self.assertFalse(request_packet.explain_profile())
+        self.assertEqual(0x0A, int(ChiSnpOpcode.SNP_MAKE_INVALID))
+        self.assertIs(ChiSnpOpcode.SNP_MAKE_INVALID, snoop.opcode)
+        self.assertTrue(snoop.do_not_go_to_shared_dirty)
+        self.assertFalse(snoop.return_to_source)
+        self.assertTrue(ChiIssueHSnpProfile().contains(snoop))
+        self.assertFalse(snoop_packet.explain_profile())
 
     def test_mesi_read_and_snoop_are_typed_no_shared_dirty_forms(
         self,

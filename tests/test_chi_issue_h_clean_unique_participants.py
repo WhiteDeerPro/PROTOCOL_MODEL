@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import unittest
 
 from protocol_model.integrations.recipes.amba.chi import (
@@ -558,12 +559,71 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
             second_snooped.state,
             ChiDeliverCoherencePacket(second_snooped.emissions[0]),
         )
+        completion_packet = first_completed_at_home.emissions[0]
+        completion_key = (self.REQUESTER, 0x31)
+        completion_evidence = (
+            first_completed_at_home.state
+            .expected_clean_unique_completions
+        )
+        self.assertEqual(
+            completion_packet,
+            completion_evidence[completion_key],
+        )
+        forged_packets = (
+            replace(
+                completion_packet,
+                message=replace(
+                    completion_packet.message,
+                    data_buffer_id=self.DBID + 1,
+                ),
+            ),
+            replace(
+                completion_packet,
+                packet_index=1,
+                packet_count=2,
+            ),
+        )
+        for forged_packet in forged_packets:
+            rejected = session.step(
+                first_completed_at_home.state,
+                ChiDeliverCoherencePacket(forged_packet),
+            )
+            self.assert_fault_rule(
+                rejected,
+                "clean_unique_completion_correlation",
+            )
+            self.assertIs(first_completed_at_home.state, rejected.state)
+            self.assertEqual(
+                completion_packet,
+                rejected.state.expected_clean_unique_completions[
+                    completion_key
+                ],
+            )
+        early_ack = session.step(
+            first_completed_at_home.state,
+            ChiDeliverCoherencePacket(
+                ChiNetworkPacket.response(
+                    ChiCompAckMessage(transaction_id=self.DBID),
+                    source_id=self.REQUESTER,
+                    target_id=self.HOME,
+                )
+            ),
+        )
+        self.assert_fault_rule(
+            early_ack,
+            "clean_unique_completion_ack_sequence",
+        )
+        self.assertIs(first_completed_at_home.state, early_ack.state)
+
         first_completed = self.apply(
             session,
             first_completed_at_home.state,
             ChiDeliverCoherencePacket(
                 first_completed_at_home.emissions[0]
             ),
+        )
+        self.assertFalse(
+            first_completed.state.expected_clean_unique_completions
         )
         first_retired = self.apply(
             session,

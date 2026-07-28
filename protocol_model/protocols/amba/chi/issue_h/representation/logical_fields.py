@@ -40,6 +40,7 @@ from .domain import (
 from .req import (
     ChiCleanUniqueMessage,
     ChiEvictMessage,
+    ChiMakeUniqueMessage,
     ChiPCrdReturnMessage,
     ChiReadNoSnpMessage,
     ChiReadNotSharedDirtyMessage,
@@ -59,6 +60,7 @@ from .rsp import (
 )
 from .snp import (
     ChiSnpCleanInvalidMessage,
+    ChiSnpMakeInvalidMessage,
     ChiSnpOpcode,
     ChiSnpNotSharedDirtyMessage,
     ChiSnpSharedMessage,
@@ -423,6 +425,13 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
     ),
     _schema(
         ChiChannelKind.REQ,
+        ChiReqOpcode.MAKE_UNIQUE,
+        7,
+        ChiMakeUniqueMessage,
+        _READ_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
         ChiReqOpcode.EVICT,
         7,
         ChiEvictMessage,
@@ -551,6 +560,13 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
         ChiSnpOpcode.SNP_CLEAN_INVALID,
         5,
         ChiSnpCleanInvalidMessage,
+        _SNOOP_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.SNP,
+        ChiSnpOpcode.SNP_MAKE_INVALID,
+        5,
+        ChiSnpMakeInvalidMessage,
         _SNOOP_FIELDS,
     ),
     _schema(

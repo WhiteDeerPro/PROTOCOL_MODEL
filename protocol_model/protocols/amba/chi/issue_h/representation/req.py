@@ -3,8 +3,8 @@
 This module deliberately represents fields by meaning rather than packing a
 REQFLIT bit vector.  ``ReadNoSnp``, ``ReadShared``,
 ``ReadNotSharedDirty``, ``ReadUnique``, ``CleanUnique``, ``Evict``,
-``WriteBackFull``, and ``PCrdReturn`` are the currently implemented
-protocol messages;
+``MakeUnique``, ``WriteBackFull``, and ``PCrdReturn`` are the currently
+implemented protocol messages;
 ``LCrdReturn`` is the REQ-channel link-maintenance flit.  Routing NodeIDs are
 added by the Network packet.
 """
@@ -27,6 +27,7 @@ class ChiReqOpcode(IntEnum):
     PROTOCOL_CREDIT_RETURN = 0x05
     READ_UNIQUE = 0x07
     CLEAN_UNIQUE = 0x0B
+    MAKE_UNIQUE = 0x0C
     EVICT = 0x0D
     WRITE_BACK_FULL = 0x1B
     READ_NOT_SHARED_DIRTY = 0x26
@@ -219,6 +220,23 @@ class ChiCleanUniqueMessage(_ChiCoherentRequestMessage):
 
 
 @dataclass(frozen=True)
+class ChiMakeUniqueMessage(_ChiCoherentRequestMessage):
+    """Dataless request coupled to a guaranteed full-line local store.
+
+    The represented base form is a full-line, non-Exclusive, snoopable
+    request that does not ask the Home or a peer to return the old line.  It
+    expects ``Comp`` followed by ``CompAck``.  The replacement data is
+    Requester-local operation intent, not a field of this wire message;
+    cache-state eligibility and invalidation progress remain lifecycle
+    concerns above this representation.
+    """
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.MAKE_UNIQUE
+
+
+@dataclass(frozen=True)
 class ChiEvictMessage(_ChiCoherentRequestMessage):
     """Dataless request to remove one clean resident line from coherence.
 
@@ -361,6 +379,7 @@ ChiReqProtocolMessage: TypeAlias = (
     | ChiReadNotSharedDirtyMessage
     | ChiReadUniqueMessage
     | ChiCleanUniqueMessage
+    | ChiMakeUniqueMessage
     | ChiEvictMessage
     | ChiWriteBackFullMessage
     | ChiPCrdReturnMessage
@@ -404,6 +423,7 @@ class ChiIssueHReqProfile:
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
                 ChiCleanUniqueMessage,
+                ChiMakeUniqueMessage,
                 ChiEvictMessage,
                 ChiWriteBackFullMessage,
                 ChiPCrdReturnMessage,
@@ -419,6 +439,7 @@ class ChiIssueHReqProfile:
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
                 ChiCleanUniqueMessage,
+                ChiMakeUniqueMessage,
                 ChiEvictMessage,
                 ChiWriteBackFullMessage,
             ),
@@ -507,6 +528,17 @@ class ChiIssueHReqProfile:
                         reasons.append(
                             "CleanUnique requires LikelyShared=0"
                         )
+                if isinstance(message, ChiMakeUniqueMessage):
+                    if message.exclusive:
+                        reasons.append("MakeUnique requires Excl=0")
+                    if message.likely_shared:
+                        reasons.append(
+                            "MakeUnique requires LikelyShared=0"
+                        )
+                    if message.tag_operation != 0:
+                        reasons.append(
+                            "MakeUnique requires TagOp=Invalid(0)"
+                        )
             if message.pas >= 6:
                 reasons.append("PAS encodings 6 and 7 are reserved")
             if message.allow_retry and message.protocol_credit_type:
@@ -526,6 +558,7 @@ __all__ = [
     "ChiCleanUniqueMessage",
     "ChiEvictMessage",
     "ChiIssueHReqProfile",
+    "ChiMakeUniqueMessage",
     "ChiPCrdReturnMessage",
     "ChiReadNoSnpMessage",
     "ChiReadNotSharedDirtyMessage",

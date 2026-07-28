@@ -121,18 +121,26 @@ correlation，等该 transaction 退休后再以 P-Credit 重发，并由上述 
 `CleanUnique→UC→local write→UD` 保留本地数据完成权限升级，也可通过
 `ReadUnique→UC→local write→UD` 走需要返回数据的路径。clean `Evict` 已闭合
 `UC/UCE/SC→I→Evict→Comp_I` 的 REQ/RSP-only lifecycle、条件 directory removal 和最小 topology
-witness。当前仍未实现 `MakeUnique`、
-packed bit/raw pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty
+witness。独立的 `MakeUnique(0x0C)` 切片也已闭合：REQ 不携带写数据，submit API 将 RN-local
+512-bit store intent 保存在 requester pending state；Home 用 `SnpMakeInvalid(0x0A)` 使任意当前已表示的
+peer state 进入 `I`，只接收 `SnpResp_I` 且不接收 DAT。`Comp_UC` 到达 requester 时原子覆盖/安装 intent
+为 `UD` 并产生 `CompAck`；Home 到 Ack 才提交 unique owner，backing payload/version 保持不变。规范描述
+`I/SC/SD` 为 expected initial requester state；当前模型还允许 `UC/UCE`，拒绝 `UD`。该 feature 独立于
+CleanUnique，已由 dirty-peer 五 packet resolved witness 闭合 REQ/SNP/SnpResp/Comp/CompAck 与零 DAT。
+由于它可产生 `UD`，与 clean ReadUnique/CleanUnique base 组合时当前 profile 分别要求相应
+dirty-unique/shared-dirty modifier；与 MESI ReadNotSharedDirty 的双向 same-line transient 尚未闭合，
+当前 construction 拒绝同时选择两者。这些都是阶段 closure，不是协议永久禁配。
+当前仍未实现 packed bit/raw pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty
 victim/writeback scheduling、coherent DERR/同一 accepted request 已发出 Snoop 后的 error、
-coherent Retry cancel/multi-waiter
+MakeUnique Retry/error/MTE Update/partial write、coherent Retry cancel/multi-waiter
 policy、超出当前窄 witness 的一般 same-line transient/hazard，以及一般 MOESI `SD`/Owned。Participant
 facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，尚未并入通用
 `SystemSession` action loop；有界 scheduler budget 耗尽给出 inconclusive，不作为 network deadlock
 证明。
 
-后续扩展继续以可执行 lifecycle 为单位增加。紧邻的 opcode 增量是 `MakeUnique`；
-自动 dirty victim/writeback scheduling、一般 same-line transient/hazard，以及同一 Home/type 下多个
-waiter 的具名选择与公平性合同再按依赖推进。
+后续扩展继续以可执行 lifecycle 为单位增加，不把此处建议固化成永久顺序。若继续扩展
+opcode/lifecycle，可优先比较 Evict Retry 与 deliberate dirty invalidate/WriteEvict；若下一场景首先受
+并发资源阻塞，则先闭合同一 Home/type 下多个 waiter 的具名选择、释放与公平性 witness。
 `PCrdGrant`、`RetryAck` 仍走 Home→Requester 的 RSP 路径；`PCrdReturn` 根据 CHI Issue H B2.5.6 走
 Requester→Home 的 REQ 路径，router 继续只按 `channel + TgtID` 透明转发。NodeID ownership 与首条
 single-scope address/Home/domain authority 已由 system construction 闭合；multi-Home/SAM 选择和

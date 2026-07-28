@@ -23,6 +23,7 @@ from ..representation.packet import ChiNetworkPacket
 from ..representation.req import (
     ChiCleanUniqueMessage,
     ChiEvictMessage,
+    ChiMakeUniqueMessage,
     ChiWriteBackFullMessage,
 )
 from .coherence import ChiDeliverCoherencePacket
@@ -324,7 +325,11 @@ def _held_lines(
                         ChiLineRelease.COMP
                         if isinstance(
                             request,
-                            (ChiCleanUniqueMessage, ChiEvictMessage),
+                            (
+                                ChiCleanUniqueMessage,
+                                ChiEvictMessage,
+                                ChiMakeUniqueMessage,
+                            ),
                         )
                         else ChiLineRelease.COMP_DATA
                     ),

@@ -34,6 +34,9 @@ from ..participants.capability import (
     CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+    CHI_MAKE_UNIQUE_HOME_CAPABILITIES,
+    CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES,
+    CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES,
     CHI_MESI_READ_NOT_SHARED_DIRTY_HOME_CAPABILITIES,
     CHI_MESI_READ_NOT_SHARED_DIRTY_REQUESTER_CAPABILITIES,
     CHI_MESI_READ_NOT_SHARED_DIRTY_SNOOPEE_CAPABILITIES,
@@ -98,6 +101,7 @@ CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS = ChiFeatureKey(
 CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER = ChiFeatureKey(
     "chi.feature.clean_unique.shared_dirty_peer"
 )
+CHI_FEATURE_MAKE_UNIQUE = ChiFeatureKey("chi.feature.make_unique")
 CHI_FEATURE_DIRTY_UNIQUE_TRANSFER = ChiFeatureKey(
     "chi.feature.dirty_unique_transfer"
 )
@@ -146,6 +150,9 @@ CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE = ChiCapabilityKey(
 )
 CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE = ChiCapabilityKey(
     "chi.system.clean_unique.shared_dirty_peer.lifecycle"
+)
+CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.make_unique.lifecycle"
 )
 CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE = ChiCapabilityKey(
     "chi.system.dirty_unique_transfer.lifecycle"
@@ -744,6 +751,61 @@ CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION = ChiFeatureDefinition(
     ),
 )
 
+CHI_MAKE_UNIQUE_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_MAKE_UNIQUE,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_MAKE_UNIQUE_HOME_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "snoopee",
+            CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES,
+            ChiRoleCardinality.FINITE_SET,
+            minimum_members=0,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "make_unique_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "make_unique_snoop",
+            "home",
+            "snoopee",
+            ChiChannelKind.SNP,
+        ),
+        ChiFlowRequirement(
+            "make_unique_snoop_response",
+            "snoopee",
+            "home",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "make_unique_completion",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "make_unique_completion_ack",
+            "requester",
+            "home",
+            ChiChannelKind.RSP,
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE,)
+    ),
+)
+
 CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION = ChiFeatureDefinition(
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
     dependencies=frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE,)),
@@ -929,6 +991,7 @@ CHI_BUILTIN_FEATURE_CATALOG = ChiFeatureCatalog(
         CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER: (
             CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION
         ),
+        CHI_FEATURE_MAKE_UNIQUE: CHI_MAKE_UNIQUE_DEFINITION,
         CHI_FEATURE_DIRTY_UNIQUE_TRANSFER: (
             CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION
         ),
@@ -1546,6 +1609,7 @@ __all__ = [
     "CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION",
     "CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION",
     "CHI_DIRTY_WRITEBACK_DEFINITION",
+    "CHI_MAKE_UNIQUE_DEFINITION",
     "CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION",
     "CHI_FEATURE_READ_NO_SNP_NDERR",
     "CHI_FEATURE_CLEAN_READ_SHARED",
@@ -1557,6 +1621,7 @@ __all__ = [
     "CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER",
     "CHI_FEATURE_DIRTY_UNIQUE_TRANSFER",
     "CHI_FEATURE_DIRTY_WRITEBACK",
+    "CHI_FEATURE_MAKE_UNIQUE",
     "CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY",
     "CHI_MESI_NO_SD_REQUIRED_FEATURES",
     "CHI_FEATURE_READ_NO_SNP",
@@ -1575,6 +1640,7 @@ __all__ = [
     "CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE",
     "CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE",
     "CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE",
+    "CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE",
     "CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE",
     "ChiBoundFlowRequirement",
     "ChiCapabilityClosureError",

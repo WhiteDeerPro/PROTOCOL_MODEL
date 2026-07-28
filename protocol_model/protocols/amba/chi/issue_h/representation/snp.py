@@ -7,7 +7,7 @@ the Network-layer packet carries each per-copy destination.  Consequently the
 protocol message below owns neither route endpoint.
 
 ``SnpShared``, ``SnpNotSharedDirty``, ``SnpUnique``, and
-``SnpCleanInvalid`` are represented alongside the hop-local
+``SnpCleanInvalid``/``SnpMakeInvalid`` are represented alongside the hop-local
 ``SnpLCrdReturn`` form.  This module establishes the channel/transport
 boundary; cache transitions, target selection, and response matching are
 participant/system behavior, not fields silently inferred by this local form.
@@ -31,6 +31,7 @@ class ChiSnpOpcode(IntEnum):
     SNP_NOT_SHARED_DIRTY = 0x04
     SNP_UNIQUE = 0x07
     SNP_CLEAN_INVALID = 0x09
+    SNP_MAKE_INVALID = 0x0A
 
 
 def _require_uint(name: str, value: int, width: int) -> None:
@@ -115,7 +116,7 @@ class ChiSnpNotSharedDirtyMessage(_ChiCleanSnoopMessage):
 
 @dataclass(frozen=True)
 class ChiSnpUniqueMessage(_ChiCleanSnoopMessage):
-    """Invalidate a clean cached copy for a Unique requester."""
+    """Invalidate a cached copy and return Dirty data when required."""
 
     do_not_go_to_shared_dirty: bool = True
 
@@ -134,6 +135,23 @@ class ChiSnpCleanInvalidMessage(_ChiCleanSnoopMessage):
     @property
     def opcode(self) -> ChiSnpOpcode:
         return ChiSnpOpcode.SNP_CLEAN_INVALID
+
+
+@dataclass(frozen=True)
+class ChiSnpMakeInvalidMessage(_ChiCleanSnoopMessage):
+    """Invalidate a peer for a dataless ``MakeUnique`` request.
+
+    The participant lifecycle responds with data-less ``SnpResp_I`` even
+    when the invalidated copy was Dirty; that discard behavior is not an
+    extra field on this SNP message.
+    """
+
+    do_not_go_to_shared_dirty: bool = True
+    return_to_source: bool = False
+
+    @property
+    def opcode(self) -> ChiSnpOpcode:
+        return ChiSnpOpcode.SNP_MAKE_INVALID
 
 
 @dataclass(frozen=True)
@@ -159,6 +177,7 @@ ChiSnpProtocolMessage: TypeAlias = (
     | ChiSnpNotSharedDirtyMessage
     | ChiSnpUniqueMessage
     | ChiSnpCleanInvalidMessage
+    | ChiSnpMakeInvalidMessage
 )
 ChiSnpChannelItem: TypeAlias = ChiSnpProtocolMessage | ChiSnpLCrdReturn
 
@@ -198,6 +217,7 @@ class ChiIssueHSnpProfile:
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
                 ChiSnpCleanInvalidMessage,
+                ChiSnpMakeInvalidMessage,
             ),
         ):
             return ("expected a supported clean Snoop protocol message",)
@@ -221,20 +241,29 @@ class ChiIssueHSnpProfile:
                     ChiSnpNotSharedDirtyMessage,
                     ChiSnpUniqueMessage,
                     ChiSnpCleanInvalidMessage,
+                    ChiSnpMakeInvalidMessage,
                 ),
             )
             and not message.do_not_go_to_shared_dirty
         ):
             reasons.append(
                 "DoNotGoToSD must be one for "
-                "SnpNotSharedDirty/SnpUnique/SnpCleanInvalid"
+                "SnpNotSharedDirty/SnpUnique/SnpCleanInvalid/"
+                "SnpMakeInvalid"
             )
         if (
-            isinstance(message, ChiSnpCleanInvalidMessage)
+            isinstance(
+                message,
+                (
+                    ChiSnpCleanInvalidMessage,
+                    ChiSnpMakeInvalidMessage,
+                ),
+            )
             and message.return_to_source
         ):
             reasons.append(
-                "RetToSrc must be zero for SnpCleanInvalid"
+                "RetToSrc must be zero for "
+                "SnpCleanInvalid/SnpMakeInvalid"
             )
         return tuple(reasons)
 
@@ -247,6 +276,7 @@ __all__ = [
     "ChiSnpChannelItem",
     "ChiSnpCleanInvalidMessage",
     "ChiSnpLCrdReturn",
+    "ChiSnpMakeInvalidMessage",
     "ChiSnpNotSharedDirtyMessage",
     "ChiSnpOpcode",
     "ChiSnpProtocolMessage",

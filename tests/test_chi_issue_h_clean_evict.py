@@ -635,7 +635,7 @@ class ChiIssueHCleanEvictTest(unittest.TestCase):
         completion = self.assert_evict_completion(accepted.emissions)
         key = (self.REQUESTER, self.TXN_ID)
         self.assertEqual(
-            completion.message,
+            completion,
             accepted.state.expected_evict_completions[key],
         )
         self.assertIsNone(
@@ -650,6 +650,23 @@ class ChiIssueHCleanEvictTest(unittest.TestCase):
         )
         self.assert_fault_rule(wrong, "evict_completion_correlation")
         self.assertEqual(accepted.state, wrong.state)
+
+        repacketized = ChiNetworkPacket.response(
+            completion.message,
+            source_id=self.HOME,
+            target_id=self.REQUESTER,
+            packet_index=1,
+            packet_count=2,
+        )
+        wrong_packet = session.step(
+            accepted.state,
+            ChiDeliverCoherencePacket(repacketized),
+        )
+        self.assert_fault_rule(
+            wrong_packet,
+            "evict_completion_correlation",
+        )
+        self.assertEqual(accepted.state, wrong_packet.state)
 
         duplicate_request = session.step(
             accepted.state,

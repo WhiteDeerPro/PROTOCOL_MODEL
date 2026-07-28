@@ -108,6 +108,23 @@ Requester→Home REQ 与 Home→Requester RSP，两 packet topology witness 不�
 自动 victim/LRU、普通 dirty replacement、deliberate dirty invalidate、WriteEvict family 与 Evict Retry
 没有并入该 slice。
 
+第一条 `MakeUnique` 切片也已闭合。REQ `MakeUnique(0x0C)` 本身不携带数据；提交 API 另保存一份
+RN-local 512-bit full-line store intent，它不是 wire payload。规范描述的 expected initial state 是
+`I/SC/SD`；当前模型还允许已表示的 `UC/UCE`，并拒绝 `UD` 发起。Home 以
+`SnpMakeInvalid(0x0A)` 失效实际 peer；peer 无论原来是 clean 还是 dirty
+都进入 `I`，只返回 `SnpResp_I`，不发送 DAT，旧 dirty payload 被本阶段 profile 明确丢弃。Home 收齐
+response 后返回 `Comp_UC`；requester 在接收 completion 的同一原子 transition 中覆盖安装 store intent、
+进入 `UD` 并发出 `CompAck`。Home 的 DBID 与同址 reservation 保留到 Ack，随后只提交 requester 的 unique
+directory authority，backing payload/version 不变。该 feature 独立声明 Requester/Home 以及可为空的
+Snoopee finite-set role，闭合 REQ、SNP、SnpResp、Comp、CompAck 五类 flow，不依赖 CleanUnique；但因其结果可为 `UD`，与 clean
+ReadUnique/CleanUnique base 组合时，当前 construction 分别要求 dirty-unique/shared-dirty modifier。
+与 MESI ReadNotSharedDirty 的两个方向 same-line transient 尚未闭合，当前 construction 拒绝同时选择；
+这些是阶段 dirty-policy closure，不是 CHI 永久禁配。当前 executable profile 固定
+full-line、初始 `AllowRetry=1/PCrdType=0`、`TagOp=Invalid`、tagless（状态空间内没有 Dirty-tag
+holder）、`TraceTag=0` 与 OK-only；引入 MTE Dirty tags 时需重新闭合 `TagOp` 和 snoop 选择。Retry、DERR/NDERR、
+MTE Update、partial write 和 multi-Home 不在本切片中。resolved dirty-peer witness 恰好运输
+REQ、SNP、SnpResp、Comp、CompAck 五个 packet，并确认零 DAT。
+
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
 | 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
@@ -117,10 +134,12 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 2 · WriteBack same-line/cancel outcome | `WriteBackFull`、invalidating Snoop、`CompDBIDResp`、post-Snoop `CopyBackWrData_I` | 既有 writeback DBID/correlation、dirty Snoop data transfer、directory/backing authority | RN `LIVE_UD/CANCELED_I`；system-derived stale-owner admission；Home snapshot/version guard 与零数据 retirement | 本切片已闭合 |
 | 3 · Retry/Snoop/error 窄组合 | `RetryAck`、`PCrdGrant`、独立 transaction 的 SNP、`CompData_I(NDERR)`；DERR 原子待来源 | 既有 Retry ledger、same-line transient、coherence pending 与 pre-Snoop NDERR modifier | 无新增；正交组合 `ChiRequestRetryPhase × ChiCacheState` | 本切片已闭合 |
 | 4 · clean `Evict` | `Evict`、`Comp_I`；无 DAT/CompAck/DBID lease | 复用 RN TxnID/line reservation、条件 directory removal、system return correlation 与 REQ/RSP topology | RN clean→I pending intent；Home-produced completion evidence；无新 cache 稳态 | 本切片已闭合 |
-| 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid` form 尚未登记，completion/ack 可复用 | 复用 `UCE`、失效 fanout、Home reservation 与 full-line write | 不再引入 payload 稳态；补 operation-specific correlation | 下一条独立 opcode slice |
+| 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid`、`SnpResp_I`、`Comp_UC`、`CompAck`；无 DAT | 复用失效 fanout、Home DBID/line reservation 与 full-line cache store | RN-local store intent；operation-specific correlation；`Comp_UC` 原子覆盖安装 `UD` | 本切片已闭合 |
 
-1. 下一条 opcode 主线按表中依赖加入 `MakeUnique`；DERR 继续等待
-   ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
+1. 下一条主线应按现有缺口和验证目标选择，而不是固化永久顺序：若继续扩展 opcode/lifecycle，可优先比较
+   Evict Retry 与 deliberate dirty invalidate/WriteEvict；若下一场景首先受并发资源阻塞，则先做同
+   Home/type 多 waiter 的具名选择、释放和公平性 witness。DERR 继续等待 ECC/Poison/DataCheck 来源，
+   不用普通 decode/access failure 冒充；
 2. 只有验证目标需要观察 physical commit 时，才增加
    topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；
 3. 增加多 waiter 选择/公平性、多个 pending emission batch 和 wait-for cycle witness；只有这些运行投影

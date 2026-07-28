@@ -137,12 +137,14 @@ phit 展开成 raw pins、lane 或 PHY transfer；`AtomicFrame` 观察的是 nor
 SNP 给出了保留这些层次的直接理由。Snoop request 的协议格式不定义 `TgtID`，Snoopee 由 interconnect 选择。
 因此 system/network construction 为每个选中的 Snoopee 建立一份显式 packet copy，并把选定 NodeID 放入
 packet 的 `target_id`；相同的 typed SNP message 可以被多份 packet 引用。当前 CHI slice 已经支持
-`SnpShared/SnpUnique/SnpNotSharedDirty` 表示、SNP channel 的 activation、L-Credit、
+`SnpShared/SnpUnique/SnpNotSharedDirty/SnpCleanInvalid/SnpMakeInvalid` 表示、SNP channel 的
+activation、L-Credit、
 FIFO/reservation、背压和 capture/drain。受限 coherent Home 会从显式 directory holder 中选择目标，
 生成 per-target packet，并聚合 clean response 或 dirty data。clean Shared/Unique、dirty unique
 responsibility transfer 和 no-SD `ReadNotSharedDirty` 都能由组合 session 经 resolved network 逐份运输。
-真实 snoop filter、router multicast、coherence-domain 自动成员派生，以及 MOESI shared-dirty/forwarding
-仍属于后续 participant/system 行为，不由 transport 自动补出。
+coherence-domain 成员已由 authority resolver 派生为有限 Snoopee set；真实 snoop filter、router
+multicast、动态成员变化以及 MOESI shared-dirty/forwarding 仍属于后续 participant/system 行为，不由
+transport 自动补出。
 
 ## 2. 五个构建阶段
 
@@ -301,7 +303,7 @@ verdict 不冒充实际模块输出。
 - system monitor 核对 fanout、response aggregation 和全局 owner/shared/dirty 演化。
 
 当前已实现 directory 选靶、per-Snoopee packet copy、clean SnpResp 与 dirty SnpRespData 聚合、
-`I/SC/UC/UD` permission、Home pending/commit 和稳定点 directory/cache 检查，并能经 resolved 多 hop
+`I/SC/SD/UC/UCE/UD` permission、Home pending/commit 和稳定点 directory/cache 检查，并能经 resolved 多 hop
 network 自动运输。`ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管
 dirty data/responsibility→CompData_SC→CompAck→Home backing/directory commit` 是当前 no-SD MESI
 路径。当前 Home 固定选择吸收 PassDirty 并返回 `CompData_SC`，这是规范允许结果的受限子集。普通
@@ -309,7 +311,7 @@ clean `ReadShared` 与任一允许 `UD` 的 feature 组合仍在本 profile 之�
 `SC→ReadUnique→UC→local write→UD` 与保留本地数据的 `SC→CleanUnique→UC→local write→UD` 已实现；
 clean `ReadUnique` 的单次 Retry 也已经经 resolved XP topology 自动闭合 RetryAck、PCrdGrant、
 credited reissue 与原有 SnpUnique lifecycle；显式 `UD` writeback 已经经同类 topology 闭合。真实 snoop
-filter、router multicast、`MakeUnique`、自动 dirty victim/writeback scheduling、Evict Retry/deliberate
+filter、router multicast、自动 dirty victim/writeback scheduling、Evict Retry/deliberate
 dirty invalidate/WriteEvict、一般 same-line transient/hazard 和
 一般 MOESI `SD`/Owned 仍属于后续
 participant/system 能力。
@@ -318,6 +320,16 @@ clean `Evict` 已作为独立 REQ/RSP-only feature 闭合：RN 从 `UC/UCE/SC` �
 matching clean holder 并返回 `Comp_I`；stale 或目录明确标记为 shared-dirty responsibility 的 hint
 no-op，且不产生 SNP/DAT/CompAck 或 backing update。最小
 direct topology witness 证明这两条 flow 可由同一 resolved network runtime 自动推进。
+
+`MakeUnique` 也已作为独立、无 DAT 的 feature 闭合。REQ `MakeUnique(0x0C)` 不携带写数据，requester
+另存 RN-local 512-bit store intent；Home 对实际 peer 发 `SnpMakeInvalid(0x0A)`，peer 无论原来是否 dirty
+都进入 `I` 并只返回 `SnpResp_I`。Requester 收到 `Comp_UC` 时原子覆盖/安装 intent 为 `UD` 并发送
+`CompAck`；Home 到 Ack 才提交 requester unique authority，backing payload/version 不变。resolved
+dirty-peer witness 恰好运输 REQ、SNP、SnpResp、Comp、CompAck 五个 packet，确认零 DAT。规范 expected
+initial requester state 为 `I/SC/SD`；当前模型还允许 `UC/UCE`，拒绝 `UD`。feature dependency
+独立于 CleanUnique；若与 clean ReadUnique/CleanUnique base 组合，当前 construction 因 MakeUnique 可产生
+`UD` 而分别要求 dirty-unique/shared-dirty modifier。MakeUnique 与 MESI ReadNotSharedDirty 的双向
+same-line transient 尚未闭合，当前 construction 拒绝同时选择。这些是阶段 closure，不是协议永久禁配。
 
 这里仍按三种投影保存权威：message/opcode/field 与 transaction-local correlation 属于 typed
 representation 和完整逻辑接口合同；cache/directory/backing/pending 属于 participant VirtualDut；
@@ -356,13 +368,16 @@ transport projection；其余 property 仍未闭合：
   Request-Retry/P-Credit 合同，Home grant 与 requester reissue 由同一 composition scheduler 自主推进；
   direct address-backed read 已把 authority 内 decode/access failure 映射为沿原 DAT route 返回的
   `CompData_I(NDERR)`；coherent `ReadUnique` 也已闭合 pre-snoop
-  `CompData_I(NDERR)→CompAck`、零 SNP 与 cache/directory/backing 不变式。Retry 与 NDERR modifier
+  `CompData_I(NDERR)→CompAck`、零 SNP 与 cache/directory/backing 不变式。MakeUnique 的独立
+  Requester/Home/Snoopee capability、五类 flow、participant lifecycle 和 dirty-peer topology witness
+  也已闭合，且不依赖 CleanUnique。Retry 与 NDERR modifier
   现可联合闭合经 XP 的六 packet 路径；direct 双 Requester witness 另证明等待 P-Credit 时可响应独立
   同址 Snoop 而保留 correlation。当前不含 coherent cancel、多 waiter policy、DERR 或同一 accepted
   request 已发出 Snoop 后的 error，
   或超出该窄 witness 的 Retry/Snoop 到达次序。通用 participant plan、
   multi-Home/SAM authority、
-  `MakeUnique`、自动 dirty victim/writeback scheduling、Evict Retry/deliberate dirty invalidate/WriteEvict、
+  MakeUnique Retry/error/MTE Update/partial-write 扩展、自动 dirty victim/writeback scheduling、
+  Evict Retry/deliberate dirty invalidate/WriteEvict、
   一般 same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；

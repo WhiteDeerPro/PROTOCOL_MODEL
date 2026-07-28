@@ -14,6 +14,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiIssueHReqProfile,
     ChiLogicalCodecError,
     ChiLogicalFieldRecord,
+    ChiMakeUniqueMessage,
     ChiPCrdGrantMessage,
     ChiPCrdReturnMessage,
     ChiReadNoSnpMessage,
@@ -26,6 +27,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiRetryAckMessage,
     ChiSnpRespMessage,
     ChiSnpRespDataMessage,
+    ChiSnpMakeInvalidMessage,
     ChiSnpNotSharedDirtyMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
@@ -56,7 +58,8 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
             (ChiReadNotSharedDirtyMessage(3, 0xA000), None),
             (ChiReadUniqueMessage(4, 0xC000), None),
             (ChiCleanUniqueMessage(5, 0xD000), None),
-            (ChiEvictMessage(6, 0xD040), None),
+            (ChiMakeUniqueMessage(6, 0xD040), None),
+            (ChiEvictMessage(7, 0xD080), None),
             (
                 ChiWriteBackFullMessage(
                     0x12,
@@ -118,6 +121,7 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                 None,
             ),
             (ChiSnpCleanInvalidMessage(10, 0xD000), None),
+            (ChiSnpMakeInvalidMessage(11, 0xD040), None),
             (
                 ChiCompDataMessage(
                     9,
@@ -315,6 +319,166 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
             completion,
             self.codec.decode(completion_record),
         )
+
+    def test_make_unique_forms_have_spec_opcodes_and_exact_fields(
+        self,
+    ) -> None:
+        request = ChiMakeUniqueMessage(0x17, 0xD080)
+        snoop = ChiSnpMakeInvalidMessage(0x107, 0xD080)
+        request_fields = (
+            "Opcode",
+            "TxnID",
+            "Addr",
+            "Size",
+            "QoS",
+            "PAS",
+            "LikelyShared",
+            "AllowRetry",
+            "Order",
+            "PCrdType",
+            "MemAttr",
+            "SnpAttr",
+            "Excl",
+            "ExpCompAck",
+            "TagOp",
+            "TraceTag",
+        )
+        snoop_fields = (
+            "Opcode",
+            "TxnID",
+            "Addr",
+            "QoS",
+            "PAS",
+            "DoNotGoToSD",
+            "RetToSrc",
+            "TraceTag",
+        )
+
+        request_record = self.codec.encode(request)
+        snoop_record = self.codec.encode(snoop)
+
+        self.assertEqual(0x0C, int(ChiReqOpcode.MAKE_UNIQUE))
+        self.assertIs(ChiReqOpcode.MAKE_UNIQUE, request.opcode)
+        self.assertEqual(request_fields, tuple(request_record.fields))
+        self.assertEqual(request, self.codec.decode(request_record))
+        self.assertEqual(6, request.size)
+        self.assertFalse(request.exclusive)
+        self.assertTrue(request.snoop_attribute)
+        self.assertEqual(0b0101, request.memory_attributes)
+        self.assertEqual(0, request.order)
+        self.assertFalse(request.likely_shared)
+        self.assertTrue(request.expect_completion_ack)
+        self.assertTrue(request.allow_retry)
+        self.assertEqual(0, request.protocol_credit_type)
+        self.assertEqual(0, request.tag_operation)
+
+        self.assertEqual(0x0A, int(ChiSnpOpcode.SNP_MAKE_INVALID))
+        self.assertIs(ChiSnpOpcode.SNP_MAKE_INVALID, snoop.opcode)
+        self.assertEqual(snoop_fields, tuple(snoop_record.fields))
+        self.assertEqual(snoop, self.codec.decode(snoop_record))
+        self.assertTrue(snoop.do_not_go_to_shared_dirty)
+        self.assertFalse(snoop.return_to_source)
+
+        outer_shareable = ChiMakeUniqueMessage(
+            0x18,
+            0xD0C0,
+            memory_attributes=0b1101,
+        )
+        self.assertEqual(
+            outer_shareable,
+            self.codec.decode(self.codec.encode(outer_shareable)),
+        )
+
+    def test_make_unique_profile_rejects_out_of_slice_fields(self) -> None:
+        invalid_cases = (
+            (ChiMakeUniqueMessage(1, 0x8000, size=5), "Size=6"),
+            (
+                ChiMakeUniqueMessage(
+                    1,
+                    0x8000,
+                    snoop_attribute=False,
+                ),
+                "SnpAttr=1",
+            ),
+            (
+                ChiMakeUniqueMessage(
+                    1,
+                    0x8000,
+                    memory_attributes=0,
+                ),
+                "MemAttr",
+            ),
+            (
+                ChiMakeUniqueMessage(1, 0x8000, order=1),
+                "Order=0",
+            ),
+            (
+                ChiMakeUniqueMessage(1, 0x8000, exclusive=True),
+                "Excl=0",
+            ),
+            (
+                ChiMakeUniqueMessage(
+                    1,
+                    0x8000,
+                    likely_shared=True,
+                ),
+                "LikelyShared=0",
+            ),
+            (
+                ChiMakeUniqueMessage(
+                    1,
+                    0x8000,
+                    expect_completion_ack=False,
+                ),
+                "ExpCompAck=1",
+            ),
+            (
+                ChiMakeUniqueMessage(
+                    1,
+                    0x8000,
+                    tag_operation=1,
+                ),
+                "TagOp=Invalid(0)",
+            ),
+            (
+                ChiMakeUniqueMessage(
+                    1,
+                    0x8000,
+                    allow_retry=True,
+                    protocol_credit_type=1,
+                ),
+                "PCrdType",
+            ),
+            (
+                ChiSnpMakeInvalidMessage(
+                    2,
+                    0x8000,
+                    do_not_go_to_shared_dirty=False,
+                ),
+                "DoNotGoToSD",
+            ),
+            (
+                ChiSnpMakeInvalidMessage(
+                    2,
+                    0x8000,
+                    return_to_source=True,
+                ),
+                "RetToSrc",
+            ),
+        )
+
+        for message, expected in invalid_cases:
+            with self.subTest(
+                message=type(message).__name__,
+                expected=expected,
+            ):
+                reasons = self.codec.explain_encode(message)
+
+                self.assertTrue(
+                    any(expected in reason for reason in reasons)
+                )
+                with self.assertRaises(ChiLogicalCodecError):
+                    self.codec.encode(message)
 
     def test_evict_profile_checks_shape_but_allows_retry_form(self) -> None:
         invalid_cases = (

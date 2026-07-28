@@ -15,6 +15,7 @@ from protocol_model.semantics import ConstraintScope, ResourceDemand
 
 from ..participants.coherence import (
     ChiCoherentTransactionPending,
+    ChiHomeWriteEvictPending,
     ChiHomeWriteBackPending,
 )
 from ..participants.progress import chi_line_resource_name
@@ -24,6 +25,7 @@ from ..representation.req import (
     ChiCleanUniqueMessage,
     ChiEvictMessage,
     ChiMakeUniqueMessage,
+    ChiWriteEvictFullMessage,
     ChiWriteBackFullMessage,
 )
 from .coherence import ChiDeliverCoherencePacket
@@ -289,8 +291,11 @@ def _held_lines(
                 pending.data_buffer_id,
             )
         )
-    for pending in state.coherence.home.pending_writebacks.values():
-        assert isinstance(pending, ChiHomeWriteBackPending)
+    for pending in state.coherence.home.pending_copybacks.values():
+        assert isinstance(
+            pending,
+            (ChiHomeWriteBackPending, ChiHomeWriteEvictPending),
+        )
         held.append(
             ChiHeldLine(
                 chi_line_resource_name(
@@ -336,9 +341,12 @@ def _held_lines(
                     request.transaction_id,
                 )
             )
-        for pending in node_state.pending_writebacks.values():
+        for pending in node_state.pending_copybacks.values():
             request = pending.request
-            assert isinstance(request, ChiWriteBackFullMessage)
+            assert isinstance(
+                request,
+                (ChiWriteBackFullMessage, ChiWriteEvictFullMessage),
+            )
             held.append(
                 ChiHeldLine(
                     chi_line_resource_name(node.name, request.address),

@@ -450,14 +450,20 @@ def _bind_feature_authority(
         )
 
     required_roles: set[str] = set()
+    requires_coherence_domain = False
     visited: set[ChiFeatureKey] = set()
 
     def visit(feature: ChiFeatureKey) -> None:
+        nonlocal requires_coherence_domain
         if feature in visited:
             return
         visited.add(feature)
         definition = catalog.definitions[feature]
         required_roles.update(item.role for item in definition.roles)
+        requires_coherence_domain = (
+            requires_coherence_domain
+            or definition.requires_coherence_domain
+        )
         for dependency in definition.dependencies:
             visit(dependency)
 
@@ -471,7 +477,8 @@ def _bind_feature_authority(
     role_sets = dict(feature_contract.role_sets)
     roles["home"] = authority.home
 
-    if "snoopee" in required_roles:
+    eligible_snoopees: tuple[str, ...] | None = None
+    if requires_coherence_domain or "snoopee" in required_roles:
         requester_members = feature_contract.role_members("requester")
         if (
             requester_members is None
@@ -486,12 +493,13 @@ def _bind_feature_authority(
                 f"CHI Home authority for claim {feature_address_claim!r} "
                 "does not select a coherence domain"
             )
-        role_sets["snoopee"] = frozenset(
-            authority_plan.eligible_snoopees(
-                feature_address_claim,
-                requester_members[0],
-            )
+        eligible_snoopees = authority_plan.eligible_snoopees(
+            feature_address_claim,
+            requester_members[0],
         )
+    if "snoopee" in required_roles:
+        assert eligible_snoopees is not None
+        role_sets["snoopee"] = frozenset(eligible_snoopees)
 
     return ChiFeatureContract(
         roles,

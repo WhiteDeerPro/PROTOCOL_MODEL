@@ -388,8 +388,8 @@ class ChiIssueHEvictRetryParticipantTest(unittest.TestCase):
         self.assertIs(initial.backing, rejected.state.backing)
         self.assertEqual(initial.pending, rejected.state.pending)
         self.assertEqual(
-            initial.pending_writebacks,
-            rejected.state.pending_writebacks,
+            initial.pending_copybacks,
+            rejected.state.pending_copybacks,
         )
         self.assertEqual(
             initial.next_snoop_transaction_id,

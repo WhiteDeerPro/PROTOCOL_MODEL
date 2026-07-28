@@ -48,6 +48,7 @@ from .req import (
     ChiReadUniqueMessage,
     ChiReqOpcode,
     ChiWriteBackFullMessage,
+    ChiWriteEvictFullMessage,
 )
 from .rsp import (
     ChiCompAckMessage,
@@ -354,6 +355,11 @@ _READ_FIELDS = (
     _boolean("TraceTag", "trace_tag"),
 )
 
+_COPYBACK_FIELDS = (
+    *_READ_FIELDS,
+    _boolean("CAH", "copy_at_home"),
+)
+
 _SNOOP_FIELDS = (
     _integer("TxnID", "transaction_id", 12),
     _integer(
@@ -439,10 +445,17 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
     ),
     _schema(
         ChiChannelKind.REQ,
+        ChiReqOpcode.WRITE_EVICT_FULL,
+        7,
+        ChiWriteEvictFullMessage,
+        _COPYBACK_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
         ChiReqOpcode.WRITE_BACK_FULL,
         7,
         ChiWriteBackFullMessage,
-        _READ_FIELDS,
+        _COPYBACK_FIELDS,
     ),
     _schema(
         ChiChannelKind.REQ,

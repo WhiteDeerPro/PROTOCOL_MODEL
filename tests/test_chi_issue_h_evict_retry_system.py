@@ -319,7 +319,7 @@ class ChiIssueHEvictRetrySystemTest(unittest.TestCase):
             rejected.state.home.next_data_buffer_id,
         )
         self.assertFalse(rejected.state.home.pending)
-        self.assertFalse(rejected.state.home.pending_writebacks)
+        self.assertFalse(rejected.state.home.pending_copybacks)
 
         credited_request = retried.emissions[0]
         self.assertIsInstance(credited_request.message, ChiEvictMessage)

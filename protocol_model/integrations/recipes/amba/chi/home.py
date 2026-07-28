@@ -35,6 +35,10 @@ from protocol_model.protocols.amba.chi.issue_h.transport import (
     CHI_ISSUE_H_TRANSPORT_FAMILY,
 )
 from protocol_model.virtual_dut.backend.backing import FullLineBackingCore
+from protocol_model.virtual_dut.backend.cache import (
+    CacheCore,
+    CacheLinePayload,
+)
 from protocol_model.virtual_dut.boundary import (
     DutBehaviorTag,
     TransportDirection,
@@ -51,6 +55,7 @@ class ChiIssueHHomeVdutAssembly:
     backing_core: FullLineBackingCore
     participant: ChiCoherentHomeNode
     facets: ChiVirtualDutFacets
+    clean_residency_core: CacheCore[CacheLinePayload] | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.virtual_dut, VirtualDut):
@@ -66,6 +71,21 @@ class ChiIssueHHomeVdutAssembly:
         if self.participant.backing_core is not self.backing_core:
             raise ValueError(
                 "CHI Home participant must use the assembled backing core"
+            )
+        if (
+            self.clean_residency_core is not None
+            and not isinstance(self.clean_residency_core, CacheCore)
+        ):
+            raise TypeError(
+                "CHI Home clean residency requires CacheCore or None"
+            )
+        if (
+            self.participant.clean_residency_core
+            is not self.clean_residency_core
+        ):
+            raise ValueError(
+                "CHI Home participant must use the assembled clean "
+                "residency core"
             )
         if not isinstance(self.facets, ChiVirtualDutFacets):
             raise TypeError("CHI Home assembly requires CHI behavior facets")
@@ -101,6 +121,7 @@ def bind_chi_issue_h_home_vdut(
     *,
     port_channels: Mapping[str, frozenset[ChiChannelKind]],
     initial_directory: tuple[ChiHomeDirectoryEntry, ...],
+    clean_residency_core: CacheCore[CacheLinePayload] | None = None,
     participant_name: str | None = None,
     binding_name: str | None = None,
     transaction_capacity: int = 4,
@@ -131,7 +152,7 @@ def bind_chi_issue_h_home_vdut(
     if virtual_dut.backend is not None:
         raise ValueError(
             "CHI Home binding requires a VirtualDut without an executable "
-            "backend to avoid two backing-state authorities"
+            "backend to avoid two reference-backing authorities"
         )
     if not isinstance(backing_core, FullLineBackingCore):
         raise TypeError(
@@ -213,6 +234,7 @@ def bind_chi_issue_h_home_vdut(
         ),
         node_id,
         backing_core=backing_core,
+        clean_residency_core=clean_residency_core,
         initial_directory=initial_directory,
         transaction_capacity=transaction_capacity,
         initial_snoop_transaction_id=initial_snoop_transaction_id,
@@ -239,10 +261,11 @@ def bind_chi_issue_h_home_vdut(
         ChiFacetKind.TRANSACTION,
     )
     return ChiIssueHHomeVdutAssembly(
-        virtual_dut,
-        backing_core,
-        participant,
-        ChiVirtualDutFacets(virtual_dut, (facet,)),
+        virtual_dut=virtual_dut,
+        backing_core=backing_core,
+        participant=participant,
+        facets=ChiVirtualDutFacets(virtual_dut, (facet,)),
+        clean_residency_core=clean_residency_core,
     )
 
 
@@ -252,6 +275,7 @@ def attach_chi_issue_h_home(
     node_id: int,
     *,
     initial_directory: tuple[ChiHomeDirectoryEntry, ...],
+    clean_residency_core: CacheCore[CacheLinePayload] | None = None,
     transaction_capacity: int = 4,
     initial_snoop_transaction_id: int = 0x100,
     initial_data_buffer_id: int = 0x200,
@@ -268,7 +292,8 @@ def attach_chi_issue_h_home(
     """Create the first Home VirtualDut around an existing backing core.
 
     The default boundary declares the channel superset used by the implemented
-    coherent-read, CleanUnique, and dirty-writeback slices:
+    coherent-read, CleanUnique, dirty-writeback, and clean
+    WriteEvictFull/residency slices:
 
     - transmit: RSP, SNP, and DAT;
     - receive: REQ, RSP, and DAT.
@@ -337,6 +362,7 @@ def attach_chi_issue_h_home(
             ),
         },
         initial_directory=initial_directory,
+        clean_residency_core=clean_residency_core,
         transaction_capacity=transaction_capacity,
         initial_snoop_transaction_id=initial_snoop_transaction_id,
         initial_data_buffer_id=initial_data_buffer_id,

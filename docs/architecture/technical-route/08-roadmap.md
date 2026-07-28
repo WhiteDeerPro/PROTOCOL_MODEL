@@ -139,6 +139,16 @@ P-Credit；initial/credited REQ 另与 retained entry 的 current form/phase 核
 五个 packet，零 SNP/DAT/CompAck。该 modifier 与 ReadUnique Retry 使用同一 Request-Retry ledger，但采用
 独立 admission policy 与 feature gate；当前只证明一次 Retry 后成功，不包含 cancel 或多 waiter fairness。
 
+第一条 clean `WriteEvictFull` base slice 现已闭合。Requester 只从已选中的 resident `UC` line 发起
+`WriteEvictFull(MemAttr=1101, CAH=0)`，在收到 `CompDBIDResp` 前保留 payload；随后用 Home DBID 发出
+full-line/full-BE 的 `CopyBackWrData_UC` 并原子进入 `I`。Home admission 冻结 directory snapshot 与
+reference-backing version，精确 DAT 到达后才清除 unique owner，并把 clean payload 安装到单独的
+Snoop-domain residency；backing 对象、payload 与 version 全程不变。该 feature 独立声明 REQ/RSP/DAT
+三条 flow，resolved witness 恰好运输三包且没有 SNP 或显式 `CompAck`。canonical Home binder 可透传同一
+协议无关 `CacheCore`，但当前 retain policy 仍是无容量/替换行为的 sparse state。`CAH=1`、
+`WriteEvictOrEvict`、同址 Snoop、Retry/error、下游读取命中、victim/LRU 和级联 eviction 没有并入 base
+slice。
+
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
 | 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
@@ -150,9 +160,11 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 4 · clean `Evict` | `Evict`、`Comp_I`；无 DAT/CompAck/DBID lease | 复用 RN TxnID/line reservation、条件 directory removal、system return correlation 与 REQ/RSP topology | RN clean→I pending intent；Home-produced completion evidence；无新 cache 稳态 | 本切片已闭合 |
 | 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid`、`SnpResp_I`、`Comp_UC`、`CompAck`；无 DAT | 复用失效 fanout、Home DBID/line reservation 与 full-line cache store | RN-local store intent；operation-specific correlation；`Comp_UC` 原子覆盖安装 `UD` | 本切片已闭合 |
 | 6 · clean `Evict` Retry | `RetryAck`、`PCrdGrant`、credited `Evict`、`Comp_I` | 复用 opcode-neutral Retry ledger、Home capacity reservation、Evict exact completion 与 REQ/RSP scheduler | Evict-specific policy/feature gate；exact RetryAck/P-Credit delivery evidence；无新 cache 稳态 | 本切片已闭合 |
+| 7 · clean `WriteEvictFull(CAH=0)` | `WriteEvictFull`、`CompDBIDResp`、`CopyBackWrData_UC`；无 SNP/显式 CompAck | 复用 RN TxnID/line reservation、Home DBID allocator、CopyBack DAT 与三通道 topology | 独立 clean residency authority；operation-specific RSP evidence；backing 不提交 | 本切片已闭合 |
 
 1. 下一条主线应按现有缺口和验证目标选择，而不是固化永久顺序：若继续扩展 opcode/lifecycle，可优先比较
-   deliberate dirty invalidate 与 `WriteEvictFull`/`WriteEvictOrEvict`；若下一场景首先受并发资源阻塞，
+   `WriteEvictFull` 的 CAH/Snoop/error modifier、`WriteEvictOrEvict` 与 deliberate dirty invalidate；
+   若下一场景首先受并发资源阻塞，
    则先做同 Home/type 多 waiter 的具名选择、释放和公平性 witness。DERR 继续等待
    ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
 2. 只有验证目标需要观察 physical commit 时，才增加

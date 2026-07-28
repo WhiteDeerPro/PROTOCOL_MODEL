@@ -618,7 +618,7 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
         assert line is not None
         self.assertIs(ChiCacheState.I, line.state)
         self.assertIsNone(line.data)
-        pending = snooped.state.pending_writebacks[0x15]
+        pending = snooped.state.pending_copybacks[0x15]
         self.assertIs(
             ChiRnWriteBackOutcome.CANCELED_I,
             pending.outcome,
@@ -647,7 +647,7 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
         self.assertIs(ChiRespCode.I, repeated_response.response)
         self.assertIs(
             ChiRnWriteBackOutcome.CANCELED_I,
-            repeated.state.pending_writebacks[0x15].outcome,
+            repeated.state.pending_copybacks[0x15].outcome,
         )
 
         completed = self.apply(
@@ -664,7 +664,7 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
                 )
             ),
         )
-        self.assertFalse(completed.state.pending_writebacks)
+        self.assertFalse(completed.state.pending_copybacks)
         copyback = completed.emissions[0].message
         self.assertIsInstance(copyback, ChiCopyBackWrDataMessage)
         self.assertIs(ChiRespCode.I, copyback.response)

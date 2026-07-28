@@ -6,7 +6,7 @@ digraph chi_operation_families {
     nodesep=0.35,
     ranksep=0.75,
     fontname="Noto Sans CJK SC",
-    label="评审快照 b4e5aba · 非实时实现状态\nCHI operation families：opcode-specific effect 由可复用原语组合",
+    label="输入摘录基线 b4e5aba · 非实时实现状态\nCHI operation families：opcode-specific effect 由可复用原语组合",
     labelloc=t,
     fontsize=20
   ];
@@ -79,10 +79,24 @@ digraph chi_operation_families {
       label="System fanout / join\ntarget set · per-target correlation\nbarrier / early completion"
     ];
     authority [
-      label="Authority commit\ncache permission · directory holder\nbacking payload/version"
+      label="Coherence authority\ncache permission · directory holder\noperation-specific final state"
+    ];
+    residency [
+      label="Snoop-domain clean residency\nallocation intent · clean-copy disposition\ncapacity/replacement separately scoped"
+    ];
+    backing [
+      label="Reference backing authority\nprepare · version guard · commit\nindependent of clean residency"
     ];
     completion [
       label="Completion contract\nreceipt · data · Comp\nCompAck · persistence point"
+    ];
+
+    residency -> backing [
+      dir=none,
+      style=dashed,
+      color="#d64545",
+      fontcolor="#8a1c1c",
+      label="独立状态轴"
     ];
   }
 
@@ -99,6 +113,14 @@ digraph chi_operation_families {
       fillcolor="#e3fcec",
       label="Authority result\nI / S / U (+ clean/dirty)\nrequester / peer / stash / nobody"
     ];
+    residency_result [
+      fillcolor="#e3fcec",
+      label="Residency result\nnone / retained clean copy\ninside Snoop domain"
+    ];
+    backing_result [
+      fillcolor="#f3e8ff",
+      label="Reference backing result\nunchanged / committed\nnot implied by residency"
+    ];
     observation_result [
       fillcolor="#fff3c4",
       label="Observation result\naccepted ≠ data complete\n≠ acknowledged ≠ persistent"
@@ -110,6 +132,8 @@ digraph chi_operation_families {
   compose -> snoop;
   compose -> fanout;
   compose -> authority;
+  compose -> residency;
+  compose -> backing;
   compose -> completion;
 
   data_plan -> payload_result;
@@ -117,6 +141,8 @@ digraph chi_operation_families {
   snoop -> permission_result;
   fanout -> observation_result [label="join/barrier"];
   authority -> permission_result;
+  residency -> residency_result;
+  backing -> backing_result;
   correlation -> observation_result;
   completion -> observation_result;
 
@@ -129,4 +155,59 @@ digraph chi_operation_families {
     label="复用 ≠ 自动完备\n新增 opcode 仍需 eligibility、phase、\nfinal state、feature/flow 与 witness"
   ];
   observation_result -> boundary [style=dashed, color="#d64545"];
+
+  subgraph cluster_write_evict_mapping {
+    label="后续规范裁决 / 建模映射更新 · WriteEvictFull 首个 CAH=0 分支";
+    color="#f0b429";
+    style="rounded,dashed";
+
+    write_evict_req [
+      fillcolor="#fff3c4",
+      label="WriteEvictFull REQ\n显式选择 resident UC line\nAllocate · CAH=0"
+    ];
+    write_evict_dbid [
+      fillcolor="#ffffff",
+      label="CompDBIDResp\noriginal TxnID → Home DBID\nRN consumes RSP: original TxnID reusable"
+    ];
+    write_evict_dat [
+      fillcolor="#e3f8ff",
+      label="CopyBackWrData_UC\none full clean line"
+    ];
+    write_evict_rn [
+      fillcolor="#e3fcec",
+      label="RN authority result\nUC → I"
+    ];
+    write_evict_residency [
+      fillcolor="#e3fcec",
+      label="Snoop-domain result\ncoherence-domain authority required\nretain clean resident copy"
+    ];
+    write_evict_backing [
+      fillcolor="#f3e8ff",
+      label="Reference backing result\npayload/version unchanged\nno backing commit"
+    ];
+    write_evict_boundary [
+      shape=note,
+      style="filled",
+      color="#d64545",
+      fillcolor="#fff5f5",
+      fontcolor="#8a1c1c",
+      label="本映射不作为实现状态证明\n未覆盖 victim/replacement policy · CAH=1\nsame-line Snoop · WriteEvictOrEvict"
+    ];
+
+    write_evict_req -> write_evict_dbid -> write_evict_dat;
+    write_evict_dbid -> write_evict_rn [label="emit DAT + retire"];
+    write_evict_dat -> write_evict_residency [label="clean allocation"];
+    write_evict_dat -> write_evict_backing [
+      style=dashed,
+      color="#805ad5",
+      fontcolor="#553c9a",
+      label="does not commit"
+    ];
+    write_evict_backing -> write_evict_boundary [
+      style=dotted,
+      arrowhead=none,
+      color="#d64545"
+    ];
+  }
+
 }

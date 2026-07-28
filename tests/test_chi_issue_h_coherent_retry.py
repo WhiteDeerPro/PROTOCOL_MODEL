@@ -462,7 +462,7 @@ class ChiIssueHCoherentRetryParticipantTest(unittest.TestCase):
         self.assertIsNotNone(transition.blocked)
         self.assertIs(granted.state, transition.state)
         self.assertFalse(transition.emissions)
-        self.assertFalse(transition.state.pending_writebacks)
+        self.assertFalse(transition.state.pending_copybacks)
         self.assertEqual(1, transition.state.request_retry.reserved_count)
 
     def test_session_requires_retry_policy_for_enabled_feature(self) -> None:

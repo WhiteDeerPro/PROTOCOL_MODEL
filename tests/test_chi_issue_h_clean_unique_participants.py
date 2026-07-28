@@ -950,7 +950,7 @@ class ChiIssueHCleanUniqueParticipantTest(unittest.TestCase):
                 collected.state.next_snoop_transaction_id
             ),
             next_data_buffer_id=collected.state.next_data_buffer_id,
-            pending_writebacks=collected.state.pending_writebacks,
+            pending_copybacks=collected.state.pending_copybacks,
         )
         ack = ChiNetworkPacket.response(
             ChiCompAckMessage(transaction_id=self.DBID),

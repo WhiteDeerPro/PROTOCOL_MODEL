@@ -108,7 +108,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         )
         self.assertEqual(
             request,
-            issued.state.pending_writebacks[0x12].request,
+            issued.state.pending_copybacks[0x12].request,
         )
         self.assertIs(
             ChiCacheState.UD,
@@ -127,7 +127,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             ChiCompDBIDRespMessage,
         )
         dbid = dbid_response_packet.message.data_buffer_id
-        self.assertIn(dbid, accepted.state.pending_writebacks)
+        self.assertIn(dbid, accepted.state.pending_copybacks)
         entry_before_data = accepted.state.directory[self.ADDRESS]
         self.assertEqual(
             self.STALE_BACKING,
@@ -140,7 +140,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             issued.state,
             ChiRnAcceptCompDBIDResp(dbid_response_packet),
         )
-        self.assertFalse(copied.state.pending_writebacks)
+        self.assertFalse(copied.state.pending_copybacks)
         self.assertIs(
             ChiCacheState.I,
             copied.state.lines[self.ADDRESS].state,
@@ -167,7 +167,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         )
         self.assertIsNone(entry.unique_owner)
         self.assertFalse(entry.sharers)
-        self.assertFalse(committed.state.pending_writebacks)
+        self.assertFalse(committed.state.pending_copybacks)
         self.assertTrue(rn.is_quiescent(copied.state))
         self.assertTrue(home.is_quiescent(committed.state))
 
@@ -717,7 +717,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         self.assertIs(ChiCacheState.I, old_line.state)
         self.assertIs(
             ChiRnWriteBackOutcome.CANCELED_I,
-            old_state.pending_writebacks[0x31].outcome,
+            old_state.pending_copybacks[0x31].outcome,
         )
         snoop_data = old_owner_snooped.emissions[0].message
         self.assertEqual(self.DIRTY_DATA, snoop_data.data)
@@ -773,7 +773,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             ],
         )
         home_pending = next(
-            iter(canceled_at_home.state.home.pending_writebacks.values())
+            iter(canceled_at_home.state.home.pending_copybacks.values())
         )
         self.assertIs(
             ChiHomeWriteBackAdmission.SNOOP_CANCELED,

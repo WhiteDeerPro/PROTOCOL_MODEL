@@ -29,9 +29,10 @@
   `sh assets/chi-injected-flow-digest/render.sh` 可重建 SVG。当前阅读件使用 Graphviz 2.43.0 和
   `Noto Sans CJK SC` 生成；图的语义由 DOT 决定，跨 Graphviz/字体版本不承诺 SVG 字节完全相同。
 
-这些图是 `b4e5aba` 评审快照，不随每个 opcode slice 滚动改写；实现汇总应从已验证的 canonical
-status/model 另生成 architecture/showcase 资产。只有发现提炼错误、重新审计一批有 provenance 的输入，
-或评审解释结构本身改变时，才同时修改 DOT 并用上述脚本重建 SVG。
+三张图的输入摘录基线是 `b4e5aba`，不随每个 opcode slice 滚动改写；实现汇总应从已验证的 canonical
+status/model 另生成 architecture/showcase 资产。`operation-families` 中明确标为“后续规范裁决 / 建模映射
+更新”的区域用于修正评审解释结构，不是实时状态勾选。只有发现提炼错误、重新审计一批有 provenance 的输入，
+或这类解释结构本身改变时，才同时修改 DOT 并用上述脚本重建 SVG。
 
 完成逐项覆盖、视觉和重建检查后，未受 Git 跟踪的原始 `figs/` 已删除；仓库长期保留的是本文、DOT 源和
 SVG 阅读件，而不是第三方像素副本。
@@ -45,6 +46,11 @@ SVG 阅读件，而不是第三方像素副本。
 这张图不把每个 opcode 当成孤立实现。Read、Write/CopyBack、dataless/CMO、Atomic 和 DVM 会按各自语义
 选取 route/correlation、data plan、Snoop、fanout/join、authority commit、completion 等方法，不要求每个
 family 经过全部原语；不同 opcode 仍需声明自己的 eligibility、dirty-data disposition、最终权限和完成条件。
+
+后续对 `WriteEvictFull` 的规范裁决暴露了一个原图没有清楚分开的建模轴：Snoop-domain 内是否保留 clean
+resident copy，与 reference backing 是否发生 prepare/commit 不是同一件事。图中的 `CAH=0` 窄映射因此只表达
+`REQ → CompDBIDResp → CopyBackWrData_UC`、RN `UC→I`、下游 clean residency 和 backing unchanged；它不表示
+该 opcode 已在实时基线闭合，实际实现状态仍查 canonical status。
 
 ### 2. 同址并发、ordering point 与 progress
 
@@ -64,10 +70,12 @@ lifecycle。
 
 ## 基本方法与组合功能
 
-| 建模层 | 可复用基本方法 | 由它组合出的功能 | 当前工程判断 |
+| 建模层 | 可复用基本方法 | 由它组合出的功能 | 评审基线判断（非实时） |
 |---|---|---|---|
 | 表示与关联 | typed REQ/RSP/SNP/DAT、NodeID route、TxnID/DBID、request/response identity | Read、Write、CopyBack、CMO、Atomic、DVM 的完整 transaction | Issue H 只登记了当前窄版所需 form；完整 catalog 尚缺 |
-| 数据与责任 | payload owner、byte enable、full/partial merge、PassDirty、backing prepare/commit | DMT/DCT、dirty transfer、WriteBack、WriteClean、partial write、Atomic RMW | full-line reference backing 与若干 dirty path 已有；partial/multi-packet/physical SN commit 尚缺 |
+| 数据传递与 dirty responsibility | payload owner、byte enable、full/partial merge、PassDirty | DMT/DCT、dirty transfer、WriteBack、WriteClean、partial write、Atomic RMW | 若干 full-line dirty path 已有；partial/multi-packet/physical SN commit 尚缺 |
+| Snoop-domain clean residency | Allocate intent、clean copy retain/discard、coherence-domain boundary | WriteEvict、stash 或下游 clean allocation | 输入 #26 提示 clean CopyBack；容量、victim 和 replacement policy 不能从该图推导 |
+| reference backing authority | backing prepare/commit、line-local version 与 conflict guard | reference payload 更新及 dirty responsibility retirement | full-line reference backing 已有；它不是 Snoop-domain residency 或独立 Memory/SN physical commit |
 | coherence authority | cache permission、directory holder、Snoop fanout/aggregate、operation-specific final state | ReadUnique、CleanUnique、MakeUnique、Clean/MakeInvalid、Evict、Stash | Read/CleanUnique/受限 WriteBack 已闭合；Evict/MakeUnique/Stash 尚缺 |
 | completion 与 ordering | receipt、DBID lease、Comp/CompAck、同址 reservation、causal edge | same-line transient、OWO、跨 Home stream ordering | 当前只闭合少量同址路径；一般 observation/ordering property 尚缺 |
 | progress | held resource、waiting demand、release event、Retry/P-Credit escape | block/replay、Retry/Snoop 组合、wait-for/deadlock witness | 已有只读 held/wait 投影；尚无一般 cycle proof、选择/公平性或多 waiter |
@@ -83,7 +91,7 @@ eligibility/final-state、Home holder removal、feature/flow closure 以及负�
 | 输入组 | 提炼出的稳定关系 | 对当前路线的影响 |
 |---|---|---|
 | 1–14 · Read | 数据可来自 SN/Home/peer；common、DMT、DCT 改变 transport path，不改变 transaction 必须闭合的 correlation；最终 I/SC/UC/UD 与 dirty responsibility 单独判定 | 可作为未来 DMT/DCT、MakeReadUnique 和 partial merge 的候选目录，不扩大当前 Read slice |
-| 15–27 · Write/CopyBack | full/partial/zero、是否 Snoop、是否 merge、requester 保留/丢弃 line 是独立轴；DBID grant 不等于 memory observation | 23 只展示正常 WriteBack，不包含已实现的 same-line cancel；26/27 是 WriteEvict family，不并入首个 clean Evict |
+| 15–27 · Write/CopyBack | full/partial/zero、是否 Snoop、是否 merge、requester 保留/丢弃 line 是独立轴；DBID grant 不等于 memory observation；clean residency 也不等于 backing commit | 23 只展示正常 WriteBack，不包含已实现的 same-line cancel；26/27 是 WriteEvict family，不并入首个 clean Evict |
 | 28–38 · Dataless/CMO/Stash/Evict | operation 由“peer dirty 数据写回或丢弃、谁获得 authority、是否等待 persistence”区分 | 29 与 dirty-peer CleanUnique 相符但画了尚未实现的 HN→SN physical write；38 是 clean Evict 的候选最小流 |
 | 39–44 · Atomic/DVM | AtomicStore 不返回旧值，Load/Swap/Compare 返回旧值；DVM 是 fanout/join，sync 需要 barrier | 需要独立 operation algebra 与 system fanout，不应顺手塞进 coherence opcode 切片 |
 | 45–47 · same-line hazard | pending phase 与 line authority/payload 是两条状态轴；Snoop 后晚到 completion 不得复活旧 authority；dirty payload 只转移一次 | 支持当前 `LIVE_UD→CANCELED_I→CopyBackWrData_I` 的方法选择，但 46 的具体完成流版本不明 |
@@ -95,6 +103,9 @@ eligibility/final-state、Home holder removal、feature/flow closure 以及负�
 
 - 输入 #23 是正常 `WriteBackFull → CompDBIDResp → CopyBack data`，没有 post-Snoop cancel；
   本工程的 cancel 结论来自 Issue H 独立核对，不来自该图。
+- 输入 #26 只提供 data-bearing clean eviction 的发现线索；`CAH=0` 字段合同、精确
+  `REQ → CompDBIDResp → CopyBackWrData_UC` 序列、RN `UC→I` 和 backing unchanged 都来自后续 Issue H
+  裁决，不能反向归因给原图。该裁决也不证明自动 replacement、`CAH=1` 或 same-line Snoop 已实现。
 - 输入 #29 把 dirty data 进一步写到 SN；当前工程只承诺协议无关 reference backing commit，
   不宣称已有 topology-visible HN→SN physical write。
 - 输入 #30 的无数据 permission upgrade 与标注的 `I→UD` 不自洽；只保留
@@ -116,9 +127,16 @@ eligibility/final-state、Home holder removal、feature/flow closure 以及负�
    write。本次核准的 clean profile 对 RN 从 `I/UD/SD` 主动发起是负例，但 Issue H 另有 deliberate dirty
    invalidate 后用 Evict 通知的旁支，所以该旁支是非目标，不是“协议永远禁止 dirty→Evict”。迟到或
    TxnID 不匹配的 completion 仍是 RN correlation 负例。
-3. `WriteEvictFull`、`WriteEvictOrEvict`、自动 victim policy 与 replacement scheduler 是相邻机会，不与第一版
-   clean `Evict` 混成一个工作包。
-4. same-line、OWO 与 deadlock 继续采用“phase + authority/payload + held/wait/release”三类事实，避免把一张
+3. 本次对 `WriteEvictFull` 采用的首个规范映射是 `CAH=0` data-bearing 分支：
+   `WriteEvictFull REQ → CompDBIDResp → CopyBackWrData_UC`。调用方显式选择 resident `UC` line；RN 接收
+   DBID 并发出完整 clean data 时进入 `I`。Home 侧将数据保留为 Snoop-domain clean residency，同时保持
+   reference backing payload/version 不变，不执行 backing commit。该映射没有 SNP traffic，但
+   Snoop-domain residency 仍要求 system authority 显式选择 coherence domain。clean residency 与
+   reference backing 因而是两个独立状态轴。RN 发出 DAT 后 original TxnID 可复用，旧 data phase 改由
+   Home DBID 关联；该裁决只定义建模边界，能力是否闭合仍查实时实现状态。
+4. 自动 victim/replacement policy、`CAH=1`、`WriteEvictOrEvict` 与 same-line Snoop 组合不由上述窄映射覆盖，
+   也不在摘要图中表示为已实现。
+5. same-line、OWO 与 deadlock 继续采用“phase + authority/payload + held/wait/release”三类事实，避免把一张
    具体 MSC 硬编码成通用 scheduler。
 
 ## 逐项语义索引（压缩）

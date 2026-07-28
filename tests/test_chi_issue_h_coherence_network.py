@@ -1177,11 +1177,11 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         self.assertEqual(0, backing.version)
 
         self.assertFalse(requester.pending_transactions)
-        self.assertFalse(requester.pending_writebacks)
+        self.assertFalse(requester.pending_copybacks)
         self.assertFalse(requester.request_retry.entries)
         self.assertFalse(requester.request_retry.protocol_credits)
         self.assertFalse(state.home.pending)
-        self.assertFalse(state.home.pending_writebacks)
+        self.assertFalse(state.home.pending_copybacks)
         self.assertFalse(state.home.request_retry.retry_debts)
         self.assertFalse(state.home.request_retry.reservations)
         self.assertEqual(1, state.home.request_retry.retry_ack_count)
@@ -1672,7 +1672,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
         )
         self.assertIsNone(entry.unique_owner)
         self.assertFalse(entry.sharers)
-        self.assertFalse(home_state.pending_writebacks)
+        self.assertFalse(home_state.pending_copybacks)
         self.assertFalse(
             state.coherence.expected_writeback_dbid_responses
         )
@@ -1681,7 +1681,7 @@ class ChiIssueHCoherenceNetworkTest(unittest.TestCase):
             (response.data_buffer_id + 1) % (1 << 12),
             home_state.next_data_buffer_id,
         )
-        self.assertFalse(rn_state.pending_writebacks)
+        self.assertFalse(rn_state.pending_copybacks)
         self.assertIs(
             ChiCacheState.I,
             rn_state.permissions[self.ADDRESS],

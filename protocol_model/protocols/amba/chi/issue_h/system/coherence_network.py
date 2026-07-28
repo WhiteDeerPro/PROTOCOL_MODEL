@@ -9,7 +9,8 @@ admitted to the network one packet at a time.
 The current feature set includes clean ReadShared/ReadUnique, clean- and
 restricted shared-dirty-peer CleanUnique, the UD ReadUnique owner-transfer
 path, clean Evict, the MESI no-SharedDirty downgrade path, and explicit dirty
-WriteBackFull.  It also schedules Home P-Credit grants and credited requester
+WriteBackFull and clean WriteEvictFull.  It also schedules Home P-Credit
+grants and credited requester
 reissue for one successful clean ReadUnique Retry cycle.  Retry cancellation
 and error composition, general shared-dirty ownership, automatic victim
 selection, forwarding snoops, and a cycle-accurate Network Interface remain
@@ -49,6 +50,7 @@ from .coherence import (
     ChiSubmitCoherentRead,
     ChiSubmitEvict,
     ChiSubmitMakeUnique,
+    ChiSubmitWriteEvictFull,
     ChiSubmitWriteBackFull,
     ChiWriteUniqueCacheLine,
 )
@@ -82,6 +84,7 @@ ChiCoherenceNetworkAction = (
     | ChiSubmitMakeUnique
     | ChiSubmitEvict
     | ChiSubmitWriteBackFull
+    | ChiSubmitWriteEvictFull
     | ChiWriteUniqueCacheLine
     | ChiAdvanceCoherenceNetwork
 )
@@ -477,6 +480,7 @@ class ChiCoherenceNetworkSession(
                 ChiSubmitMakeUnique,
                 ChiSubmitEvict,
                 ChiSubmitWriteBackFull,
+                ChiSubmitWriteEvictFull,
             ),
         ):
             return self._submit(state, action)
@@ -1034,7 +1038,7 @@ class ChiCoherenceNetworkSession(
         home_state = state.coherence.home
         if (
             len(home_state.pending)
-            + len(home_state.pending_writebacks)
+            + len(home_state.pending_copybacks)
             + home_state.request_retry.reserved_count
             > self.coherence.home.transaction_capacity
         ):

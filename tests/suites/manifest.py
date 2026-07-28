@@ -65,6 +65,7 @@ CHI_MODULES = (
     "tests.test_chi_issue_h_transport_network",
     "tests.test_chi_issue_h_writeback_lifecycle",
     "tests.test_chi_issue_h_writeback_representation",
+    "tests.test_chi_issue_h_write_evict_full",
 )
 
 VIRTUAL_DUT_MODULES = (
@@ -151,6 +152,7 @@ SMOKE_MODULES = (
     "tests.test_virtual_dut_translation",
     "tests.test_system_protocol",
     "tests.test_chi_issue_h_coherence_authority",
+    "tests.test_chi_issue_h_write_evict_full",
     "tests.test_chi_issue_h_clean_unique_system",
     "tests.test_chi_issue_h_make_unique_system",
     "tests.test_chi_issue_h_transport_connection",
@@ -178,6 +180,7 @@ INTEGRATION_MODULES = (
     "tests.test_chi_issue_h_snp_network",
     "tests.test_chi_issue_h_transport_connection",
     "tests.test_chi_issue_h_transport_network",
+    "tests.test_chi_issue_h_write_evict_full",
     "tests.test_random_traffic_controller",
     "tests.test_system_sensor_dma",
     "tests.test_virtual_dut_ahb_attachment",

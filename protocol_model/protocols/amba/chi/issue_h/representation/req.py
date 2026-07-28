@@ -3,8 +3,8 @@
 This module deliberately represents fields by meaning rather than packing a
 REQFLIT bit vector.  ``ReadNoSnp``, ``ReadShared``,
 ``ReadNotSharedDirty``, ``ReadUnique``, ``CleanUnique``, ``Evict``,
-``MakeUnique``, ``WriteBackFull``, and ``PCrdReturn`` are the currently
-implemented protocol messages;
+``MakeUnique``, ``WriteBackFull``, ``WriteEvictFull``, and ``PCrdReturn`` are
+the currently implemented protocol messages;
 ``LCrdReturn`` is the REQ-channel link-maintenance flit.  Routing NodeIDs are
 added by the Network packet.
 """
@@ -29,6 +29,7 @@ class ChiReqOpcode(IntEnum):
     CLEAN_UNIQUE = 0x0B
     MAKE_UNIQUE = 0x0C
     EVICT = 0x0D
+    WRITE_EVICT_FULL = 0x15
     WRITE_BACK_FULL = 0x1B
     READ_NOT_SHARED_DIRTY = 0x26
 
@@ -254,17 +255,18 @@ class ChiEvictMessage(_ChiCoherentRequestMessage):
 
 
 @dataclass(frozen=True)
-class ChiWriteBackFullMessage:
-    """One full-line CopyBack request from a coherent Request Node.
+class _ChiCopyBackRequestMessage:
+    """Fields shared by the represented full-line CopyBack requests.
 
-    The message starts a ``WriteBackFull`` transaction; it does not carry the
-    cache-line data.  The Home later returns ``CompDBIDResp`` and the
+    The REQ does not carry the cache-line data.  The Home returns
+    ``CompDBIDResp`` in the represented ``CAH=0`` branch, after which the
     Requester uses that DBID in ``CopyBackWrData``.  Routing NodeIDs remain on
     the containing Network packet.
 
-    Defaults select the ordinary first-attempt, 64-byte Normal-memory form.
-    Retry correlation and the requirement that the Requester currently holds
-    a Dirty line are transaction-lifecycle checks above this representation.
+    ``copy_at_home`` is the Issue H CAH field shared by CopyBack requests.
+    The current executable WriteBackFull and WriteEvictFull lifecycles fix it
+    to zero; CAH=1 adds the alternative ``Comp``/``CompAck`` branch and hidden
+    Home-copy provenance, so it remains a separate modifier.
     """
 
     chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.REQ
@@ -287,6 +289,7 @@ class ChiWriteBackFullMessage:
     expect_completion_ack: bool = False
     tag_operation: int = 0
     trace_tag: bool = False
+    copy_at_home: bool = False
 
     def __post_init__(self) -> None:
         for name, value, width in (
@@ -307,6 +310,7 @@ class ChiWriteBackFullMessage:
             ("exclusive", self.exclusive),
             ("expect_completion_ack", self.expect_completion_ack),
             ("trace_tag", self.trace_tag),
+            ("copy_at_home", self.copy_at_home),
         ):
             _require_bool(name, value)
         if (
@@ -317,14 +321,36 @@ class ChiWriteBackFullMessage:
             raise ValueError("address must be a non-negative integer")
 
     @property
-    def opcode(self) -> ChiReqOpcode:
-        return ChiReqOpcode.WRITE_BACK_FULL
-
-    @property
     def semantic_key(self) -> int:
         """Return the original Requester-owned transaction identifier."""
 
         return self.transaction_id
+
+
+@dataclass(frozen=True)
+class ChiWriteBackFullMessage(_ChiCopyBackRequestMessage):
+    """Write one resident Dirty line back to the next level or memory."""
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.WRITE_BACK_FULL
+
+
+@dataclass(frozen=True)
+class ChiWriteEvictFullMessage(_ChiCopyBackRequestMessage):
+    """Offer one evicted ``UC`` line to a next-level coherent cache.
+
+    ``MemAttr=1101`` asserts the required Allocate hint.  The executable base
+    profile uses ``CAH=0``, always transfers ``CopyBackWrData_UC``, and keeps
+    the data inside the Snoop domain; participant code must not turn it into a
+    reference-backing or physical-memory write.
+    """
+
+    memory_attributes: int = 0b1101
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.WRITE_EVICT_FULL
 
 
 @dataclass(frozen=True)
@@ -382,6 +408,7 @@ ChiReqProtocolMessage: TypeAlias = (
     | ChiMakeUniqueMessage
     | ChiEvictMessage
     | ChiWriteBackFullMessage
+    | ChiWriteEvictFullMessage
     | ChiPCrdReturnMessage
 )
 ChiReqChannelItem: TypeAlias = ChiReqProtocolMessage | ChiReqLCrdReturn
@@ -426,6 +453,7 @@ class ChiIssueHReqProfile:
                 ChiMakeUniqueMessage,
                 ChiEvictMessage,
                 ChiWriteBackFullMessage,
+                ChiWriteEvictFullMessage,
                 ChiPCrdReturnMessage,
             ),
         ):
@@ -442,6 +470,7 @@ class ChiIssueHReqProfile:
                 ChiMakeUniqueMessage,
                 ChiEvictMessage,
                 ChiWriteBackFullMessage,
+                ChiWriteEvictFullMessage,
             ),
         ):
             if message.address >= (1 << self.request_address_width):
@@ -491,6 +520,43 @@ class ChiIssueHReqProfile:
                 if message.expect_completion_ack:
                     reasons.append(
                         "WriteBackFull requires ExpCompAck=0"
+                    )
+                if message.copy_at_home:
+                    reasons.append(
+                        "the first WriteBackFull profile requires CAH=0"
+                    )
+            elif isinstance(message, ChiWriteEvictFullMessage):
+                if message.size != 6:
+                    reasons.append(
+                        "WriteEvictFull requires Size=6 (64 bytes)"
+                    )
+                if not message.snoop_attribute:
+                    reasons.append(
+                        "WriteEvictFull requires SnpAttr=1"
+                    )
+                if message.memory_attributes != 0b1101:
+                    reasons.append(
+                        "WriteEvictFull requires Allocate MemAttr 1101"
+                    )
+                if message.order != 0:
+                    reasons.append("WriteEvictFull requires Order=0")
+                if message.exclusive:
+                    reasons.append("WriteEvictFull requires Excl=0")
+                if message.likely_shared:
+                    reasons.append(
+                        "WriteEvictFull requires LikelyShared=0"
+                    )
+                if message.expect_completion_ack:
+                    reasons.append(
+                        "WriteEvictFull requires ExpCompAck=0"
+                    )
+                if message.tag_operation != 0:
+                    reasons.append(
+                        "the first WriteEvictFull profile requires TagOp=0"
+                    )
+                if message.copy_at_home:
+                    reasons.append(
+                        "the first WriteEvictFull profile requires CAH=0"
                     )
             else:
                 if message.size != 6:
@@ -565,6 +631,7 @@ __all__ = [
     "ChiReadSharedMessage",
     "ChiReadUniqueMessage",
     "ChiWriteBackFullMessage",
+    "ChiWriteEvictFullMessage",
     "ChiReqChannelItem",
     "ChiReqLCrdReturn",
     "ChiReqOpcode",

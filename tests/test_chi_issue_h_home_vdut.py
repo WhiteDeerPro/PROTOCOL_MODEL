@@ -21,6 +21,9 @@ from protocol_model.protocols.amba.chi.issue_h.transport import (
 from protocol_model.system import SystemProtocolBuilder
 from protocol_model.virtual_dut.backend import (
     BackingLine,
+    CacheCore,
+    CacheLinePayload,
+    CacheLineStore,
     FullLineBackingCore,
     NoOpBackend,
 )
@@ -45,6 +48,18 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
             initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
         )
 
+    def clean_residency_core(
+        self,
+        name: str = "hn0.clean_residency",
+    ) -> CacheCore[CacheLinePayload]:
+        return CacheCore(
+            name,
+            CacheLineStore(
+                f"{name}.lines",
+                line_bytes=64,
+            ),
+        )
+
     @staticmethod
     def port(
         name: str,
@@ -61,6 +76,7 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
         self,
     ) -> None:
         core = self.backing_core()
+        clean_core = self.clean_residency_core()
 
         def retry_policy(request, state):
             return 5
@@ -76,6 +92,7 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
             core,
             self.HOME,
             initial_directory=self.directory(),
+            clean_residency_core=clean_core,
             transaction_capacity=3,
             initial_snoop_transaction_id=0x120,
             initial_data_buffer_id=0x220,
@@ -91,6 +108,11 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
         self.assertIsInstance(assembly, ChiIssueHHomeVdutAssembly)
         self.assertIs(core, assembly.backing_core)
         self.assertIs(core, assembly.participant.backing_core)
+        self.assertIs(clean_core, assembly.clean_residency_core)
+        self.assertIs(
+            clean_core,
+            assembly.participant.clean_residency_core,
+        )
         self.assertIs(assembly.virtual_dut, assembly.facets.dut)
         self.assertIs(assembly.virtual_dut, assembly.binding.dut)
         self.assertIs(assembly.participant, assembly.binding.component)
@@ -183,6 +205,7 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
         rx = self.port("rx_req_rsp_dat", TransportDirection.RECEIVE)
         dut = VirtualDut("hn0", {tx.name: tx, rx.name: rx})
         core = self.backing_core()
+        clean_core = self.clean_residency_core()
 
         assembly = bind_chi_issue_h_home_vdut(
             dut,
@@ -205,6 +228,7 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
                 ),
             },
             initial_directory=self.directory(),
+            clean_residency_core=clean_core,
             participant_name="home",
             binding_name="hn0",
         )
@@ -216,6 +240,11 @@ class ChiIssueHHomeVdutRecipeTest(unittest.TestCase):
         self.assertIs(dut, system.virtual_duts["hn0"])
         self.assertIs(core, assembly.backing_core)
         self.assertIs(core, assembly.participant.backing_core)
+        self.assertIs(clean_core, assembly.clean_residency_core)
+        self.assertIs(
+            clean_core,
+            assembly.participant.clean_residency_core,
+        )
         self.assertEqual("home", assembly.participant.name)
         self.assertEqual("hn0", assembly.binding.name)
         self.assertIs(tx, assembly.binding.ports[0].port)

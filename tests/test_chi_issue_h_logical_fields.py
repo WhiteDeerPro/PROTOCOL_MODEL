@@ -877,6 +877,7 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                     "ExpCompAck",
                     "TagOp",
                     "TraceTag",
+                    "CAH",
                 ),
             ),
             (
@@ -947,6 +948,15 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                 ),
                 None,
                 "Size=6",
+            ),
+            (
+                ChiWriteBackFullMessage(
+                    1,
+                    0x8000,
+                    copy_at_home=True,
+                ),
+                None,
+                "CAH=0",
             ),
             (
                 ChiCompDBIDRespMessage(

@@ -34,6 +34,7 @@ class ChiIssueHWriteBackRepresentationTest(unittest.TestCase):
         self.assertTrue(message.allow_retry)
         self.assertEqual(0, message.protocol_credit_type)
         self.assertFalse(message.expect_completion_ack)
+        self.assertFalse(message.copy_at_home)
         self.assertTrue(ChiIssueHReqProfile().contains(message))
         self.assertFalse(packet.explain_profile())
 
@@ -49,6 +50,7 @@ class ChiIssueHWriteBackRepresentationTest(unittest.TestCase):
             snoop_attribute=False,
             exclusive=True,
             expect_completion_ack=True,
+            copy_at_home=True,
         )
 
         explanation = "; ".join(ChiIssueHReqProfile().explain(message))
@@ -59,6 +61,7 @@ class ChiIssueHWriteBackRepresentationTest(unittest.TestCase):
             "Order=0",
             "Excl=0",
             "ExpCompAck=0",
+            "CAH=0",
             "PCrdType",
         ):
             with self.subTest(expected=expected):

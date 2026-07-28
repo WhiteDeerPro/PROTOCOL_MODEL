@@ -17,6 +17,8 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+    CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
+    CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
     CHI_HOME_CLEAN_SNOOP_COORDINATE,
     CHI_HOME_COMP_ACK_ACCEPT,
     CHI_HOME_COMP_UC_PRODUCE,
@@ -35,6 +37,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_REQUEST_RETRY_HOME_CAPABILITIES,
     CHI_REQUEST_RETRY_REQUESTER_CAPABILITIES,
     CHI_REQUESTER_COMP_ACK_PRODUCE,
+    CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,
     CHI_REQUESTER_COMP_UC_ACCEPT,
     CHI_REQUESTER_EVICT_COMP_ACCEPT,
     CHI_REQUESTER_EVICT_ISSUE,
@@ -83,6 +86,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
     CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
     CHI_FEATURE_DIRTY_WRITEBACK,
+    CHI_FEATURE_WRITE_EVICT_FULL,
     CHI_FEATURE_MAKE_UNIQUE,
     CHI_FEATURE_READ_NO_SNP,
     CHI_FEATURE_READ_NO_SNP_NDERR,
@@ -94,6 +98,8 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,
     CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE,
+    CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,
+    CHI_WRITE_EVICT_FULL_DEFINITION,
     CHI_MAKE_UNIQUE_DEFINITION,
     CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE,
     ChiCapabilityClosureError,
@@ -1786,6 +1792,157 @@ class ChiIssueHDirtyWriteBackCapabilityTest(unittest.TestCase):
                 "writeback_copyback_data",
             },
             set(evidence.flows),
+        )
+
+
+class ChiIssueHWriteEvictFullCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract() -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_WRITE_EVICT_FULL,)),
+        )
+
+    @staticmethod
+    def participants(
+        requester: frozenset[ChiCapabilityKey] = (
+            CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES
+        ),
+    ) -> tuple[ChiParticipantCapability, ...]:
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                requester,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
+            ),
+        )
+
+    @staticmethod
+    def flows() -> tuple[ChiFlowCapability, ...]:
+        return (
+            ChiFlowCapability(
+                "write_evict_request_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+            ),
+            ChiFlowCapability(
+                "write_evict_dbid_response_path",
+                "hn0",
+                "rn0",
+                ChiChannelKind.RSP,
+            ),
+            ChiFlowCapability(
+                "write_evict_copyback_data_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.DAT,
+            ),
+        )
+
+    def test_write_evict_closes_req_rsp_dat_without_feature_dependency(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,)
+            ),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_WRITE_EVICT_FULL)
+        self.assertEqual((), evidence.dependencies)
+        self.assertEqual({"requester", "home"}, set(evidence.participants))
+        self.assertEqual(
+            {
+                "write_evict_request",
+                "write_evict_dbid_response",
+                "write_evict_copyback_data",
+            },
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            (
+                ChiChannelKind.REQ,
+                ChiChannelKind.RSP,
+                ChiChannelKind.DAT,
+            ),
+            tuple(
+                flow.channel
+                for flow in CHI_WRITE_EVICT_FULL_DEFINITION.flows
+            ),
+        )
+        self.assertIs(
+            CHI_WRITE_EVICT_FULL_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_WRITE_EVICT_FULL
+            ],
+        )
+        self.assertTrue(
+            CHI_WRITE_EVICT_FULL_DEFINITION.requires_coherence_domain
+        )
+
+    def test_write_evict_requires_explicit_lifecycle_composition(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_WRITE_EVICT_FULL)
+            if gap.kind is ChiCapabilityGapKind.SYSTEM
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual(
+            (CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,),
+            gaps[0].missing,
+        )
+
+    def test_copyback_requester_explicitly_accepts_dbid_response(
+        self,
+    ) -> None:
+        self.assertIn(
+            CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,
+            CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,
+            CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+        )
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(
+                CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES
+                - {CHI_REQUESTER_COMP_DBID_RESP_ACCEPT}
+            ),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,)
+            ),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_WRITE_EVICT_FULL)
+            if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual("rn0", gaps[0].subject)
+        self.assertEqual(
+            (CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,),
+            gaps[0].missing,
         )
 
 

@@ -320,7 +320,7 @@ class ChiIssueHCleanEvictTest(unittest.TestCase):
             accepted.state.next_data_buffer_id,
         )
         self.assertFalse(accepted.state.pending)
-        self.assertFalse(accepted.state.pending_writebacks)
+        self.assertFalse(accepted.state.pending_copybacks)
         self.assert_evict_completion(accepted.emissions)
 
     def test_home_removes_only_the_matching_shared_holder(self) -> None:

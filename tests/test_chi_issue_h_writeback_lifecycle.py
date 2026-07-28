@@ -13,10 +13,10 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiHomeAcceptCopyBackData,
     ChiHomeAcceptWriteBackFull,
     ChiHomeDirectoryEntry,
-    ChiHomeWriteBackAdmission,
+    ChiHomeCopyBackAdmission,
     ChiRnAcceptCompDBIDResp,
     ChiRnIssueWriteBackFull,
-    ChiRnWriteBackOutcome,
+    ChiRnCopyBackOutcome,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiCleanUniqueMessage,
@@ -716,7 +716,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
         assert old_line is not None
         self.assertIs(ChiCacheState.I, old_line.state)
         self.assertIs(
-            ChiRnWriteBackOutcome.CANCELED_I,
+            ChiRnCopyBackOutcome.CANCELED_I,
             old_state.pending_copybacks[0x31].outcome,
         )
         snoop_data = old_owner_snooped.emissions[0].message
@@ -776,7 +776,7 @@ class ChiIssueHWriteBackLifecycleTest(unittest.TestCase):
             iter(canceled_at_home.state.home.pending_copybacks.values())
         )
         self.assertIs(
-            ChiHomeWriteBackAdmission.SNOOP_CANCELED,
+            ChiHomeCopyBackAdmission.SNOOP_CANCELED,
             home_pending.admission,
         )
         cancel_sent = self.apply(

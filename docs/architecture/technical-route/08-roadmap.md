@@ -5,6 +5,18 @@
 这条路线按“下一个真实场景缺少什么”递归补共享能力，而不是把工程误画成唯一的上下层，或按协议名称与
 软件包数量推进。三张视图见[通信建模的三张视图](../communication-scope-and-transport.md)。
 
+本页不是 CHI 规范目录的镜像，也不是不可复审的绝对优先级。每个协议切片进入施工前分别记录四类依据：
+
+1. **协议要求**：固定到官方规范的 document issue、章节与适用条件；不同 issue 或 errata 有差异时显式裁决，
+   不从二手流程图补出规范结论；
+2. **实现事实**：由当前代码、canonical implementation status 和定向回归证明，只说明已执行的 profile；
+3. **架构/阶段选择**：说明为何先取某个合法子集及其非目标，不把 reference policy 写成所有实现必须遵守；
+4. **发现线索或待验证假设**：review、教材、实现手册和网络资料可以帮助找到问题，但在官方规范核对前不提升为
+   requirement。
+
+因此“按路线推进”表示按依赖和证据成熟度选择下一小片，不表示追求未经限定的逐条 spec coverage。合法 witness
+证明该输入和边界可执行，负例证明某条已声明规则生效；二者都不单独构成整份规范的一致性证明。
+
 ## 当前已经打通的一条小型完整路径
 
 ```text
@@ -146,8 +158,11 @@ reference-backing version，精确 DAT 到达后才清除 unique owner，并把 
 Snoop-domain residency；backing 对象、payload 与 version 全程不变。该 feature 独立声明 REQ/RSP/DAT
 三条 flow，resolved witness 恰好运输三包且没有 SNP 或显式 `CompAck`。canonical Home binder 可透传同一
 协议无关 `CacheCore`，但当前 retain policy 仍是无容量/替换行为的 sparse state。`CAH=1`、
-`WriteEvictOrEvict`、同址 Snoop、Retry/error、下游读取命中、victim/LRU 和级联 eviction 没有并入 base
-slice。
+`WriteEvictOrEvict`、Retry/error、下游读取命中、victim/LRU 和级联 eviction 没有并入 base slice。
+随后完成的 robustness slice 只开放 REQ 已发出、`CompDBIDResp` 前的 invalidating Snoop：RN 由
+`LIVE_UC` 转为无 payload 的 `CANCELED_I`，保留 request/TxnID，并在晚到 DBID 后发送
+`CopyBackWrData_I(Data=0, BE=0)`。system 从 exact RN 状态派生 stale-owner admission；Home 只校验并
+退休 DBID，不安装 clean residency，也不改当前 directory/backing。
 
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
@@ -161,10 +176,22 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid`、`SnpResp_I`、`Comp_UC`、`CompAck`；无 DAT | 复用失效 fanout、Home DBID/line reservation 与 full-line cache store | RN-local store intent；operation-specific correlation；`Comp_UC` 原子覆盖安装 `UD` | 本切片已闭合 |
 | 6 · clean `Evict` Retry | `RetryAck`、`PCrdGrant`、credited `Evict`、`Comp_I` | 复用 opcode-neutral Retry ledger、Home capacity reservation、Evict exact completion 与 REQ/RSP scheduler | Evict-specific policy/feature gate；exact RetryAck/P-Credit delivery evidence；无新 cache 稳态 | 本切片已闭合 |
 | 7 · clean `WriteEvictFull(CAH=0)` | `WriteEvictFull`、`CompDBIDResp`、`CopyBackWrData_UC`；无 SNP/显式 CompAck | 复用 RN TxnID/line reservation、Home DBID allocator、CopyBack DAT 与三通道 topology | 独立 clean residency authority；operation-specific RSP evidence；backing 不提交 | 本切片已闭合 |
+| 8 · `WriteEvictFull` pre-DBID Snoop cancel | pending `WriteEvictFull`、`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`、`CopyBackWrData_I` | 共用 `ChiRnCopyBackOutcome`、stale-owner admission、Home snapshot/version guard 与 exact RSP/DAT evidence | WEF `LIVE_UC/CANCELED_I`；cancel 只退休 DBID，不改 directory/backing/clean residency | 本切片已闭合 |
 
-1. 下一条主线应按现有缺口和验证目标选择，而不是固化永久顺序：若继续扩展 opcode/lifecycle，可优先比较
-   `WriteEvictFull` 的 CAH/Snoop/error modifier、`WriteEvictOrEvict` 与 deliberate dirty invalidate；
-   若下一场景首先受并发资源阻塞，
+对 [Arm IHI 0050 Issue H](https://developer.arm.com/documentation/ihi0050/h/) 的 CopyBack transaction、
+CAH 与 requester state 规则进行切片级核对后，后续候选的证据成熟度并不相同：
+
+| 候选 | 协议依据与当前依赖 | 路线判断 |
+|---|---|---|
+| `WriteEvictOrEvict(CAH=0)` base | 规范允许 Home 选择 `CompDBIDResp→CopyBackWrData` 或 `Comp→CompAck`；现有 WriteEvict data branch、Evict-style no-data effect、CompAck 与 exact evidence 可复用 | 下一新增 opcode 候选；只有同时闭合 Home accept-data 与 no-data 两种 outcome 才构成 base，并需处理 `UC/SC` 与 `LikelyShared` |
+| `WriteEvictFull(CAH=1)` | 规范把是否可省略 data 与 CAH provenance、Home 是否仍有 copy 关联；当前 RN line 没有 cached-CAH 状态，Home residency 也未成为通用 read/copy predicate | 后置于 CAH state/provenance 工作，不能只开放字段 |
+| WriteEvict error | 需要分别定义错误来源、形成 phase 与 clean payload disposition；当前没有支持该路径的 ECC/Poison/DataCheck 来源 | 与 Snoop modifier 分离并后置，不用普通 decode/access failure 冒充 |
+| deliberate dirty invalidate 后的 `Evict` | 规范允许由 deliberate action 触发 dirty→I，并可用 Evict 使其可见；当前没有 caller-visible invalidate/discard intent | 等具体 invalidate 场景提出，不把普通 replacement 当成 deliberate action |
+| 同 Home/type 多 waiter 与 deadlock | 来自 runtime 验证需求，不是某个 CHI opcode 的规范前置条件 | 当前不升为主线；保留 held/wait/release seam，待真实资源场景阻塞后再做 |
+
+1. 下一条新增 opcode slice 实现 `WriteEvictOrEvict(CAH=0)` 的显式 Home 二选一 base。
+   `WriteEvictFull(CAH=1)`、
+   error 与 deliberate dirty invalidate 继续作为独立 modifier。若下一真实场景首先受并发资源阻塞，
    则先做同 Home/type 多 waiter 的具名选择、释放和公平性 witness。DERR 继续等待
    ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
 2. 只有验证目标需要观察 physical commit 时，才增加

@@ -9,8 +9,8 @@
 <g id="graph0" class="graph" transform="scale(1 1) rotate(0) translate(18 894)">
 <title>chi_exclusive_monitors</title>
 <polygon fill="#f7f9fc" stroke="transparent" points="-18,18 -18,-894 1165,-894 1165,18 -18,18"/>
-<text text-anchor="middle" x="573.5" y="-856" font-family="Noto Sans CJK SC" font-size="20.00">评审快照 b4e5aba · 非实时实现状态</text>
-<text text-anchor="middle" x="573.5" y="-834" font-family="Noto Sans CJK SC" font-size="20.00">Exclusive reservation：概念作用域与成功条件（候选模型，尚未实现）</text>
+<text text-anchor="middle" x="573.5" y="-856" font-family="Noto Sans CJK SC" font-size="20.00">输入摘录基线 b4e5aba · 概念关系，不表达实现覆盖率</text>
+<text text-anchor="middle" x="573.5" y="-834" font-family="Noto Sans CJK SC" font-size="20.00">Exclusive reservation：概念作用域与成功条件（候选模型）</text>
 <g id="clust1" class="cluster">
 <title>cluster_local</title>
 <path fill="#f7f9fc" stroke="#9fb3c8" d="M20,-192C20,-192 389,-192 389,-192 395,-192 401,-198 401,-204 401,-204 401,-744 401,-744 401,-750 395,-756 389,-756 389,-756 20,-756 20,-756 14,-756 8,-750 8,-744 8,-744 8,-204 8,-204 8,-198 14,-192 20,-192"/>

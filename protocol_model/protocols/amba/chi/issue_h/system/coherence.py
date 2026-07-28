@@ -10,14 +10,15 @@ The profile is intentionally narrow.  It closes clean ``ReadShared`` and
 ``CleanUnique`` permission upgrades, the ``UD`` owner-transfer path for
 ``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
 clean ``Evict``, explicit ``UD`` ``WriteBackFull``, a
-``WriteEvictFull(CAH=0)`` transfer into Snoop-domain clean residency, one
+``WriteEvictFull(CAH=0)`` transfer into Snoop-domain clean residency and its
+pre-DBID invalidating-Snoop cancellation, one
 successful clean ``ReadUnique`` or clean ``Evict`` Request-Retry cycle, a
 pre-snoop ``ReadUnique`` NDERR completion, and their
 narrow composition with an independent same-line Snoop while the Requester
 waits for P-Credit.  The ``SD`` state exists only for the CleanUnique
 memory-update slice; general shared-dirty behavior, post-snoop errors,
-automatic victim selection, ``WriteEvictFull``/same-line-Snoop composition,
-forwarding snoops, and packed pin observations remain separate extensions.
+automatic victim selection, post-DBID CopyBack/Snoop composition, forwarding
+snoops, and packed pin observations remain separate extensions.
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ from ..participants.coherence import (
     ChiHomeAcceptWriteBackFull,
     ChiHomeGrantPCredit,
     ChiHomeWriteEvictPending,
-    ChiHomeWriteBackAdmission,
+    ChiHomeCopyBackAdmission,
     ChiHomeWriteBackPending,
     ChiRnAcceptComp,
     ChiRnAcceptCompDBIDResp,
@@ -68,7 +69,7 @@ from ..participants.coherence import (
     ChiRnIssueWriteEvictFull,
     ChiRnIssueWriteBackFull,
     ChiRnRetryCoherentRequest,
-    ChiRnWriteBackOutcome,
+    ChiRnCopyBackOutcome,
     ChiRnWriteEvictPending,
     ChiRnWriteBackPending,
     ChiRnWriteCacheLine,
@@ -826,6 +827,16 @@ class ChiCoherenceState:
                     rn_pending, ChiRnWriteBackPending
                 )
                 or rn_pending.request != home_pending.request
+                or (
+                    (
+                        home_pending.admission
+                        is ChiHomeCopyBackAdmission.SNOOP_CANCELED
+                    )
+                    != (
+                        rn_pending.outcome
+                        is ChiRnCopyBackOutcome.CANCELED_I
+                    )
+                )
             ):
                 raise ValueError(
                     "expected CompDBIDResp requires one exact canonical "
@@ -891,6 +902,16 @@ class ChiCoherenceState:
                     rn_pending, ChiRnWriteEvictPending
                 )
                 or rn_pending.request != home_pending.request
+                or (
+                    (
+                        home_pending.admission
+                        is ChiHomeCopyBackAdmission.SNOOP_CANCELED
+                    )
+                    != (
+                        rn_pending.outcome
+                        is ChiRnCopyBackOutcome.CANCELED_I
+                    )
+                )
             ):
                 raise ValueError(
                     "expected WriteEvict CompDBIDResp requires one exact "
@@ -934,9 +955,12 @@ class ChiCoherenceState:
                 else None
             )
             canceled = (
-                isinstance(home_pending, ChiHomeWriteBackPending)
+                isinstance(
+                    home_pending,
+                    (ChiHomeWriteBackPending, ChiHomeWriteEvictPending),
+                )
                 and home_pending.admission
-                is ChiHomeWriteBackAdmission.SNOOP_CANCELED
+                is ChiHomeCopyBackAdmission.SNOOP_CANCELED
             )
             clean_evict = isinstance(
                 home_pending, ChiHomeWriteEvictPending
@@ -966,6 +990,7 @@ class ChiCoherenceState:
                 or home_pending.requester_id != key[0]
                 or (
                     clean_evict
+                    and not canceled
                     and (
                         message.response is not ChiRespCode.UC
                         or not 0 <= message.data < (1 << 512)
@@ -2800,7 +2825,6 @@ class ChiCoherenceSession(
                         message.transaction_id
                     )
                 )
-                line = requester_state.line_at(message.address)
                 if (
                     packet.packet_index != 0
                     or packet.packet_count != 1
@@ -2808,17 +2832,74 @@ class ChiCoherenceSession(
                         pending_write_evict, ChiRnWriteEvictPending
                     )
                     or pending_write_evict.request != message
-                    or line is None
-                    or line.state is not ChiCacheState.UC
-                    or line.data is None
                 ):
                     return self._fault(
                         state,
                         "write_evict_admission_evidence",
                         "WriteEvictFull does not match one canonical "
-                        "RN-produced request with its retained UC line",
+                        "RN-produced request",
                     )
-                action = ChiHomeAcceptWriteEvictFull(packet)
+                admission = ChiHomeCopyBackAdmission.CURRENT_OWNER
+                entry = state.home.directory.get(message.address)
+                line = requester_state.line_at(message.address)
+                if (
+                    entry is not None
+                    and entry.unique_owner != packet.source_id
+                ):
+                    if (
+                        pending_write_evict.outcome
+                        is not ChiRnCopyBackOutcome.CANCELED_I
+                        or line is None
+                        or line.state is not ChiCacheState.I
+                        or line.data is not None
+                        or packet.source_id in entry.sharers
+                        or entry.shared_dirty_owner == packet.source_id
+                    ):
+                        return self._fault(
+                            state,
+                            "write_evict_cancellation_evidence",
+                            "non-owner WriteEvictFull lacks a matching "
+                            "Snoop-canceled RN pending outcome",
+                        )
+                    admission = (
+                        ChiHomeCopyBackAdmission.SNOOP_CANCELED
+                    )
+                elif (
+                    pending_write_evict.outcome
+                    is ChiRnCopyBackOutcome.CANCELED_I
+                    and not any(
+                        item.request.address == message.address
+                        for item in state.home.pending.values()
+                    )
+                    and not any(
+                        item.request.address == message.address
+                        for item in state.home.pending_copybacks.values()
+                    )
+                ):
+                    return self._fault(
+                        state,
+                        "write_evict_admission_evidence",
+                        "Snoop-canceled WriteEvictFull cannot be admitted "
+                        "as a live current-owner request",
+                    )
+                elif (
+                    pending_write_evict.outcome
+                    is ChiRnCopyBackOutcome.LIVE_UC
+                    and (
+                        line is None
+                        or line.state is not ChiCacheState.UC
+                        or line.data is None
+                    )
+                ):
+                    return self._fault(
+                        state,
+                        "write_evict_admission_evidence",
+                        "live WriteEvictFull lacks its retained UC line",
+                    )
+                action = ChiHomeAcceptWriteEvictFull(
+                    packet,
+                    admission,
+                )
             elif isinstance(message, ChiWriteBackFullMessage):
                 if packet.source_id not in self.requester_node_ids:
                     return self._fault(
@@ -2852,7 +2933,7 @@ class ChiCoherenceSession(
                         "WriteBackFull does not match one canonical "
                         "RN-produced request",
                     )
-                admission = ChiHomeWriteBackAdmission.CURRENT_OWNER
+                admission = ChiHomeCopyBackAdmission.CURRENT_OWNER
                 entry = state.home.directory.get(message.address)
                 if (
                     entry is not None
@@ -2861,7 +2942,7 @@ class ChiCoherenceSession(
                     line = requester_state.line_at(message.address)
                     if (
                         pending_writeback.outcome
-                        is not ChiRnWriteBackOutcome.CANCELED_I
+                        is not ChiRnCopyBackOutcome.CANCELED_I
                         or line is None
                         or line.state is not ChiCacheState.I
                         or line.data is not None
@@ -2875,11 +2956,11 @@ class ChiCoherenceSession(
                             "Snoop-canceled RN pending outcome",
                         )
                     admission = (
-                        ChiHomeWriteBackAdmission.SNOOP_CANCELED
+                        ChiHomeCopyBackAdmission.SNOOP_CANCELED
                     )
                 elif (
                     pending_writeback.outcome
-                    is ChiRnWriteBackOutcome.CANCELED_I
+                    is ChiRnCopyBackOutcome.CANCELED_I
                     and not any(
                         item.request.address == message.address
                         for item in state.home.pending.values()

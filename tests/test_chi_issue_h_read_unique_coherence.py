@@ -18,7 +18,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants.coherence import (
     ChiRnIssueCleanUnique,
     ChiRnIssueCoherentRead,
     ChiRnIssueWriteBackFull,
-    ChiRnWriteBackOutcome,
+    ChiRnCopyBackOutcome,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.dat import (
     ChiCompDataMessage,
@@ -620,7 +620,7 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
         self.assertIsNone(line.data)
         pending = snooped.state.pending_copybacks[0x15]
         self.assertIs(
-            ChiRnWriteBackOutcome.CANCELED_I,
+            ChiRnCopyBackOutcome.CANCELED_I,
             pending.outcome,
         )
         response = snooped.emissions[0]
@@ -646,7 +646,7 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
         self.assertIsInstance(repeated_response, ChiSnpRespMessage)
         self.assertIs(ChiRespCode.I, repeated_response.response)
         self.assertIs(
-            ChiRnWriteBackOutcome.CANCELED_I,
+            ChiRnCopyBackOutcome.CANCELED_I,
             repeated.state.pending_copybacks[0x15].outcome,
         )
 

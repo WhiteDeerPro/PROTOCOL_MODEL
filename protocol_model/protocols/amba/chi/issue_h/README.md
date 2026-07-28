@@ -89,8 +89,9 @@ responsibility transfer、`WriteBackFull→CompDBIDResp→CopyBackWrData`、
 `WriteEvictFull→CompDBIDResp→CopyBackWrData_UC`，以及
 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`
 和 dataless `MakeUnique→SnpMakeInvalid→SnpResp_I→Comp_UC→CompAck` 都可以完整 round-trip；
-writeback 覆盖正常 `CopyBackWrData_UD_PD` 与 data/byte-enable 均为零的
-`CopyBackWrData_I`。`SrcID/TgtID`、packet index/count 仍归 `ChiNetworkPacket`；四个 channel 的
+writeback 与被 Snoop 取消的 CopyBack 覆盖正常 `CopyBackWrData_UD_PD`、clean
+`CopyBackWrData_UC`，以及 data/byte-enable 均为零的 `CopyBackWrData_I`。
+`SrcID/TgtID`、packet index/count 仍归 `ChiNetworkPacket`；四个 channel 的
 `LCrdReturn` 属于 hop-local maintenance flit，也不进入 message codec。SNP `Addr` 继续使用 normalized
 full byte address，packed SNPFLIT 省略低位的处理留给未来 bit codec。
 
@@ -418,7 +419,10 @@ directory，迟到 `CopyBackWrData_UD_PD` 会 fault 并保留 state。
 
 规范依据是 [Arm IHI 0050 Issue H](https://developer.arm.com/documentation/ihi0050/h/)
 B2.3 的 CopyBack Write transaction structure、B2.8.3.4 的 Allocate 属性，以及 B4.2 的
-Write/CopyBack request state 与数据要求；下文的 fixed-resident retain 则是当前实现选择。
+Write/CopyBack request state 与数据要求；overlapping-Snoop cancel 另以
+[Arm AES 0061 C597](https://documentation-service.arm.com/static/63343110da191e7fe057d057?token=)
+关于 line 为 `I` 时必须发送零 data/BE `CopyBackWrData_I` 的澄清交叉核对。下文的
+fixed-resident retain 则是当前实现选择。
 
 ```text
 RN holds UC
@@ -439,9 +443,17 @@ clean copy；它不是 reference memory，也不是 topology-visible SN。当前
 没有 set/way、容量、victim 或 LRU，也尚未让后续 read 从该 resident 命中。`Allocate=1` 在协议上仍是
 hint；这里选择 retain 是可执行 profile 的 policy，不是声称所有 Home 都必须分配。
 
-首个切片只接受 `CAH=0`、初态 `UC` 与正常 full-line `CopyBackWrData_UC`。`CAH=1` 的
-`Comp→CompAck` 分支、`WriteEvictOrEvict`、pending line 的同址 Snoop、Retry/error、不分配 policy、
-自动 replacement 与级联 eviction 都是后续 modifier；它们不能由当前三包路径推断为已实现。
+REQ 已发出但 `CompDBIDResp` 尚未到达时，现有三种 invalidating Snoop
+（`SnpUnique`、`SnpCleanInvalid`、`SnpMakeInvalid`）也已闭合。RN 先将 `UC` payload 失效为 `I`，
+把共用 CopyBack outcome 从 `LIVE_UC` 标为 `CANCELED_I`，但保留 request/TxnID correlation；晚到
+`CompDBIDResp` 后发送 `CopyBackWrData_I(Data=0, BE=0)`。若该 REQ 直到另一同址 transaction 建立
+新 owner 后才到达 Home，`ChiCoherenceSession` 只根据 exact RN pending、无 payload `I` line 和当前
+directory 派生 `SNOOP_CANCELED` admission。Home 在实际 admission 时冻结新的 directory snapshot 与
+backing version；cancel DAT 只退休 DBID，directory、reference backing 和既有 clean residency 均不变。
+
+当前边界仍固定 `CAH=0`、初态 `UC`，并只闭合 pre-DBID invalidating-Snoop 到达次序。`CAH=1` 的
+`Comp→CompAck` 分支、`WriteEvictOrEvict`、post-`CompDBIDResp` Snoop、Retry/error、不分配 policy、
+自动 replacement 与级联 eviction 都是后续 modifier；它们不能由上述路径推断为已实现。
 
 `SC` 仍不能直接执行本地写；启用 `CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS` 后，`I` 或 `SC` requester
 可以发出 `CleanUnique`。若本地 full-line 数据一直保留，Home 以 `SnpCleanInvalid` 失效其他 clean holder，
@@ -604,8 +616,10 @@ Requester→Home `evict_request` REQ、Home→Requester `evict_completion` RSP�
 authority，不伪装成 SNP participant capability。该 feature 分别声明 Requester→Home
 `write_evict_request` REQ、Home→Requester `write_evict_dbid_response` RSP 和
 Requester→Home `write_evict_copyback_data` DAT，并要求独立的 clean CopyBack produce/accept、
-clean-residency retain 与 `CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE` capability。它没有声明 backing
-commit capability；与 dirty WriteBack 相同的三种 channel 只表示运输形状相同，不表示 state effect 相同。
+clean-residency retain、pending invalidating-Snoop accept、CopyBack cancel produce/accept 与
+`CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE` capability。它没有声明 backing commit capability，也不因
+并发组合而自行声明 SNP flow；SNP 仍由触发它的 CleanUnique/MakeUnique/ReadUnique feature 提供。
+与 dirty WriteBack 相同的三种 channel 只表示运输形状相同，不表示 state effect 相同。
 
 `CHI_FEATURE_MAKE_UNIQUE` 同样是独立 feature，dependency set 为空；它显式要求
 Requester、Home、可为空的 Snoopee finite-set role 和 `CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE`，并只闭合五类 flow：

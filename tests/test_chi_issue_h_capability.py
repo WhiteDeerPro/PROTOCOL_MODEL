@@ -22,6 +22,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_HOME_CLEAN_SNOOP_COORDINATE,
     CHI_HOME_COMP_ACK_ACCEPT,
     CHI_HOME_COMP_UC_PRODUCE,
+    CHI_HOME_COPYBACK_CANCEL_ACCEPT,
     CHI_HOME_EVICT_ACCEPT,
     CHI_HOME_EVICT_COMP_PRODUCE,
     CHI_HOME_MAKE_UNIQUE_ACCEPT,
@@ -39,6 +40,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_REQUESTER_COMP_ACK_PRODUCE,
     CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,
     CHI_REQUESTER_COMP_UC_ACCEPT,
+    CHI_REQUESTER_COPYBACK_CANCEL_PRODUCE,
     CHI_REQUESTER_EVICT_COMP_ACCEPT,
     CHI_REQUESTER_EVICT_ISSUE,
     CHI_REQUESTER_MAKE_UNIQUE_ISSUE,
@@ -48,6 +50,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_SNOOPEE_CLEAN_SNP_RESP_PRODUCE,
     CHI_SNOOPEE_SNP_MAKE_INVALID_ACCEPT,
     CHI_SNOOPEE_SNP_MAKE_INVALID_DISCARD_DIRTY,
+    CHI_SNOOPEE_WRITE_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
     ChiCapabilityKey,
     ChiDirectHomeNode,
     ChiParticipantBinding,
@@ -1943,6 +1946,20 @@ class ChiIssueHWriteEvictFullCapabilityTest(unittest.TestCase):
         self.assertEqual(
             (CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,),
             gaps[0].missing,
+        )
+
+    def test_pre_dbid_cancel_capabilities_are_explicit(self) -> None:
+        self.assertIn(
+            CHI_SNOOPEE_WRITE_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
+            CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_COPYBACK_CANCEL_PRODUCE,
+            CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_HOME_COPYBACK_CANCEL_ACCEPT,
+            CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
         )
 
 

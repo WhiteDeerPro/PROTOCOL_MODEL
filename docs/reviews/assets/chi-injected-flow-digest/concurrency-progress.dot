@@ -7,7 +7,7 @@ digraph chi_concurrency_progress {
     ranksep=0.52,
     compound=true,
     fontname="Noto Sans CJK SC",
-    label="评审快照 b4e5aba · 非实时实现状态\nCHI same-line lifecycle、ordering point 与 progress 输入",
+    label="输入摘录基线 b4e5aba · 概念关系，不表达实现覆盖率\nCHI same-line lifecycle、ordering point 与 progress 输入",
     labelloc=t,
     fontsize=20
   ];
@@ -29,7 +29,7 @@ digraph chi_concurrency_progress {
   ];
 
   subgraph cluster_hazard {
-    label="A · 已闭合的 invalidating-Snoop CopyBack outcome（45–47 的抽象）";
+    label="A · invalidating-Snoop CopyBack outcome（45–47 的抽象与规范核对）";
     color="#9fb3c8";
     style="rounded";
 
@@ -98,7 +98,7 @@ digraph chi_concurrency_progress {
   }
 
   subgraph cluster_wait {
-    label="C · wait-for/deadlock 分析输入（54–55 的抽象，不是 proof）";
+    label="C · wait-for/deadlock 候选分析输入（54–55；不是当前实施项或 proof）";
     color="#9fb3c8";
     style="rounded";
 

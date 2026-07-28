@@ -320,8 +320,12 @@ clean `WriteEvictFull(CAH=0)` 也已作为独立 REQ/RSP/DAT feature 闭合：�
 `UC` line，Home 用 `CompDBIDResp` 分配 DBID，RN 发出 full-line `CopyBackWrData_UC` 并进入 `I`；
 Home 将数据安装到协议无关的 Snoop-domain clean-residency core，同时保持 reference backing
 payload/version 不变。该 feature 不产生 SNP traffic，但 resolver 仍要求所选 Home authority 显式绑定
-coherence domain；membership 继续属于 SystemProtocol。该 base slice 固定 sparse retain，不包含自动 victim/replacement、容量策略、
-下游 read hit、`CAH=1`、same-line Snoop、Retry/error 或 `WriteEvictOrEvict`。
+coherence domain；membership 继续属于 SystemProtocol。与另一 coherence transaction 组合时，pending
+WEF 已可接纳 pre-DBID `SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`，保留 CopyBack correlation，
+再以零 payload 的 `CopyBackWrData_I` 退休；SNP flow 仍归触发 Snoop 的 feature。Home 对 cancel
+只释放 DBID，不改 directory、backing 或 clean residency。当前固定 sparse retain，不包含自动
+victim/replacement、容量策略、下游 read hit、`CAH=1`、post-DBID Snoop、Retry/error 或
+`WriteEvictOrEvict`。
 
 clean `Evict` 已作为独立 REQ/RSP-only feature 闭合：RN 从 `UC/UCE/SC` 先转 `I`，Home 只条件删除
 matching clean holder 并返回 `Comp_I`；stale 或目录明确标记为 shared-dirty responsibility 的 hint
@@ -391,7 +395,7 @@ transport projection；其余 property 仍未闭合：
   或超出该窄 witness 的 Retry/Snoop 到达次序。通用 participant plan、
   multi-Home/SAM authority、
   MakeUnique Retry/error/MTE Update/partial-write 扩展、自动 dirty victim/writeback scheduling、
-  deliberate dirty invalidate、`WriteEvictFull` CAH/Snoop/error modifier、`WriteEvictOrEvict`、
+  deliberate dirty invalidate、`WriteEvictFull` CAH/post-DBID-Snoop/Retry/error modifier、`WriteEvictOrEvict`、
   一般 same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；

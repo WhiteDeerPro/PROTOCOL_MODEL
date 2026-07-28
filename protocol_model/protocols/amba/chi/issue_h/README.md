@@ -94,7 +94,8 @@ responsibility transfer、`WriteBackFull→CompDBIDResp→CopyBackWrData`、
 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`
 和 dataless `MakeUnique→SnpMakeInvalid→SnpResp_I→Comp_UC→CompAck` 都可以完整 round-trip；
 writeback 与被 Snoop 取消的 CopyBack 覆盖正常 `CopyBackWrData_UD_PD`、clean
-`CopyBackWrData_UC`，以及 data/byte-enable 均为零的 `CopyBackWrData_I`。
+`CopyBackWrData_UC`，以及 data/byte-enable 均为零的 `CopyBackWrData_I`；conditional CopyBack 的
+no-data cancel terminal 另覆盖 `CompAck_I`。
 `SrcID/TgtID`、packet index/count 仍归 `ChiNetworkPacket`；四个 channel 的
 `LCrdReturn` 属于 hop-local maintenance flit，也不进入 message codec。SNP `Addr` 继续使用 normalized
 full byte address，packed SNPFLIT 省略低位的处理留给未来 bit codec。
@@ -482,18 +483,34 @@ Snoop-domain state；它不是 physical memory，也不是 topology-visible HN�
 resolved witness 已通过公开 Home recipe、真实 feature dependency/capability/flow closure 和
 `ChiCoherenceNetworkSession` 分别执行 data/no-data 分支。
 
-REQ 已发出但 `CompDBIDResp` 尚未到达时，现有三种 invalidating Snoop
-（`SnpUnique`、`SnpCleanInvalid`、`SnpMakeInvalid`）也已闭合。RN 先将 `UC` payload 失效为 `I`，
-把共用 CopyBack outcome 从 `LIVE_UC` 标为 `CANCELED_I`，但保留 request/TxnID correlation；晚到
-`CompDBIDResp` 后发送 `CopyBackWrData_I(Data=0, BE=0)`。若该 REQ 直到另一同址 transaction 建立
-新 owner 后才到达 Home，`ChiCoherenceSession` 只根据 exact RN pending、无 payload `I` line 和当前
-directory 派生 `SNOOP_CANCELED` admission。Home 在实际 admission 时冻结新的 directory snapshot 与
-backing version；cancel DAT 只退休 DBID，directory、reference backing 和既有 clean residency 均不变。
+WEF base 与 CAH=1 modifier 都闭合 Home response 前的三种 invalidating Snoop
+（`SnpUnique`、`SnpCleanInvalid`、`SnpMakeInvalid`）。CAH=1 窄片的时序和状态分离为：
 
-WEF base 仍固定 `CAH=0`、初态 `UC`，并只闭合 pre-DBID invalidating-Snoop 到达次序；上述 CAH=1
-modifier 只闭合正常 data/no-data terminal。CAH=1 与 same-line Snoop、post-`CompDBIDResp` Snoop、
-Retry/error、容量/不分配 policy、自动 replacement 或级联 eviction 的组合仍未实现，不能由两个正常
-终态外推。
+```text
+RN issues frozen WriteEvictFull(TxnID=A, CAH=1)
+  → before Home Comp/CompDBIDResp, invalidating Snoop completes
+  → current line/payload and cached CAH provenance are cleared; RN is I
+  → frozen request/TxnID/CAH=1 remain as historical correlation
+  → Home selects one canceled terminal:
+       CompDBIDResp(TxnID=A, DBID=B)
+         → CopyBackWrData_I(TxnID=B, Data=0, BE=0)
+     or
+       Comp_I(TxnID=A, DBID=B)
+         → CompAck_I(TxnID=B)
+```
+
+`CAH=1` 保留在 immutable request 中只说明发出 REQ 时的历史，不会在 Snoop 后重新建立当前
+provenance，也不证明 Home 仍有 copy。若旧 REQ 直到另一同址 transaction 建立新 owner 后才到达 Home，
+`ChiCoherenceSession` 只根据 exact RN pending、无 payload `I` line 和当前 directory 派生
+`SNOOP_CANCELED` admission。Home 在实际 admission 时冻结新的 directory snapshot 与 backing version；
+两类 canceled terminal 都只退休旧 DBID/reservation，不删除或覆盖新 owner、reference backing 或既有
+clean residency；旧 data/no-data terminal 互换或带非零 canceled payload 都会被拒绝。
+
+该窄片不覆盖非失效 Snoop、`UC→SC` 及相应 SC terminal。Snoop response 未完成时，Home 不产生
+`Comp`/`CompDBIDResp`；Home 已发 `Comp` 后须等 `CompAck`，已发 `CompDBIDResp` 后须等
+CopyBack WriteData，才能再发同址 Snoop。因此 post-response/pre-terminal 同址 Snoop 是 ordering 负向
+边界，不是正向 transient。Retry/error、容量驱动 no-data policy、自动 replacement 或级联 eviction 也仍
+分别留给后续 protocol modifier 与 Home/Cache VirtualDut policy。
 
 `CHI_FEATURE_WRITE_EVICT_OR_EVICT` 已独立闭合 `CAH=0` 下由 Home 显式选择的两个 outcome。Requester
 可从 resident `UC` 或 clean `SC` 发起；`LikelyShared` 必须与该 permission 及 Home directory 中的
@@ -759,7 +776,11 @@ CAH=1 modifier 的参数化 resolved witness 先经 clean
 `ReadUnique→CompData_UC(CAH=1)→CompAck` 获取 provenance，再分别执行
 `CompDBIDResp→CopyBackWrData_UC` 与 `Comp→CompAck_UC`；它检查公开 Home recipe policy、
 dependency/capability/flow closure、typed CopyBack phase ledger、provenance 清理、directory/backing
-invariant 与共同静止。
+invariant 与共同静止。participant response 前 Snoop 矩阵另覆盖
+`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid` × data/no-data：当前 line/provenance 清除，frozen
+request 的 `CAH=1` 历史保留，`CopyBackWrData_I(Data=0, BE=0)`/`CompAck_I` 精确退休；direct
+双 Requester 的 CleanUnique/`SnpCleanInvalid` 系统见证再检查 `SNOOP_CANCELED` 不覆盖新
+owner/backing/residency。
 `WriteEvictOrEvict(CAH=0)` 的 resolved witness 分别执行 data 与 no-data outcome，并覆盖 `UC/SC`：
 前者运输 REQ、`CompDBIDResp` RSP、`CopyBackWrData_{UC,SC}` DAT，后者运输 REQ、`Comp_I` RSP、
 `CompAck` RSP；每种都恰好三个 packet、零 SNP，并检查 Home-selected terminal 不能互换、RN `→I`、
@@ -797,8 +818,11 @@ snapshot/backing version 拒绝 stale mutation，只退休 DBID。该见证同�
 
 ## 场景与功能边界
 
-direct topology、调用方组装的一个或多个 router topology 和具体 FIFO 深度属于测试/showcase 的参考装配，
-不属于 CHI 核心 API。coherent `ReadUnique` Retry 已保存单 XP router witness，clean Evict Retry 已保存
+direct topology、调用方组装的一个或多个 router topology、route table 和具体 FIFO 深度属于
+测试/showcase 的固定参考装配，不属于 CHI 核心 API。generated 4×4 双向 mesh 的 deterministic XY
+corner-to-corner `ReadNoSnp` 往返验证 exact route、长路径执行与最终 quiescence；它只是
+scale/route/execution witness，不证明共享仲裁、性能、公平性、deadlock freedom 或 CHI
+opcode/lifecycle 完备。coherent `ReadUnique` Retry 已保存单 XP router witness，clean Evict Retry 已保存
 direct resolved topology witness；direct `ReadNoSnp` Retry/Cancel 仍保留为独立、较窄的 profile。
 
 pending `ReadUnique` 已可处理同址 `SnpUnique`：RN 的 `I` 保持 absent，或把 `SC` copy 失效为 `I`，
@@ -816,11 +840,15 @@ CleanUnique 与延迟 WriteBack cancel，但 resolved system 仍只有一个构�
 声称一般多 Requester topology 已闭合。pending `WriteEvictOrEvict` 也已在 direct 双 Requester
 `UC/SC × data/no-data` witness 中闭合 response 前的 invalidating-Snoop cancel；它复用现有 Snoop
 与 WEOE response/DAT/Ack evidence，不把该 direct witness 扩大成一般多 Requester resolved topology。
+pending `WriteEvictFull(CAH=1)` 另闭合 response 前三种 invalidating Snoop→`I` 与 data/no-data
+terminal；它保留 frozen request 的 CAH 历史而清除当前 provenance。`UC→SC`/非失效 Snoop 仍未闭合；
+post-`Comp`/post-`CompDBIDResp`、pre-terminal 同址 Snoop 按 Home ordering 作为负例。
 
 以下是分属不同维度的未实现事项，不合并成一条 CHI lifecycle 或网络完整度：
 
 - lifecycle/profile：coherent DERR、post-Snoop error、MakeUnique Retry/error/MTE/partial-write、
-  Retry/writeback 组合、其他 WriteBack/Snoop phase、WEF(CAH=1) 的 Snoop/Retry/error 组合、
+  Retry/writeback 组合、其他 WriteBack/Snoop phase、WEF(CAH=1) 的 `UC→SC`/非失效 Snoop 及
+  Retry/error 组合，
   WEOE post-response/其他 Snoop phase/CAH=1、容量驱动 outcome、一般 transient/Retry cancel 和可选
   forwarding/DCT；
 - participant/VirtualDut policy：自动 victim/writeback scheduling 与 stateful snoop filter；

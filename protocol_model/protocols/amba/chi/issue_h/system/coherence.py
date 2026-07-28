@@ -5423,12 +5423,12 @@ class ChiCoherenceSession(
                     ack_packet = transition.emissions[0]
                     ack = ack_packet.message
                     expected_ack_response = (
-                        ChiRespCode.UC
-                        if is_write_evict
+                        ChiRespCode.I
+                        if conditional_copyback_pending.outcome
+                        is ChiRnCopyBackOutcome.CANCELED_I
                         else (
-                            ChiRespCode.I
-                            if conditional_copyback_pending.outcome
-                            is ChiRnCopyBackOutcome.CANCELED_I
+                            ChiRespCode.UC
+                            if is_write_evict
                             else (
                                 ChiRespCode.SC
                                 if conditional_copyback_pending

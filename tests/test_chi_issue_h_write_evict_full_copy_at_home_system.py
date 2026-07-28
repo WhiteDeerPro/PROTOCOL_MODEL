@@ -19,12 +19,15 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiCacheState,
     ChiCoherentHomeNode,
     ChiCopyBackDecision,
+    ChiHomeCopyBackAdmission,
     ChiHomeDirectoryEntry,
     ChiParticipantCapability,
+    ChiRnCopyBackOutcome,
     ChiRnIssueWriteEvictFull,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiChannelKind,
+    ChiCleanUniqueMessage,
     ChiCompAckMessage,
     ChiCompDataMessage,
     ChiCompDBIDRespMessage,
@@ -36,10 +39,13 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiNetworkPacket,
     ChiReadUniqueMessage,
     ChiRespCode,
+    ChiSnpCleanInvalidMessage,
+    ChiSnpRespMessage,
     ChiWriteEvictFullMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
     CHI_FEATURE_WRITE_EVICT_FULL,
     CHI_FEATURE_WRITE_EVICT_FULL_COPY_AT_HOME,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
@@ -55,6 +61,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     ChiDeliverCoherencePacket,
     ChiFeatureContract,
     ChiHomeAuthority,
+    ChiSubmitCleanUnique,
     ChiSubmitCoherentRead,
     ChiSubmitWriteEvictFull,
     resolve_chi_system,
@@ -91,6 +98,7 @@ class ChiIssueHWriteEvictFullCopyAtHomeSystemTest(
     unittest.TestCase
 ):
     RN = 0x07
+    NEW_RN = 0x08
     HOME = 0x21
     ADDRESS = 0x8000
     DATA = (1 << 400) | 0xCA11_600D
@@ -233,6 +241,32 @@ class ChiIssueHWriteEvictFullCopyAtHomeSystemTest(
             enabled_features=self.FEATURES,
             requester_node_ids=frozenset((self.RN,)),
             snoopee_node_ids=frozenset(),
+        )
+
+    def build_multi_requester_session(
+        self,
+        decision: ChiCopyBackDecision,
+        *,
+        name: str,
+        current_copy: bool = True,
+    ) -> ChiCoherenceSession:
+        return ChiCoherenceSession(
+            name,
+            self.build_home(decision, current_copy=current_copy),
+            {
+                self.RN: self.build_rn(),
+                self.NEW_RN: build_chi_cache_participant_fixture(
+                    f"{name}.new_owner",
+                    self.NEW_RN,
+                    self.HOME,
+                ),
+            },
+            enabled_features=(
+                self.FEATURES
+                | frozenset((CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,))
+            ),
+            requester_node_ids=frozenset((self.RN, self.NEW_RN)),
+            snoopee_node_ids=frozenset((self.RN, self.NEW_RN)),
         )
 
     @staticmethod
@@ -979,6 +1013,323 @@ class ChiIssueHWriteEvictFullCopyAtHomeSystemTest(
             committed.state,
             "completion_ack_correlation",
         )
+
+    def test_clean_unique_snoop_cancels_delayed_cah_one_write_evict(
+        self,
+    ) -> None:
+        for decision, current_copy in (
+            (ChiCopyBackDecision.REQUEST_DATA, True),
+            (ChiCopyBackDecision.COMPLETE_WITHOUT_DATA, True),
+            (ChiCopyBackDecision.COMPLETE_WITHOUT_DATA, False),
+        ):
+            with self.subTest(
+                decision=decision.value,
+                current_copy=current_copy,
+            ):
+                session = self.build_multi_requester_session(
+                    decision,
+                    name=(
+                        f"copy_at_home_snoop_{decision.value}_"
+                        f"copy_{current_copy}"
+                    ),
+                    current_copy=current_copy,
+                )
+                initial = session.initial_state()
+                request = ChiWriteEvictFullMessage(
+                    self.WRITE_EVICT_TXN_ID,
+                    self.ADDRESS,
+                    copy_at_home=True,
+                )
+                write_evict_issued = self.apply(
+                    session,
+                    initial,
+                    ChiSubmitWriteEvictFull(self.RN, request),
+                )
+                delayed_write_evict = write_evict_issued.emissions[0]
+                frozen = write_evict_issued.state.request_nodes[
+                    self.RN
+                ].pending_copybacks[self.WRITE_EVICT_TXN_ID]
+                self.assertEqual(request, frozen.request)
+                self.assertTrue(frozen.request.copy_at_home)
+
+                clean_unique_issued = self.apply(
+                    session,
+                    write_evict_issued.state,
+                    ChiSubmitCleanUnique(
+                        self.NEW_RN,
+                        ChiCleanUniqueMessage(
+                            self.WRITE_EVICT_TXN_ID + 1,
+                            self.ADDRESS,
+                        ),
+                    ),
+                )
+                clean_unique_at_home = self.apply(
+                    session,
+                    clean_unique_issued.state,
+                    ChiDeliverCoherencePacket(
+                        clean_unique_issued.emissions[0]
+                    ),
+                )
+                snoop_packet = clean_unique_at_home.emissions[0]
+                self.assertIsInstance(
+                    snoop_packet.message,
+                    ChiSnpCleanInvalidMessage,
+                )
+                old_owner_snooped = self.apply(
+                    session,
+                    clean_unique_at_home.state,
+                    ChiDeliverCoherencePacket(snoop_packet),
+                )
+                old_state = old_owner_snooped.state.request_nodes[
+                    self.RN
+                ]
+                old_line = old_state.line_at(self.ADDRESS)
+                self.assertIsNotNone(old_line)
+                assert old_line is not None
+                self.assertIs(ChiCacheState.I, old_line.state)
+                self.assertIsNone(old_line.data)
+                self.assertFalse(old_line.copy_at_home)
+                self.assertNotIn(
+                    self.ADDRESS,
+                    old_state.copy_at_home_lines,
+                )
+                pending = old_state.pending_copybacks[
+                    self.WRITE_EVICT_TXN_ID
+                ]
+                self.assertEqual(request, pending.request)
+                self.assertTrue(pending.request.copy_at_home)
+                self.assertIs(
+                    ChiRnCopyBackOutcome.CANCELED_I,
+                    pending.outcome,
+                )
+                snoop_response = old_owner_snooped.emissions[0]
+                self.assertIsInstance(
+                    snoop_response.message,
+                    ChiSnpRespMessage,
+                )
+                self.assertIs(
+                    ChiRespCode.I,
+                    snoop_response.message.response,
+                )
+
+                clean_unique_collected = self.apply(
+                    session,
+                    old_owner_snooped.state,
+                    ChiDeliverCoherencePacket(snoop_response),
+                )
+                new_owner_completed = self.apply(
+                    session,
+                    clean_unique_collected.state,
+                    ChiDeliverCoherencePacket(
+                        clean_unique_collected.emissions[0]
+                    ),
+                )
+                clean_unique_retired = self.apply(
+                    session,
+                    new_owner_completed.state,
+                    ChiDeliverCoherencePacket(
+                        new_owner_completed.emissions[0]
+                    ),
+                )
+                home_after_snoop = clean_unique_retired.state.home
+                self.assertEqual(
+                    self.NEW_RN,
+                    home_after_snoop.directory[
+                        self.ADDRESS
+                    ].unique_owner,
+                )
+
+                canceled_at_home = self.apply(
+                    session,
+                    clean_unique_retired.state,
+                    ChiDeliverCoherencePacket(delayed_write_evict),
+                )
+                home_pending = next(
+                    iter(
+                        canceled_at_home.state.home
+                        .pending_copybacks.values()
+                    )
+                )
+                self.assertIs(
+                    ChiHomeCopyBackAdmission.SNOOP_CANCELED,
+                    home_pending.admission,
+                )
+                home_response = canceled_at_home.emissions[0]
+                expectation = (
+                    canceled_at_home.state.copyback_phase_ledger
+                    .for_request(
+                        self.RN,
+                        self.WRITE_EVICT_TXN_ID,
+                    )
+                )
+                self.assertIsNotNone(expectation)
+                assert expectation is not None
+                self.assertIs(
+                    ChiCopyBackDeliveryPhase.HOME_RESPONSE,
+                    expectation.phase,
+                )
+                self.assertEqual(home_response, expectation.packet)
+
+                terminal_sent = self.apply(
+                    session,
+                    canceled_at_home.state,
+                    ChiDeliverCoherencePacket(home_response),
+                )
+                terminal_packet = terminal_sent.emissions[0]
+                terminal = terminal_packet.message
+                expected_phase = (
+                    ChiCopyBackDeliveryPhase.REQUESTER_DATA
+                    if decision is ChiCopyBackDecision.REQUEST_DATA
+                    else ChiCopyBackDeliveryPhase.REQUESTER_ACK
+                )
+                if decision is ChiCopyBackDecision.REQUEST_DATA:
+                    self.assertIsInstance(
+                        home_response.message,
+                        ChiCompDBIDRespMessage,
+                    )
+                    self.assertIsInstance(
+                        terminal,
+                        ChiCopyBackWrDataMessage,
+                    )
+                    self.assertIs(ChiRespCode.I, terminal.response)
+                    self.assertEqual(0, terminal.data)
+                    self.assertEqual(0, terminal.byte_enable)
+                else:
+                    self.assertIsInstance(
+                        home_response.message,
+                        ChiCompMessage,
+                    )
+                    self.assertIsInstance(
+                        terminal,
+                        ChiCompAckMessage,
+                    )
+                    self.assertEqual(
+                        int(ChiRespCode.I),
+                        terminal.response,
+                    )
+                terminal_expectation = (
+                    terminal_sent.state.copyback_phase_ledger
+                    .for_data_buffer(
+                        self.RN,
+                        terminal.transaction_id,
+                    )
+                )
+                self.assertIsNotNone(terminal_expectation)
+                assert terminal_expectation is not None
+                self.assertIs(
+                    expected_phase,
+                    terminal_expectation.phase,
+                )
+                self.assertEqual(
+                    terminal_packet,
+                    terminal_expectation.packet,
+                )
+                self.assertFalse(
+                    terminal_sent.state.request_nodes[
+                        self.RN
+                    ].pending_copybacks
+                )
+
+                retired = self.apply(
+                    session,
+                    terminal_sent.state,
+                    ChiDeliverCoherencePacket(terminal_packet),
+                )
+                self.assertEqual(
+                    home_after_snoop.directory,
+                    retired.state.home.directory,
+                )
+                self.assertEqual(
+                    home_after_snoop.backing,
+                    retired.state.home.backing,
+                )
+                self.assertEqual(
+                    home_after_snoop.clean_residency,
+                    retired.state.home.clean_residency,
+                )
+                self.assertFalse(
+                    retired.state.home.pending_copybacks
+                )
+                self.assertFalse(
+                    retired.state.copyback_phase_ledger.entries
+                )
+                self.assertTrue(session.is_quiescent(retired.state))
+
+                replay = session.step(
+                    retired.state,
+                    ChiDeliverCoherencePacket(delayed_write_evict),
+                )
+                self.assert_atomic_fault(
+                    replay,
+                    retired.state,
+                    "write_evict_admission_evidence",
+                )
+
+    def test_home_defers_same_line_request_until_cah_terminal(
+        self,
+    ) -> None:
+        for decision in (
+            ChiCopyBackDecision.REQUEST_DATA,
+            ChiCopyBackDecision.COMPLETE_WITHOUT_DATA,
+        ):
+            with self.subTest(decision=decision.value):
+                session = self.build_multi_requester_session(
+                    decision,
+                    name=f"copy_at_home_ordering_{decision.value}",
+                )
+                initial = session.initial_state()
+                issued = self.apply(
+                    session,
+                    initial,
+                    ChiSubmitWriteEvictFull(
+                        self.RN,
+                        ChiWriteEvictFullMessage(
+                            self.WRITE_EVICT_TXN_ID,
+                            self.ADDRESS,
+                            copy_at_home=True,
+                        ),
+                    ),
+                )
+                accepted = self.apply(
+                    session,
+                    issued.state,
+                    ChiDeliverCoherencePacket(issued.emissions[0]),
+                )
+                terminal_sent = self.apply(
+                    session,
+                    accepted.state,
+                    ChiDeliverCoherencePacket(
+                        accepted.emissions[0]
+                    ),
+                )
+
+                clean_unique_issued = self.apply(
+                    session,
+                    terminal_sent.state,
+                    ChiSubmitCleanUnique(
+                        self.NEW_RN,
+                        ChiCleanUniqueMessage(
+                            self.WRITE_EVICT_TXN_ID + 1,
+                            self.ADDRESS,
+                        ),
+                    ),
+                )
+                deferred = session.step(
+                    clean_unique_issued.state,
+                    ChiDeliverCoherencePacket(
+                        clean_unique_issued.emissions[0]
+                    ),
+                )
+
+                self.assertIsNone(deferred.fault)
+                self.assertIsNotNone(deferred.blocked)
+                assert deferred.blocked is not None
+                self.assertIn(
+                    "same-line",
+                    deferred.blocked.reason,
+                )
+                self.assertIs(clean_unique_issued.state, deferred.state)
+                self.assertFalse(deferred.emissions)
 
     def test_cached_provenance_survives_home_copy_loss_via_data_path(
         self,

@@ -218,7 +218,10 @@ responder 与 scheduled crossbar 的延后 emission。自主 wakeup、定时 lat
 
 根 `SystemSession` 当前只执行 `InterfaceConnection`。CHI Issue H 的 `ChiTransportNetworkSession`
 则消费 `ElaboratedSystemProtocol.transport_plan`，执行调用方声明的 directed hops 和 router 绑定。
-它不固定 line、ring 或 mesh；这些形状是 recipe/fixture。受限的 `ChiReadNoSnpSystemSession` 已在 family
+它不固定 line、ring 或 mesh；这些形状与 route table 都是调用方提供的固定 recipe/fixture。4×4 双向
+mesh 的 deterministic XY corner-to-corner 往返只检验更大静态 topology 的 exact route、scale 与
+quiescence，不证明 CHI opcode/lifecycle 完备、共享仲裁、公平性、性能或 deadlock freedom。受限的
+`ChiReadNoSnpSystemSession` 已在 family
 内部组合 requester ledger、Home participant、router 与 transport state，并以轮转 microstep 调度一个
 direct-Home read lifecycle。`ChiCoherenceNetworkSession` 进一步组合 clean 与受限 dirty RN/Home
 participant 和同一 transport network，以显式 pending egress batch 保存多 Snoopee fanout，并逐 packet
@@ -336,8 +339,9 @@ coherence domain；membership 继续属于 SystemProtocol。与另一 coherence 
 WEF 已可接纳 pre-DBID `SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`，保留 CopyBack correlation，
 再以零 payload 的 `CopyBackWrData_I` 退休；SNP flow 仍归触发 Snoop 的 feature。Home 对 cancel
 只释放 DBID，不改 directory、backing 或 clean residency。当前固定 sparse retain，不包含自动
-victim/replacement、容量策略或下游 read hit；这些属于可选 Home/Cache VirtualDut policy。post-DBID
-Snoop、Retry/error 与级联 eviction 仍属于后续 lifecycle/profile。
+victim/replacement、容量策略或下游 read hit；这些属于可选 Home/Cache VirtualDut policy。Retry/error
+与级联 eviction 仍属于后续 lifecycle/profile；post-`CompDBIDResp`、pre-DAT 同址 Snoop 按 Home
+ordering 作为负例，不建立正向 modifier。
 
 独立 `WriteEvictFull(CAH=1)` modifier 依赖 clean ReadUnique 与上述 WEF base。Home 只在 clean
 `CompData_UC(CAH=1)` 上授予 provenance，RN 将它解释为“此后尚未修改该 line”；本地写或 line removal
@@ -347,7 +351,13 @@ WEF `write_evict_full_current_copy_policy`，并以 `CHECK_CURRENT_COPY` profile
 匹配 current copy 的情形；policy 在 copy 仍存在时也可选择
 `CompDBIDResp→CopyBackWrData_UC`。hidden clean copy 属于 Home participant 的 Snoop-domain state，
 不表示 physical memory 或 HN→SN commit。modifier 增加 Home→Requester response 与
-Requester→Home CompAck capability flow，但不产生 SNP；same-line Snoop、Retry/error 组合尚未闭合。
+Requester→Home CompAck capability flow，但不产生 SNP。WEF REQ 已发出、Home response 尚未产生时，
+`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid` 可使当前 line/provenance 清除为 `I`，同时保留 frozen
+request/TxnID 中的 `CAH=1` 历史；之后 data/no-data outcome 分别以
+`CopyBackWrData_I(Data=0, BE=0)`/`CompAck_I` 退休。system-derived `SNOOP_CANCELED` 只退休旧
+reservation，不覆盖新 owner、reference backing 或 clean residency。该窄片不包含 `UC→SC`/非失效
+Snoop、Retry/error；Home 已发 `Comp`/`CompDBIDResp` 后须先等 `CompAck`/DAT，post-response Snoop
+是 ordering 负向边界而非正向 transient。
 session 中三类 CopyBack 的 delivery correlation 由 typed `ChiCopyBackPhaseLedger` 统一保存
 operation、TxnID/DBID identity 和 response/data/ack phase；旧 operation-specific mappings 仅为构造兼容输入
 与只读投影，不再构成平行权威。
@@ -428,7 +438,9 @@ transport projection；其余 property 仍未闭合：
   topology 闭合 REQ/RSP/DAT，使用独立 clean residency core 且不提交 reference backing；
   `WriteEvictFull(CAH=1)` modifier 另闭合 clean ReadUnique acquisition、cached unchanged-line provenance
   和 Home-selected DAT/CompAck 双终态；当前 no-data 路径受显式 current-copy policy 约束，参数化
-  resolved witness 通过真实 resolver/capability/flow closure 分别执行两条路径；
+  resolved witness 通过真实 resolver/capability/flow closure 分别执行两条正常路径。response 前三种
+  invalidating Snoop→`I` 的窄组合另保留 frozen request CAH 历史、清除当前 provenance，并以
+  `CopyBackWrData_I(0/BE0)`/`CompAck_I` 安全退休旧 reservation；
   `WriteEvictOrEvict(CAH=0)` 另闭合四条 capability flow、Home-selected data/no-data outcome 与四个
   `UC/SC × outcome` 三 packet witness，同样不提交 reference backing。
   clean ReadUnique Retry modifier 复用 transaction-local
@@ -444,7 +456,7 @@ transport projection；其余 property 仍未闭合：
   同址 Snoop 而保留 correlation。当前 CHI lifecycle/profile 不含 coherent cancel、DERR 或同一 accepted
   request 已发出 Snoop 后的 error，
   或超出该窄 witness 的 Retry/Snoop 到达次序，也未闭合 MakeUnique Retry/error/MTE Update/partial-write、
-  deliberate dirty invalidate、`WriteEvictFull` CAH modifier 的 same-line/post-DBID-Snoop/Retry/error 组合、
+  deliberate dirty invalidate、`WriteEvictFull` CAH modifier 的 `UC→SC`/非失效 Snoop 及 Retry/error 组合、
   `WriteEvictOrEvict` post-response/其他 Snoop phase、Retry/error、CAH=1、容量驱动 outcome policy 与一般
   same-line transient/hazard；其 response 前 invalidating-Snoop cancel 已以
   `CANCELED_I→CopyBackWrData_I/CompAck_I` 闭合。通用 participant plan 和 dynamic multi-Home/SAM 是

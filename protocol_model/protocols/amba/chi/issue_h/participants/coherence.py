@@ -1854,7 +1854,6 @@ class ChiCoherentRnNode(
             and same_line
             and all(
                 isinstance(request, ChiWriteEvictFullMessage)
-                and not request.copy_at_home
                 for request in same_line
             )
         )
@@ -2178,13 +2177,6 @@ class ChiCoherentRnNode(
                 pending_copyback.outcome
                 is ChiRnCopyBackOutcome.CANCELED_I
             )
-            if is_write_evict_copy_at_home and canceled:
-                return self._fault(
-                    state,
-                    "write_evict_copy_at_home_snoop",
-                    "the first WriteEvictFull(CAH=1) slice does not combine "
-                    "the no-data branch with a same-line invalidating Snoop",
-                )
             expected_state = (
                 ChiCacheState.I
                 if canceled
@@ -3518,17 +3510,6 @@ class ChiHomeWriteEvictPending:
             raise ValueError(
                 "WriteEvictFull(CAH=0) must request CopyBack data"
             )
-        if (
-            self.admission is ChiHomeCopyBackAdmission.SNOOP_CANCELED
-            and (
-                self.request.copy_at_home
-                or decision is not ChiCopyBackDecision.REQUEST_DATA
-            )
-        ):
-            raise ValueError(
-                "the first Snoop-canceled WriteEvictFull profile supports "
-                "only CAH=0 data completion"
-            )
         object.__setattr__(self, "decision", decision)
 
 
@@ -3917,6 +3898,8 @@ class ChiCoherentHomeState:
                 if (
                     item.decision
                     is ChiCopyBackDecision.COMPLETE_WITHOUT_DATA
+                    and item.admission
+                    is ChiHomeCopyBackAdmission.CURRENT_OWNER
                     and self.clean_residency.line_at(
                         item.request.address
                     )
@@ -4019,8 +4002,9 @@ ChiReadUniqueCopyAtHomePolicy = Callable[
 ]
 # This callback selects the data/no-data branch of the executable
 # CHECK_CURRENT_COPY profile.  Unlike the full CHI permission, this profile
-# permits COMPLETE_WITHOUT_DATA only while Home still has a matching clean
-# residency entry.
+# permits a live CURRENT_OWNER request to complete without data only while
+# Home still has a matching clean residency entry.  A SNOOP_CANCELED request
+# terminates with CompAck_I and does not expose a hidden Home copy.
 ChiWriteEvictFullCurrentCopyPolicy = Callable[
     [ChiWriteEvictFullMessage, ChiCoherentHomeState],
     ChiCopyBackDecision,
@@ -5245,15 +5229,19 @@ class ChiCoherentHomeNode(
                     "write_evict_terminal",
                     "WriteEvictFull data reservation cannot consume CompAck",
                 )
-            if (
-                ack.response != int(ChiRespCode.UC)
-                or ack.trace_tag
-            ):
+            canceled = (
+                copyback_pending.admission
+                is ChiHomeCopyBackAdmission.SNOOP_CANCELED
+            )
+            expected_response = (
+                ChiRespCode.I if canceled else ChiRespCode.UC
+            )
+            if ack.response != int(expected_response) or ack.trace_tag:
                 return self._fault(
                     state,
                     "write_evict_completion_ack_state",
-                    "WriteEvictFull no-data outcome requires CompAck_UC "
-                    "without TraceTag",
+                    "WriteEvictFull no-data outcome requires "
+                    f"CompAck_{expected_response.name} without TraceTag",
                 )
             entry = state.directory[
                 copyback_pending.request.address
@@ -5266,7 +5254,10 @@ class ChiCoherentHomeNode(
                 or backing_line is None
                 or backing_line.version
                 != copyback_pending.backing_version
-                or state.clean_residency.line_at(entry.address) is None
+                or (
+                    not canceled
+                    and state.clean_residency.line_at(entry.address) is None
+                )
             ):
                 return self._fault(
                     state,
@@ -5276,11 +5267,16 @@ class ChiCoherentHomeNode(
                 )
             copybacks = dict(state.pending_copybacks)
             del copybacks[copyback_pending.data_buffer_id]
-            directory = dict(state.directory)
-            directory[entry.address] = self._remove_clean_holder(
-                entry,
-                copyback_pending.requester_id,
-            )
+            directory = state.directory
+            if not canceled:
+                updated_directory = dict(state.directory)
+                updated_directory[entry.address] = (
+                    self._remove_clean_holder(
+                        entry,
+                        copyback_pending.requester_id,
+                    )
+                )
+                directory = updated_directory
             return SemanticStep(
                 ChiCoherentHomeState(
                     directory=directory,
@@ -5727,16 +5723,6 @@ class ChiCoherentHomeNode(
                 "64-byte UC CopyBack with Allocate MemAttr=1101, "
                 "AllowRetry=1, PCrdType=0, and ExpCompAck=0",
             )
-        if (
-            request.copy_at_home
-            and admission is ChiHomeCopyBackAdmission.SNOOP_CANCELED
-        ):
-            return self._fault(
-                state,
-                "write_evict_copy_at_home_snoop",
-                "the first WriteEvictFull(CAH=1) slice does not combine "
-                "with same-line Snoop cancellation",
-            )
         entry = state.directory.get(request.address)
         backing_line = state.backing.line_at(request.address)
         if entry is None or backing_line is None:
@@ -5840,6 +5826,7 @@ class ChiCoherentHomeNode(
                 )
             if (
                 decision is ChiCopyBackDecision.COMPLETE_WITHOUT_DATA
+                and admission is ChiHomeCopyBackAdmission.CURRENT_OWNER
                 and state.clean_residency.line_at(request.address) is None
             ):
                 return self._fault(

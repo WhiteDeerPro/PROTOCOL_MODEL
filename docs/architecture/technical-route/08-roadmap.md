@@ -198,9 +198,18 @@ Snoop-domain `clean_residency` 仍有匹配 clean line 时允许
 `Comp→CompAck_UC` no-data outcome；即使 copy 存在，policy 仍可选择
 `CompDBIDResp→CopyBackWrData_UC` data outcome。两者都使 requester 进入 `I`、删除其 directory
 authority，并保持 reference backing payload/version 不变。hidden clean copy 是 Home 的 Snoop-domain
-state，不是 physical memory 或 topology-visible HN→SN commit。该 modifier 当前只闭合正常终态，不组合
-same-line Snoop、Retry 或 error。参数化 resolved witness 已通过公开 Home recipe、真实
-resolver/capability/flow closure 与 `ChiCoherenceNetworkSession` 分别执行 data/no-data 分支。
+state，不是 physical memory 或 topology-visible HN→SN commit。参数化 resolved witness 已通过公开 Home
+recipe、真实 resolver/capability/flow closure 与 `ChiCoherenceNetworkSession` 分别执行正常
+data/no-data 分支。
+
+随后完成的窄 robustness slice 只处理 `WriteEvictFull(CAH=1)` 已发出、Home 尚未给出
+`Comp`/`CompDBIDResp` 时到达的同址 invalidating Snoop：
+`SnpUnique`、`SnpCleanInvalid` 或 `SnpMakeInvalid` 都使 RN 的当前 line/payload 与 cached CAH
+provenance 清除并进入 `I`，但 pending 中冻结的原 REQ/TxnID/`CAH=1` 仍作为历史 correlation 保留，
+不能被重写成当前 Home-copy 证明。Snoop response 完成后，data outcome 以
+`CopyBackWrData_I(Data=0, BE=0)` 退休，no-data outcome 以 `CompAck_I` 退休。system-derived
+`SNOOP_CANCELED` 只允许旧 CopyBack reservation 安全退休，不删除或覆盖期间建立的新
+owner、reference backing 或 clean residency。
 
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
@@ -218,6 +227,7 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 9 · `WriteEvictOrEvict(CAH=0)` 双 outcome | `WriteEvictOrEvict`、`CompDBIDResp`/`Comp`、`CopyBackWrData_{UC,SC}`/`CompAck`；无 SNP | 复用 CopyBack TxnID/DBID split、clean residency、Evict-style holder removal、CompAck 与 exact evidence | `LikelyShared` 对应 `UC/SC`；显式 Home outcome；四 flow、每 outcome 三 packet | 本切片已闭合 |
 | 10 · `WriteEvictOrEvict` response 前 Snoop cancel | pending WEOE、`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`、迟到 `CompDBIDResp`/`Comp`、`CopyBackWrData_I`/`CompAck_I` | 复用 invalidating-Snoop、`CANCELED_I`、system-derived stale-holder admission、Home snapshot/version guard 与既有 WEOE RSP/DAT/Ack evidence | 原 REQ/`LikelyShared` 与 post-Snoop outcome 分离；`UC/SC × data/no-data` direct 双 Requester witness | 本切片已闭合 |
 | 11 · `WriteEvictFull(CAH=1)` | clean `ReadUnique→CompData_UC(CAH=1)` acquisition；`WriteEvictFull` 后由 Home 选择 `CompDBIDResp→CopyBackWrData_UC` 或 `Comp→CompAck_UC` | 复用 WEF base、clean residency、CompAck、feature/capability/flow closure 与统一 CopyBack phase evidence | RN unchanged-line provenance；显式 current-copy policy；WEF dual terminal | 本切片已闭合 |
+| 12 · `WriteEvictFull(CAH=1)` response 前 invalidating Snoop | pending CAH=1 WEF、`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`、随后到达的 `CompDBIDResp`/`Comp`、`CopyBackWrData_I(0/BE0)`/`CompAck_I` | 复用 `CANCELED_I`、typed CopyBack ledger、system-derived `SNOOP_CANCELED` 与 snapshot/version guard | frozen request CAH 历史和当前 cached provenance 分离；旧 reservation 不覆盖新 owner/backing/residency | 本窄切片已闭合 |
 
 对 [Arm IHI 0050 Issue H](https://developer.arm.com/documentation/ihi0050/h/) 的 CopyBack transaction、
 CAH 与 requester state 规则进行切片级核对后，后续候选的证据成熟度并不相同：
@@ -225,8 +235,10 @@ CAH 与 requester state 规则进行切片级核对后，后续候选的证据�
 | 候选 | 协议依据与当前依赖 | 路线判断 |
 |---|---|---|
 | `WriteEvictOrEvict` response 前 same-line invalidating Snoop | RN 以 `CANCELED_I` 保留原 REQ/TxnID，迟到 data/no-data Home outcome 分别产生零载荷 `CopyBackWrData_I`/`CompAck_I`；system exact evidence 只退休旧 correlation | 已闭合；不据此声称 post-response/非失效 Snoop、Retry/error 或动态 allocation policy |
-| `WriteEvictFull(CAH=1)` | CAH=1 是 RN 未修改该行的 cached provenance，不证明 Home 当前仍有 copy；首个 profile 从 clean `CompData_UC(CAH=1)` 获取，并用显式 current-copy policy 将 no-data 结果收窄到 matching clean residency 仍存在的情形 | 已闭合正常 data/no-data 终态；不据此声称 same-line Snoop、Retry/error、容量替换策略或通用 CAH=1 policy 已实现 |
-| WriteEvict error | 需要分别定义错误来源、形成 phase 与 clean payload disposition；当前没有支持该路径的 ECC/Poison/DataCheck 来源 | 与 Snoop modifier 分离并后置，不用普通 decode/access failure 冒充 |
+| `WriteEvictFull(CAH=1)` 正常终态与 response 前 invalidating Snoop | CAH=1 是 RN 未修改该行的 cached provenance，不证明 Home 当前仍有 copy；首个 profile 从 clean `CompData_UC(CAH=1)` 获取，并用显式 current-copy policy 收窄 no-data 结果。窄 Snoop slice 保留 frozen REQ/CAH 历史，清除当前 provenance，以 `CopyBackWrData_I(0/BE0)`/`CompAck_I` 退休 | 正常双终态与三种 invalidating-Snoop→`I` 已闭合；`SNOOP_CANCELED` 不覆盖新 owner/backing/residency |
+| CAH CopyBack 的其余 same-line/ordering | 广义 Snoop hazard 还需要非失效 Snoop 及 `UC→SC`/SC terminal；Home 发出 `Comp` 后须等 `CompAck`，发出 `CompDBIDResp` 后须等 DAT，才能再发同址 Snoop | 前者留作独立 lifecycle；post-response Snoop 不建正向路径，作为当前 ordering 负向边界 |
+| WriteEvict Retry/error | Retry 需要 RetryAck/P-Credit、容量预留与 reissue 后仍正确维持 CAH provenance；error 需要分别定义错误来源、形成 phase 与 clean payload disposition，当前没有相应 ECC/Poison/DataCheck 来源 | 与 Snoop modifier 分离并后置，不用普通 decode/access failure 冒充 |
+| 容量驱动 data/no-data outcome | 需要 Home/Cache VirtualDut 的容量、victim/replacement 与 residency policy；当前 fixed sparse residency 不提供这些决策 | 保持为可选 participant policy，不把它冒充 CHI transaction 必备功能 |
 | deliberate dirty invalidate 后的 `Evict` | 规范允许由 deliberate action 触发 dirty→I，并可用 Evict 使其可见；当前没有 caller-visible invalidate/discard intent | 等具体 invalidate 场景提出，不把普通 replacement 当成 deliberate action |
 | 同 Home/type 多 waiter、公平性与 deadlock | 来自 runtime/scenario 的 progress 验证需求，不是某个 CHI opcode 的规范前置条件 | 当前不升为 opcode 主线；保留 held/wait/release seam，待真实资源场景阻塞后形成 waiter-selection/fairness property 与 wait-for/deadlock verdict |
 
@@ -237,10 +249,12 @@ Home DBID 与 `HOME_RESPONSE/REQUESTER_DATA/REQUESTER_ACK` 下一阶段；旧 op
 directory、backing 与 residency effect 继续分开；该收敛不新增 wire 行为，既有三类 CopyBack 正负向
 witness 保持原语义，并让 WEF(CAH=1) 的 DAT/ack 双终态不再增加一组平行 evidence authority。
 
-1. pending `WriteEvictOrEvict` response 前 invalidating Snoop 和 `WriteEvictFull(CAH=1)` 正常双终态已经
-   闭合，并保持 exact terminal correlation。下一 lifecycle 决策点比较 WEF CAH modifier 的 same-line/
-   post-response Snoop、Retry/error 与 deliberate dirty invalidate；它们继续作为独立 modifier，不从
-   已闭合的正常 CAH 分支外推。若下一真实场景首先受并发资源阻塞，
+1. pending `WriteEvictOrEvict` response 前 invalidating Snoop、`WriteEvictFull(CAH=1)` 正常双终态，
+   以及 WEF(CAH=1) response 前三种 invalidating-Snoop→`I` 的窄切片已经闭合，并保持 exact terminal
+   correlation。下一 lifecycle 决策点只比较 CAH CopyBack 的 `UC→SC`/非失效 Snoop、Retry/error 与
+   deliberate dirty invalidate；Home 已发 `Comp`/`CompDBIDResp` 后的同址 Snoop 不作为正向候选，而是
+   “先等 `CompAck`/DAT” ordering 的负向边界。容量驱动 outcome 继续等待 Home/Cache VirtualDut policy，
+   不从 fixed residency 外推。若下一真实场景首先受并发资源阻塞，
    则先做同 Home/type 多 waiter 的具名选择、释放和公平性 witness。DERR 继续等待
    ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
 2. 只有验证目标需要观察 Home 之外的 downstream commit 时，才增加独立 SN participant 与

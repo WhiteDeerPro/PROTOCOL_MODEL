@@ -44,6 +44,7 @@ from ..participants.coherence import (
     ChiHomeAcceptSnoopResponse,
     ChiHomeAcceptWriteBackFull,
     ChiHomeGrantPCredit,
+    ChiHomeWriteBackAdmission,
     ChiRnAcceptComp,
     ChiRnAcceptCompDBIDResp,
     ChiRnAcceptCompData,
@@ -54,6 +55,7 @@ from ..participants.coherence import (
     ChiRnIssueCoherentRead,
     ChiRnIssueWriteBackFull,
     ChiRnRetryCoherentRequest,
+    ChiRnWriteBackOutcome,
     ChiRnWriteCacheLine,
 )
 from ..participants.progress import chi_line_resource_name
@@ -1332,7 +1334,43 @@ class ChiCoherenceSession(
                         "WriteBackFull is not enabled by the resolved "
                         "feature contract",
                     )
-                action = ChiHomeAcceptWriteBackFull(packet)
+                admission = ChiHomeWriteBackAdmission.CURRENT_OWNER
+                entry = state.home.directory.get(message.address)
+                if (
+                    entry is not None
+                    and entry.unique_owner != packet.source_id
+                ):
+                    requester_state = state.request_nodes[packet.source_id]
+                    pending_writeback = (
+                        requester_state.pending_writebacks.get(
+                            message.transaction_id
+                        )
+                    )
+                    line = requester_state.line_at(message.address)
+                    if (
+                        pending_writeback is None
+                        or pending_writeback.request != message
+                        or pending_writeback.outcome
+                        is not ChiRnWriteBackOutcome.CANCELED_I
+                        or line is None
+                        or line.state is not ChiCacheState.I
+                        or line.data is not None
+                        or packet.source_id in entry.sharers
+                        or entry.shared_dirty_owner == packet.source_id
+                    ):
+                        return self._fault(
+                            state,
+                            "writeback_cancellation_evidence",
+                            "non-owner WriteBackFull lacks a matching "
+                            "Snoop-canceled RN pending outcome",
+                        )
+                    admission = (
+                        ChiHomeWriteBackAdmission.SNOOP_CANCELED
+                    )
+                action = ChiHomeAcceptWriteBackFull(
+                    packet,
+                    admission,
+                )
             elif isinstance(
                 message,
                 (ChiSnpRespMessage, ChiSnpRespDataMessage),

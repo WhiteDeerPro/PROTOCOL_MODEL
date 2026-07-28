@@ -51,10 +51,12 @@ class ChiCopyBackWrDataMessage:
     """Data returned after a Completer grants a CopyBack DBID.
 
     ``transaction_id`` carries the DBID received in ``CompDBIDResp``, not the
-    original REQ TxnID.  ``response`` describes the Requester's cache state
-    immediately before sending the data and whether dirty responsibility is
-    passed.  The current WriteBackFull lifecycle later restricts this generic
-    CopyBack form to ``UD_PD`` with every byte enable asserted.
+    original REQ TxnID.  Data-bearing ``response`` values describe the
+    Requester's cache state and whether dirty responsibility is passed.
+    ``I`` is the cancellation indication, whose cache-state information is
+    imprecise and ignored.  The participant lifecycle accepts either live
+    ``UD_PD`` with every byte enable asserted, or the invalidating-Snoop
+    cancellation form ``I`` with zero data and byte enables.
     """
 
     chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.DAT

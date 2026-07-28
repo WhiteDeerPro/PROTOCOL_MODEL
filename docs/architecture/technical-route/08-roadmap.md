@@ -77,28 +77,36 @@ correlation。后续无数据 `Comp_UC` 在 full-line payload 仍在时形成 `U
 local write 原子安装 payload 并进入 `UD`。direct `ChiCoherenceSession` 的双 Requester witness 已证明两笔
 `CleanUnique` 可由 Home reservation 串行完成；这不等于 resolved construction 已支持一般多 Requester。
 
+第三条 same-line progress 切片现已闭合 `WriteBackFull` 的 Snoop cancel：RN pending 显式区分
+`LIVE_UD` 与 `CANCELED_I`；前者收到同址 `SnpUnique`/`SnpCleanInvalid` 后把 dirty payload 通过
+`SnpRespData_I_PD` 交出，进入无 payload 的 `CANCELED_I`，但保留原 WriteBack correlation。随后
+`CompDBIDResp` 使 RN 发送 data/byte-enable 均为零的 `CopyBackWrData_I` 并退休。若原 REQ 延迟到
+CleanUnique 已提交新 owner 后才到达 Home，只有组合 session 能从同一 source/TxnID/request 的 RN
+`CANCELED_I` 和 `I` line 派生 `SNOOP_CANCELED` admission；这不是 wire field，独立 Home 也不从一笔
+non-owner REQ 自行推断。Home 接纳时冻结当前 directory snapshot 与 backing version，收到
+`CopyBackWrData_I` 时确认二者未变，只释放 DBID，不覆盖新 backing/owner。direct 双 Requester witness 已
+闭合 `CleanUnique + delayed WriteBack`；一般多 Requester resolved construction 仍未闭合。
+
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
 | 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
 |---|---|---|---|---|
 | 0 · `ReadUnique` same-line | `ReadUnique`、`SnpUnique`、`SnpResp`、`CompData`、`CompAck` | pending/Retry correlation、Home line reservation、blocked packet replay | 无；复用 `I/SC/UC` | 已闭合 |
 | 1 · `CleanUnique` / `UCE` | `CleanUnique`、`SnpCleanInvalid`/`SnpUnique`、`SnpResp`、`Comp_UC`、`CompAck` | 既有 CleanUnique fanout/聚合、同址 reservation、full-line local write | `UCE` 空数据 unique authority；pending CU 的 post-Snoop line state | 本切片已闭合 |
-| 2 · WriteBack same-line/cancel outcome | `WriteBackFull`、invalidating Snoop、`CompDBIDResp`、post-Snoop `CopyBack_I` | 既有 writeback DBID/correlation、directory/backing commit | writeback 的 post-Snoop outcome 与零数据 CopyBack retirement | **下一条主线** |
-| 3 · Retry/Snoop/error 窄组合 | `RetryAck`、`PCrdGrant`、SNP、`CompData_I(NDERR)`；DERR 原子待来源 | 既有 Retry ledger、coherence pending 与 pre-Snoop NDERR modifier | 组合 phase/cancel 证据；post-Snoop DERR 需 ECC/Poison/DataCheck 来源 | WriteBack 后分段加入 |
+| 2 · WriteBack same-line/cancel outcome | `WriteBackFull`、invalidating Snoop、`CompDBIDResp`、post-Snoop `CopyBackWrData_I` | 既有 writeback DBID/correlation、dirty Snoop data transfer、directory/backing authority | RN `LIVE_UD/CANCELED_I`；system-derived stale-owner admission；Home snapshot/version guard 与零数据 retirement | 本切片已闭合 |
+| 3 · Retry/Snoop/error 窄组合 | `RetryAck`、`PCrdGrant`、SNP、`CompData_I(NDERR)`；DERR 原子待来源 | 既有 Retry ledger、coherence pending 与 pre-Snoop NDERR modifier | 组合 phase/cancel 证据；post-Snoop DERR 需 ECC/Poison/DataCheck 来源 | **下一条主线** |
 | 4 · clean `Evict` | `Evict` REQ form 尚未登记；通用 `Comp_I` 可复用 | 复用 clean directory removal、TxnID 与 completion retirement | 显式 victim/evict intent；不等于自动 replacement policy | 后续独立 opcode slice |
 | 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid` form 尚未登记，completion/ack 可复用 | 复用 `UCE`、失效 fanout、Home reservation 与 full-line write | 不再引入 payload 稳态；补 operation-specific correlation | `Evict` 后加入 |
 
-1. 下一条主线只闭合 WriteBack 同址 invalidating Snoop 与 post-Snoop `CopyBack_I` retirement；自动
-   victim/writeback scheduling 和 replacement policy 保持独立 refinement；
-2. 随后把既有 Retry、Snoop 与 pre-Snoop NDERR 组合成窄而可执行的 phase；DERR 等待
+1. 下一条主线把既有 Retry、Snoop 与 pre-Snoop NDERR 组合成窄而可执行的 phase；DERR 等待
    ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
-3. 再按表中依赖加入 clean `Evict` 和 `MakeUnique`；只有验证目标需要观察 physical commit 时，才增加
+2. 再按表中依赖加入 clean `Evict` 和 `MakeUnique`；只有验证目标需要观察 physical commit 时，才增加
    topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；
-4. 增加多 waiter 选择/公平性、多个 pending emission batch 和 wait-for cycle witness；只有这些运行投影
+3. 增加多 waiter 选择/公平性、多个 pending emission batch 和 wait-for cycle witness；只有这些运行投影
    稳定后，才将 family scheduler 上提为有界并发 LTS 探索；
-5. 将当前只供 CleanUnique 消费的预置 `SD` 扩展为可生成、可维持的 Owned lifecycle，再以 dirty
+4. 将当前只供 CleanUnique 消费的预置 `SD` 扩展为可生成、可维持的 Owned lifecycle，再以 dirty
    `SnpShared`、owner handoff、replacement 与 forwarding/DCT 检验 MOESI-like 扩展；
-6. 第二种 packet network 提出相同接口后，再把 family scheduler 的稳定形状投影到通用 system runtime。
+5. 第二种 packet network 提出相同接口后，再把 family scheduler 的稳定形状投影到通用 system runtime。
 
 当前每个 resolved feature scope 显式选择一个未进入 address-router translation 的 address claim 和一个
 scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 resolver 核对；同一 runtime 按地址动态

@@ -132,6 +132,40 @@ class ChiCacheLine:
             raise ValueError("a full valid cache line requires data")
 
 
+class ChiRnWriteBackOutcome(str, Enum):
+    """Post-Snoop outcome retained while an RN waits for a CopyBack DBID."""
+
+    LIVE_UD = "live_ud"
+    CANCELED_I = "canceled_i"
+
+
+@dataclass(frozen=True)
+class ChiRnWriteBackPending:
+    """Requester correlation plus the post-Snoop CopyBack outcome."""
+
+    request: ChiWriteBackFullMessage
+    outcome: ChiRnWriteBackOutcome = ChiRnWriteBackOutcome.LIVE_UD
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, ChiWriteBackFullMessage):
+            raise TypeError(
+                "RN writeback pending record requires WriteBackFull"
+            )
+        object.__setattr__(
+            self,
+            "outcome",
+            ChiRnWriteBackOutcome(self.outcome),
+        )
+
+    @property
+    def transaction_id(self) -> int:
+        return self.request.transaction_id
+
+    @property
+    def address(self) -> int:
+        return self.request.address
+
+
 ChiCoherentReadMessage = (
     ChiReadSharedMessage
     | ChiReadNotSharedDirtyMessage
@@ -345,7 +379,7 @@ class ChiCoherentRnState:
     pending_transactions: Mapping[int, ChiCoherenceRequestMessage] = field(
         default_factory=dict
     )
-    pending_writebacks: Mapping[int, ChiWriteBackFullMessage] = field(
+    pending_writebacks: Mapping[int, ChiRnWriteBackPending] = field(
         default_factory=dict
     )
     request_retry: ChiRequestRetryRequesterState[
@@ -407,7 +441,7 @@ class ChiCoherentRnState:
         )
         writebacks = dict(self.pending_writebacks)
         if any(
-            not isinstance(item, ChiWriteBackFullMessage)
+            not isinstance(item, ChiRnWriteBackPending)
             or transaction_id != item.transaction_id
             for transaction_id, item in writebacks.items()
         ):
@@ -429,14 +463,27 @@ class ChiCoherentRnState:
             raise ValueError(
                 "RN coherent transactions must reserve distinct cache lines"
             )
-        if any(
-            request.address not in resident
-            or permissions.get(request.address) is not ChiCacheState.UD
-            for request in writebacks.values()
-        ):
-            raise ValueError(
-                "RN pending WriteBackFull requires a resident UD line"
-            )
+        for pending_writeback in writebacks.values():
+            address = pending_writeback.address
+            if (
+                pending_writeback.outcome
+                is ChiRnWriteBackOutcome.LIVE_UD
+            ):
+                if (
+                    address not in resident
+                    or permissions.get(address) is not ChiCacheState.UD
+                ):
+                    raise ValueError(
+                        "live RN WriteBackFull requires a resident UD line"
+                    )
+            elif (
+                address in resident
+                or permissions.get(address) is not ChiCacheState.I
+            ):
+                raise ValueError(
+                    "Snoop-canceled RN WriteBackFull requires I without "
+                    "resident payload"
+                )
         if any(
             permissions.get(request.address, ChiCacheState.I)
             not in (ChiCacheState.I, ChiCacheState.SC)
@@ -515,9 +562,9 @@ class ChiCoherentRnState:
             for request in self.pending_transactions.values()
             if request.address == address
         ) + tuple(
-            request
-            for request in self.pending_writebacks.values()
-            if request.address == address
+            pending.request
+            for pending in self.pending_writebacks.values()
+            if pending.address == address
         )
 
     def retryable_transaction_ids(self) -> tuple[int, ...]:
@@ -1118,8 +1165,21 @@ class ChiCoherentRnNode(
                 for request in same_line
             )
         )
+        writeback_overlap = (
+            isinstance(
+                snoop,
+                (ChiSnpCleanInvalidMessage, ChiSnpUniqueMessage),
+            )
+            and same_line
+            and all(
+                isinstance(request, ChiWriteBackFullMessage)
+                for request in same_line
+            )
+        )
         if same_line and not (
-            read_unique_overlap or clean_unique_overlap
+            read_unique_overlap
+            or clean_unique_overlap
+            or writeback_overlap
         ):
             return SemanticStep(
                 state,
@@ -1132,6 +1192,7 @@ class ChiCoherentRnNode(
                         "the staged transient policy defers the Snoop because "
                         "an RN-local transaction reserves this cache line; "
                         "only ReadUnique/SnpUnique and CleanUnique/"
+                        "invalidating-Snoop and WriteBackFull/"
                         "invalidating-Snoop same-line transients are implemented"
                     ),
                     location=self.name,
@@ -1278,12 +1339,26 @@ class ChiCoherentRnNode(
                 target_id=packet.source_id,
             )
         )
+        pending_writebacks = state.pending_writebacks
+        if writeback_overlap:
+            updated_writebacks = dict(state.pending_writebacks)
+            for transaction_id, pending_writeback in tuple(
+                updated_writebacks.items()
+            ):
+                if pending_writeback.address == snoop.address:
+                    updated_writebacks[transaction_id] = (
+                        ChiRnWriteBackPending(
+                            pending_writeback.request,
+                            ChiRnWriteBackOutcome.CANCELED_I,
+                        )
+                    )
+            pending_writebacks = updated_writebacks
         return SemanticStep(
             ChiCoherentRnState(
                 cache,
                 permissions,
                 state.pending_transactions,
-                state.pending_writebacks,
+                pending_writebacks,
                 state.request_retry,
             ),
             (response_packet,),
@@ -1582,7 +1657,7 @@ class ChiCoherentRnNode(
                 "WriteBackFull requires a resident UD line",
             )
         pending = dict(state.pending_writebacks)
-        pending[request.transaction_id] = request
+        pending[request.transaction_id] = ChiRnWriteBackPending(request)
         candidate = ChiCoherentRnState(
             state.cache,
             state.permissions,
@@ -1606,7 +1681,7 @@ class ChiCoherentRnNode(
         state: ChiCoherentRnState,
         packet: ChiNetworkPacket,
     ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
-        """Invalidate the RN line and emit its latest data under Home's DBID."""
+        """Complete a live or Snoop-canceled CopyBack under Home's DBID."""
 
         if packet.target_id != self.node_id:
             return self._fault(
@@ -1622,8 +1697,10 @@ class ChiCoherentRnNode(
             )
         response = packet.message
         assert isinstance(response, ChiCompDBIDRespMessage)
-        request = state.pending_writebacks.get(response.transaction_id)
-        if request is None:
+        pending_writeback = state.pending_writebacks.get(
+            response.transaction_id
+        )
+        if pending_writeback is None:
             return self._fault(
                 state,
                 "writeback_response_identity",
@@ -1635,30 +1712,54 @@ class ChiCoherentRnNode(
                 "writeback_response_status",
                 "first writeback profile accepts only a normal DBID response",
             )
+        request = pending_writeback.request
         line = state.line_at(request.address)
-        if (
-            line is None
-            or line.state is not ChiCacheState.UD
-            or line.data is None
-        ):
-            return self._fault(
-                state,
-                "writeback_reserved_line",
-                "reserved writeback line is no longer resident in UD",
-            )
-        copyback = ChiCopyBackWrDataMessage(
-            transaction_id=response.data_buffer_id,
-            data=line.data,
-            response=ChiRespCode.UD_PD,
-            data_id=0,
-            byte_enable=(1 << _CACHE_LINE_BYTES) - 1,
-        )
-        cache = self.cache_store.remove(
-            state.cache,
-            request.address,
-        ).state
+        cache = state.cache
         permissions = dict(state.permissions)
-        permissions[request.address] = ChiCacheState.I
+        if (
+            pending_writeback.outcome
+            is ChiRnWriteBackOutcome.LIVE_UD
+        ):
+            if (
+                line is None
+                or line.state is not ChiCacheState.UD
+                or line.data is None
+            ):
+                return self._fault(
+                    state,
+                    "writeback_reserved_line",
+                    "live writeback line is no longer resident in UD",
+                )
+            copyback = ChiCopyBackWrDataMessage(
+                transaction_id=response.data_buffer_id,
+                data=line.data,
+                response=ChiRespCode.UD_PD,
+                data_id=0,
+                byte_enable=(1 << _CACHE_LINE_BYTES) - 1,
+            )
+            cache = self.cache_store.remove(
+                state.cache,
+                request.address,
+            ).state
+            permissions[request.address] = ChiCacheState.I
+        else:
+            if (
+                line is None
+                or line.state is not ChiCacheState.I
+                or request.address in state.cache.lines
+            ):
+                return self._fault(
+                    state,
+                    "writeback_canceled_line",
+                    "Snoop-canceled writeback must remain I without payload",
+                )
+            copyback = ChiCopyBackWrDataMessage(
+                transaction_id=response.data_buffer_id,
+                data=0,
+                response=ChiRespCode.I,
+                data_id=0,
+                byte_enable=0,
+            )
         pending = dict(state.pending_writebacks)
         del pending[request.transaction_id]
         return SemanticStep(
@@ -1929,13 +2030,25 @@ class ChiCoherentTransactionPending:
         return self.prepared_backing_write.data
 
 
+class ChiHomeWriteBackAdmission(str, Enum):
+    """System-validated authority mode for one Home WriteBack admission."""
+
+    CURRENT_OWNER = "current_owner"
+    SNOOP_CANCELED = "snoop_canceled"
+
+
 @dataclass(frozen=True)
 class ChiHomeWriteBackPending:
-    """Home reservation between WriteBackFull and CopyBackWrData."""
+    """Home reservation plus immutable authority evidence for CopyBack."""
 
     requester_id: int
     request: ChiWriteBackFullMessage
     data_buffer_id: int
+    directory_snapshot: ChiHomeDirectoryEntry
+    backing_version: int
+    admission: ChiHomeWriteBackAdmission = (
+        ChiHomeWriteBackAdmission.CURRENT_OWNER
+    )
 
     def __post_init__(self) -> None:
         _require_node_id("writeback requester", self.requester_id)
@@ -1949,6 +2062,29 @@ class ChiHomeWriteBackPending:
             or not 0 <= self.data_buffer_id < _TRANSACTION_ID_LIMIT
         ):
             raise ValueError("writeback data_buffer_id must be 12-bit")
+        if (
+            not isinstance(
+                self.directory_snapshot,
+                ChiHomeDirectoryEntry,
+            )
+            or self.directory_snapshot.address != self.request.address
+        ):
+            raise ValueError(
+                "writeback directory snapshot must match the request line"
+            )
+        if (
+            not isinstance(self.backing_version, int)
+            or isinstance(self.backing_version, bool)
+            or self.backing_version < 0
+        ):
+            raise ValueError(
+                "writeback backing version must be a non-negative integer"
+            )
+        object.__setattr__(
+            self,
+            "admission",
+            ChiHomeWriteBackAdmission(self.admission),
+        )
 
 
 @dataclass(frozen=True)
@@ -2010,6 +2146,9 @@ class ChiHomeAcceptCompAck:
 @dataclass(frozen=True)
 class ChiHomeAcceptWriteBackFull:
     packet: ChiNetworkPacket
+    admission: ChiHomeWriteBackAdmission = (
+        ChiHomeWriteBackAdmission.CURRENT_OWNER
+    )
 
     def __post_init__(self) -> None:
         if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
@@ -2018,6 +2157,11 @@ class ChiHomeAcceptWriteBackFull:
             raise TypeError(
                 "Home writeback action requires WriteBackFull packet"
             )
+        object.__setattr__(
+            self,
+            "admission",
+            ChiHomeWriteBackAdmission(self.admission),
+        )
 
 
 @dataclass(frozen=True)
@@ -2136,14 +2280,29 @@ class ChiCoherentHomeState:
             raise ValueError(
                 "Home pending transaction requires a directory entry"
             )
-        if any(
-            directory[item.request.address].unique_owner
-            != item.requester_id
-            for item in writebacks.values()
-        ):
-            raise ValueError(
-                "Home pending writeback requester must remain Unique owner"
-            )
+        for item in writebacks.values():
+            entry = directory[item.request.address]
+            if (
+                item.admission
+                is ChiHomeWriteBackAdmission.CURRENT_OWNER
+                and entry.unique_owner != item.requester_id
+            ):
+                raise ValueError(
+                    "normal Home writeback requester must remain Unique owner"
+                )
+            if (
+                item.admission
+                is ChiHomeWriteBackAdmission.SNOOP_CANCELED
+                and (
+                    entry.unique_owner == item.requester_id
+                    or item.requester_id in entry.sharers
+                    or entry.shared_dirty_owner == item.requester_id
+                )
+            ):
+                raise ValueError(
+                    "Snoop-canceled Home writeback requester must no longer "
+                    "hold directory authority"
+                )
         requester_transactions = tuple(
             (item.requester_id, item.request.transaction_id)
             for item in pending.values()
@@ -2328,7 +2487,11 @@ class ChiCoherentHomeNode(
         if isinstance(action, ChiHomeAcceptCompAck):
             return self._accept_comp_ack(state, action.packet)
         if isinstance(action, ChiHomeAcceptWriteBackFull):
-            return self._accept_writeback_full(state, action.packet)
+            return self._accept_writeback_full(
+                state,
+                action.packet,
+                action.admission,
+            )
         if isinstance(action, ChiHomeAcceptCopyBackData):
             return self._accept_copyback_data(state, action.packet)
         if isinstance(action, ChiHomeGrantPCredit):
@@ -3086,6 +3249,7 @@ class ChiCoherentHomeNode(
         self,
         state: ChiCoherentHomeState,
         packet: ChiNetworkPacket,
+        admission: ChiHomeWriteBackAdmission,
     ) -> SemanticStep[ChiCoherentHomeState, ChiNetworkPacket]:
         """Allocate a Home DBID without changing directory/backing state."""
 
@@ -3143,11 +3307,28 @@ class ChiCoherentHomeNode(
                 "writeback_address_home",
                 "Home has no directory/backing entry for this address",
             )
-        if entry.unique_owner != packet.source_id:
+        if (
+            admission is ChiHomeWriteBackAdmission.CURRENT_OWNER
+            and entry.unique_owner != packet.source_id
+        ):
             return self._fault(
                 state,
                 "writeback_owner",
                 "WriteBackFull source is not the directory Unique owner",
+            )
+        if (
+            admission is ChiHomeWriteBackAdmission.SNOOP_CANCELED
+            and (
+                entry.unique_owner == packet.source_id
+                or packet.source_id in entry.sharers
+                or entry.shared_dirty_owner == packet.source_id
+            )
+        ):
+            return self._fault(
+                state,
+                "writeback_cancellation_authority",
+                "Snoop-canceled WriteBack source still holds directory "
+                "authority",
             )
         if any(
             item.request.address == request.address
@@ -3207,6 +3388,9 @@ class ChiCoherentHomeNode(
             packet.source_id,
             request,
             data_buffer_id,
+            entry,
+            state.backing.line_at(request.address).version,
+            admission,
         )
         response = ChiNetworkPacket.response(
             ChiCompDBIDRespMessage(
@@ -3261,6 +3445,50 @@ class ChiCoherentHomeNode(
                 "copyback_identity",
                 "CopyBackWrData does not match the Home DBID/requester pair",
             )
+        entry = state.directory[pending.request.address]
+        backing_line = state.backing.line_at(pending.request.address)
+        if (
+            entry != pending.directory_snapshot
+            or backing_line.version != pending.backing_version
+        ):
+            return self._fault(
+                state,
+                "copyback_reservation_changed",
+                "directory or backing authority changed after the Home "
+                "admitted WriteBackFull",
+            )
+        writebacks = dict(state.pending_writebacks)
+        del writebacks[pending.data_buffer_id]
+        if (
+            pending.admission
+            is ChiHomeWriteBackAdmission.SNOOP_CANCELED
+        ):
+            if (
+                message.response is not ChiRespCode.I
+                or message.response_error != 0
+                or message.data_id != 0
+                or message.byte_enable != 0
+                or message.data != 0
+            ):
+                return self._fault(
+                    state,
+                    "copyback_cancellation_profile",
+                    "Snoop-canceled WriteBackFull requires "
+                    "CopyBackWrData_I with zero data and byte enables",
+                )
+            return SemanticStep(
+                ChiCoherentHomeState(
+                    directory=state.directory,
+                    backing=state.backing,
+                    pending=state.pending,
+                    next_snoop_transaction_id=(
+                        state.next_snoop_transaction_id
+                    ),
+                    next_data_buffer_id=state.next_data_buffer_id,
+                    pending_writebacks=writebacks,
+                    request_retry=state.request_retry,
+                )
+            )
         if (
             message.response is not ChiRespCode.UD_PD
             or message.response_error != 0
@@ -3271,10 +3499,9 @@ class ChiCoherentHomeNode(
             return self._fault(
                 state,
                 "copyback_profile",
-                "first WriteBackFull profile requires one full-line "
+                "normal WriteBackFull requires one full-line "
                 "CopyBackWrData_UD_PD packet",
             )
-        entry = state.directory[pending.request.address]
         if entry.unique_owner != pending.requester_id:
             return self._fault(
                 state,
@@ -3303,8 +3530,6 @@ class ChiCoherentHomeNode(
             entry.address,
             unique_owner=None,
         )
-        writebacks = dict(state.pending_writebacks)
-        del writebacks[pending.data_buffer_id]
         return SemanticStep(
             ChiCoherentHomeState(
                 directory=directory,
@@ -3440,6 +3665,7 @@ __all__ = [
     "ChiCacheState",
     "ChiCoherentTransactionPending",
     "ChiCoherenceRequestMessage",
+    "ChiHomeWriteBackAdmission",
     "ChiHomeWriteBackPending",
     "ChiCoherentHomeAction",
     "ChiCoherentHomeNode",
@@ -3468,6 +3694,8 @@ __all__ = [
     "ChiRnIssueCoherentRead",
     "ChiRnIssueWriteBackFull",
     "ChiRnRetryCoherentRequest",
+    "ChiRnWriteBackOutcome",
+    "ChiRnWriteBackPending",
     "ChiRnWriteCacheLine",
     "ChiSnoopResult",
 ]

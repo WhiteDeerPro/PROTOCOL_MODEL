@@ -82,7 +82,8 @@ completion、Retry/P-Credit 与 writeback 使用的 REQ/RSP/SNP/DAT form。因�
 `CleanUnique→SnpCleanInvalid→SnpResp/SnpRespData→Comp→CompAck`、clean ReadUnique、dirty unique
 responsibility transfer、`WriteBackFull→CompDBIDResp→CopyBackWrData`，以及
 `ReadNotSharedDirty→SnpNotSharedDirty→SnpRespData_SC_PD→Home pending 接管→CompData_SC→CompAck`
-都可以完整 round-trip。`SrcID/TgtID`、packet index/count 仍归 `ChiNetworkPacket`；四个 channel 的
+都可以完整 round-trip；writeback 覆盖正常 `CopyBackWrData_UD_PD` 与 data/byte-enable 均为零的
+`CopyBackWrData_I`。`SrcID/TgtID`、packet index/count 仍归 `ChiNetworkPacket`；四个 channel 的
 `LCrdReturn` 属于 hop-local maintenance flit，也不进入 message codec。SNP `Addr` 继续使用 normalized
 full byte address，packed SNPFLIT 省略低位的处理留给未来 bit codec。
 
@@ -329,6 +330,25 @@ directory owner。read 与 writeback 在 RN 共享 TxnID/capacity，在 Home 共
 具名 pending record。当前 API 提交一条已经选中的 dirty line；LRU、victim selection、自动 eviction trigger
 和 writeback queue scheduling 尚未包含在该 feature 中。
 
+WriteBack pending 现进一步显式区分两种数据处置：
+
+- `LIVE_UD`：RN 仍持有 resident dirty payload；`CompDBIDResp` 后发送
+  `CopyBackWrData_UD_PD`，Home 以该数据提交 backing 并清除 owner；
+- `CANCELED_I`：REQ 发出后、DAT 发出前收到同址 `SnpUnique`/`SnpCleanInvalid`，RN 已通过
+  `SnpRespData_I_PD` 交出 dirty payload 并转为无 payload 的 `I`，但保留 WriteBack request/TxnID；
+  `CompDBIDResp` 后只发送 `CopyBackWrData_I(Data=0, BE=0)` 退休。
+
+当前闭合的合法顺序是 Snoop response 先完成，再接收 `CompDBIDResp` 并发送 DAT。CopyBack WriteData
+承担 implicit `CompAck`；Home 发出 completion 后到 DAT 到达前，不再发起新的同址 Snoop。本切片不把绕过
+该 Home ordering 的 post-`CompDBIDResp` Snoop 注入当成另一条 RN transient。
+
+若 cancel 后的 REQ 延迟到其他同址 transaction 已提交新 owner 才到达 Home，
+`ChiCoherenceSession` 必须从 source RN 的精确 request/TxnID、`CANCELED_I` 与无 payload `I` line 派生
+`SNOOP_CANCELED` admission。它不是 CHI wire field，独立 Home participant 不能看到 non-owner REQ 就自行
+推断取消。Home 接纳 normal/canceled WriteBack 时都保存当前 directory snapshot 与 backing version；
+CopyBack 到达时先检查二者未变。cancel 只接受零数据 `CopyBackWrData_I` 并释放 DBID，不改 backing 或
+directory，迟到 `CopyBackWrData_UD_PD` 会 fault 并保留 state。
+
 `SC` 仍不能直接执行本地写；启用 `CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS` 后，`I` 或 `SC` requester
 可以发出 `CleanUnique`。若本地 full-line 数据一直保留，Home 以 `SnpCleanInvalid` 失效其他 clean holder，
 无数据 `Comp_UC` 使 requester 进入 `UC`；若从 `I` 发起，或 pending CleanUnique 收到同址
@@ -404,7 +424,11 @@ Home→Requester `retry_response` RSP flow 和
 `CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE`；原有 snoop、completion 与 CompAck flow 由依赖闭合保留。
 dirty unique transfer 也依赖 clean ReadUnique，因为它直接扩展该 read lifecycle。dirty writeback
 把“当前 line 为 `UD`”作为 participant-state 前置条件，不强制同一 construction 证明该权限由哪条获取路径产生；它声明
-Requester→Home REQ、Home→Requester RSP 和 Requester→Home DAT 三条 flow，但不引入 Snoopee role。
+Requester→Home REQ、Home→Requester RSP 和 Requester→Home DAT 三条 flow，并增加
+writeback-pending invalidating-Snoop accept、CopyBack cancel produce/accept capability，但不为 standalone
+WriteBack 引入 Snoopee role 或 SNP/Snoop-response flow。cancel witness 的 Snoop/DAT 回程由同时选中的
+CleanUnique shared-dirty feature 提供；runtime 再验证同一 RN 的 pending outcome，不能仅由 capability
+集合推断一笔 stale-owner request 合法。
 `CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY` 本身没有 feature
 dependency，也不要求 local-write capability，只声明这笔 read/snoop/completion 所需的角色和 flow。
 `CHI_MESI_NO_SD_REQUIRED_FEATURES` 是 system 侧 policy preset：它同时选择 dirty unique transfer 与
@@ -465,6 +489,12 @@ reservation 串行处理；第一笔的 invalidating Snoop 可以命中第二个
 `UCE→UD`。该见证不经过 resolved construction，不把 fixture 中的两个 requester 冒充一般多 Requester
 system authority。
 
+另一条 direct 双 Requester witness 组合 `CleanUnique + delayed WriteBack`：旧 `UD` owner 先发出的
+WriteBack REQ 被延迟，新 requester 的 `SnpCleanInvalid` 使旧 owner 返回 `SnpRespData_I_PD` 并进入
+`CANCELED_I`；CleanUnique 先提交最新 backing 与新的 `UCE` owner。迟到 REQ 随后只在 system-derived
+`SNOOP_CANCELED` evidence 下取得 DBID，返回 `CopyBackWrData_I`；Home 以 admission 时的 directory
+snapshot/backing version 拒绝 stale mutation，只退休 DBID。该见证同样不经过 resolved construction。
+
 ## 场景与功能边界
 
 direct topology、调用方组装的一个或多个 router topology 和具体 FIFO 深度属于测试/showcase 的参考装配，
@@ -477,13 +507,16 @@ pending `ReadUnique` 已可处理同址 `SnpUnique`：RN 的 `I` 保持 absent�
 pending `CleanUnique` 也可处理同址 `SnpUnique` 或 `SnpCleanInvalid`：前者采用上述区分，后者返回
 `SnpResp_I`；失效为 `I` 后仍保留 pending，
 再由自己的 `Comp_UC` 形成无 payload 的 `UCE`；`UCE` 遇到 invalidating
-Snoop 只返回无数据 `SnpResp_I` 并进入 `I`。Home 仍只允许一个同址 lifecycle；direct packet-delivery
-fixture 已表达两个 requester 的 CleanUnique 串行化，但 resolved system 仍只有一个构造期 Requester
-authority，不能据此声称一般多 Requester topology 已闭合。
+Snoop 只返回无数据 `SnpResp_I` 并进入 `I`。pending WriteBack 接收同址 invalidating Snoop 时则把
+`LIVE_UD` 转成 `CANCELED_I`，并在 DBID 返回后发送零数据 `CopyBackWrData_I`。Home 仍只允许一个已接纳
+的同址 lifecycle；direct packet-delivery fixture 已表达两个 requester 的 CleanUnique 串行化以及
+CleanUnique 与延迟 WriteBack cancel，但 resolved system 仍只有一个构造期 Requester authority，不能据此
+声称一般多 Requester topology 已闭合。
 
 仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、`MakeUnique`、clean `Evict`、自动
 victim/writeback scheduling、coherent DERR 与 post-snoop/组合错误路径、Retry 与
-error/Snoop/writeback 的并发组合、WriteBack 同址 Snoop/cancel、显式 transient phase/等待者合并、
+error/Snoop/writeback 的并发组合、超出已闭合 invalidating-Snoop cancel 的其他 WriteBack phase、
+显式 transient phase/等待者合并、
 完整 `SD`/Owned lifecycle、forwarding snoop、真实 snoop filter、可共同执行的 Home→Memory/SN
 participant 与 topology-visible `WriteNoSnp` physical commit、multi-packet DAT、同一 runtime 的
 一般多 Requester、multi-Home/SAM 选择、跨 domain 执行，以及跨 hop wait-for/deadlock

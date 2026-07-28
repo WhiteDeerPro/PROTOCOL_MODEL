@@ -327,7 +327,8 @@ def _held_lines(
                     request.transaction_id,
                 )
             )
-        for request in node_state.pending_writebacks.values():
+        for pending in node_state.pending_writebacks.values():
+            request = pending.request
             assert isinstance(request, ChiWriteBackFullMessage)
             held.append(
                 ChiHeldLine(

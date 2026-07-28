@@ -12,14 +12,18 @@ from protocol_model.protocols.amba.chi.issue_h.participants.coherence import (
     ChiCoherentRnNode,
     ChiHomeDirectoryEntry,
     ChiRnAcceptCompData,
+    ChiRnAcceptCompDBIDResp,
     ChiRnAcceptSnoop,
     ChiRnIssueCleanUnique,
     ChiRnIssueCoherentRead,
     ChiRnIssueWriteBackFull,
+    ChiRnWriteBackOutcome,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.dat import (
     ChiCompDataMessage,
+    ChiCopyBackWrDataMessage,
     ChiIssueHDatProfile,
+    ChiSnpRespDataMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.req import (
     ChiCleanUniqueMessage,
@@ -35,6 +39,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation.response import (
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.rsp import (
     ChiCompAckMessage,
+    ChiCompDBIDRespMessage,
     ChiSnpRespMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation.snp import (
@@ -590,7 +595,7 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
             snooped.emissions[0].message.response,
         )
 
-    def test_writeback_full_transient_defers_same_line_snp_unique(
+    def test_writeback_full_transient_cancels_after_same_line_snp_unique(
         self,
     ) -> None:
         requester = self.build_requester(ChiCacheState.UD)
@@ -602,17 +607,68 @@ class ChiIssueHReadUniqueCoherenceTest(unittest.TestCase):
             ),
         )
 
-        blocked = requester.step(
+        snooped = self.apply(
+            requester,
             issued.state,
             ChiRnAcceptSnoop(self.snoop_unique_packet()),
         )
 
-        self.assertIsNone(blocked.fault)
-        self.assertIsNotNone(blocked.blocked)
-        assert blocked.blocked is not None
-        self.assertIn("defers the Snoop", blocked.blocked.reason)
-        self.assertIs(issued.state, blocked.state)
-        self.assertFalse(blocked.emissions)
+        line = snooped.state.line_at(self.ADDRESS)
+        assert line is not None
+        self.assertIs(ChiCacheState.I, line.state)
+        self.assertIsNone(line.data)
+        pending = snooped.state.pending_writebacks[0x15]
+        self.assertIs(
+            ChiRnWriteBackOutcome.CANCELED_I,
+            pending.outcome,
+        )
+        response = snooped.emissions[0]
+        self.assertIsInstance(response.message, ChiSnpRespDataMessage)
+        self.assertIs(ChiRespCode.I_PD, response.message.response)
+        self.assertEqual(self.DATA, response.message.data)
+
+        repeated = self.apply(
+            requester,
+            snooped.state,
+            ChiRnAcceptSnoop(
+                ChiNetworkPacket.snoop(
+                    ChiSnpUniqueMessage(
+                        transaction_id=0x101,
+                        address=self.ADDRESS,
+                    ),
+                    source_id=self.HOME,
+                    target_id=self.REQUESTER,
+                )
+            ),
+        )
+        repeated_response = repeated.emissions[0].message
+        self.assertIsInstance(repeated_response, ChiSnpRespMessage)
+        self.assertIs(ChiRespCode.I, repeated_response.response)
+        self.assertIs(
+            ChiRnWriteBackOutcome.CANCELED_I,
+            repeated.state.pending_writebacks[0x15].outcome,
+        )
+
+        completed = self.apply(
+            requester,
+            repeated.state,
+            ChiRnAcceptCompDBIDResp(
+                ChiNetworkPacket.response(
+                    ChiCompDBIDRespMessage(
+                        transaction_id=0x15,
+                        data_buffer_id=0x200,
+                    ),
+                    source_id=self.HOME,
+                    target_id=self.REQUESTER,
+                )
+            ),
+        )
+        self.assertFalse(completed.state.pending_writebacks)
+        copyback = completed.emissions[0].message
+        self.assertIsInstance(copyback, ChiCopyBackWrDataMessage)
+        self.assertIs(ChiRespCode.I, copyback.response)
+        self.assertEqual(0, copyback.data)
+        self.assertEqual(0, copyback.byte_enable)
 
     def _assert_read_unique_nderr_lifecycle(
         self,

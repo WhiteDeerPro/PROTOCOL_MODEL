@@ -129,6 +129,15 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                 ),
                 ChiIssueHDatProfile(data_width=512),
             ),
+            (
+                ChiCopyBackWrDataMessage(
+                    0x235,
+                    0,
+                    response=ChiRespCode.I,
+                    byte_enable=0,
+                ),
+                ChiIssueHDatProfile(data_width=512),
+            ),
         )
 
         for message, profile in messages:

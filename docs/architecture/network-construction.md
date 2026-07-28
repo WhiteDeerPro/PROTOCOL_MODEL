@@ -309,10 +309,15 @@ clean `ReadShared` 与任一允许 `UD` 的 feature 组合仍在本 profile 之�
 `SC→ReadUnique→UC→local write→UD` 与保留本地数据的 `SC→CleanUnique→UC→local write→UD` 已实现；
 clean `ReadUnique` 的单次 Retry 也已经经 resolved XP topology 自动闭合 RetryAck、PCrdGrant、
 credited reissue 与原有 SnpUnique lifecycle；显式 `UD` writeback 已经经同类 topology 闭合。真实 snoop
-filter、router multicast、
-clean `Evict`、`MakeUnique`、自动 dirty victim/writeback scheduling、一般 same-line transient/hazard 和
+filter、router multicast、`MakeUnique`、自动 dirty victim/writeback scheduling、Evict Retry/deliberate
+dirty invalidate/WriteEvict、一般 same-line transient/hazard 和
 一般 MOESI `SD`/Owned 仍属于后续
 participant/system 能力。
+
+clean `Evict` 已作为独立 REQ/RSP-only feature 闭合：RN 从 `UC/UCE/SC` 先转 `I`，Home 只条件删除
+matching clean holder 并返回 `Comp_I`；stale 或目录明确标记为 shared-dirty responsibility 的 hint
+no-op，且不产生 SNP/DAT/CompAck 或 backing update。最小
+direct topology witness 证明这两条 flow 可由同一 resolved network runtime 自动推进。
 
 这里仍按三种投影保存权威：message/opcode/field 与 transaction-local correlation 属于 typed
 representation 和完整逻辑接口合同；cache/directory/backing/pending 属于 participant VirtualDut；
@@ -357,7 +362,7 @@ transport projection；其余 property 仍未闭合：
   request 已发出 Snoop 后的 error，
   或超出该窄 witness 的 Retry/Snoop 到达次序。通用 participant plan、
   multi-Home/SAM authority、
-  clean `Evict`、`MakeUnique`、自动 dirty victim/writeback scheduling、
+  `MakeUnique`、自动 dirty victim/writeback scheduling、Evict Retry/deliberate dirty invalidate/WriteEvict、
   一般 same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；

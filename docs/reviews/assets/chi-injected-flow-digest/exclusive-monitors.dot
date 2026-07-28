@@ -7,7 +7,7 @@ digraph chi_exclusive_monitors {
     ranksep=0.62,
     compound=true,
     fontname="Noto Sans CJK SC",
-    label="Exclusive reservation：概念作用域与成功条件（候选模型，尚未实现）",
+    label="评审快照 b4e5aba · 非实时实现状态\nExclusive reservation：概念作用域与成功条件（候选模型，尚未实现）",
     labelloc=t,
     fontsize=20
   ];

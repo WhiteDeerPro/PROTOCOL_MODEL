@@ -6,7 +6,7 @@ digraph chi_operation_families {
     nodesep=0.35,
     ranksep=0.75,
     fontname="Noto Sans CJK SC",
-    label="CHI operation families：opcode-specific effect 由可复用原语组合",
+    label="评审快照 b4e5aba · 非实时实现状态\nCHI operation families：opcode-specific effect 由可复用原语组合",
     labelloc=t,
     fontsize=20
   ];

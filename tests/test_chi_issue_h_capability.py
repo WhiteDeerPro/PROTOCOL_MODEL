@@ -3,6 +3,8 @@ from __future__ import annotations
 import unittest
 
 from protocol_model.protocols.amba.chi.issue_h.participants import (
+    CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+    CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_HOME_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
@@ -15,12 +17,16 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+    CHI_HOME_EVICT_ACCEPT,
+    CHI_HOME_EVICT_COMP_PRODUCE,
     CHI_READ_NO_SNP_HOME_CAPABILITIES,
     CHI_READ_NO_SNP_NDERR_HOME_CAPABILITIES,
     CHI_READ_NO_SNP_NDERR_REQUESTER_CAPABILITIES,
     CHI_READ_NO_SNP_REQUESTER_CAPABILITIES,
     CHI_REQUEST_RETRY_HOME_CAPABILITIES,
     CHI_REQUEST_RETRY_REQUESTER_CAPABILITIES,
+    CHI_REQUESTER_EVICT_COMP_ACCEPT,
+    CHI_REQUESTER_EVICT_ISSUE,
     ChiCapabilityKey,
     ChiDirectHomeNode,
     ChiParticipantBinding,
@@ -47,10 +53,12 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
 )
 from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_BUILTIN_FEATURE_CATALOG,
+    CHI_CLEAN_EVICT_DEFINITION,
     CHI_CLEAN_READ_UNIQUE_DEFINITION,
     CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION,
     CHI_CLEAN_READ_UNIQUE_RETRY_DEFINITION,
     CHI_FEATURE_CLEAN_READ_SHARED,
+    CHI_FEATURE_CLEAN_EVICT,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
     CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
@@ -59,6 +67,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_FEATURE_READ_NO_SNP_NDERR,
     CHI_FEATURE_REQUEST_RETRY,
     CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,
@@ -1365,6 +1374,193 @@ class ChiIssueHDirtyWriteBackCapabilityTest(unittest.TestCase):
                 "writeback_copyback_data",
             },
             set(evidence.flows),
+        )
+
+
+class ChiIssueHCleanEvictCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract():
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_CLEAN_EVICT,)),
+        )
+
+    @staticmethod
+    def participants(
+        *,
+        requester=CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+        home=CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+    ):
+        return (
+            ChiParticipantCapability("rn0", requester),
+            ChiParticipantCapability("hn0", home),
+        )
+
+    @staticmethod
+    def flows(
+        *,
+        request: bool = True,
+        completion: bool = True,
+    ):
+        flows = []
+        if request:
+            flows.append(
+                ChiFlowCapability(
+                    "evict_request_path",
+                    "rn0",
+                    "hn0",
+                    ChiChannelKind.REQ,
+                )
+            )
+        if completion:
+            flows.append(
+                ChiFlowCapability(
+                    "evict_completion_path",
+                    "hn0",
+                    "rn0",
+                    ChiChannelKind.RSP,
+                )
+            )
+        return tuple(flows)
+
+    def test_clean_evict_is_independent_and_closes_exactly_two_flows(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,)
+            ),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_CLEAN_EVICT)
+        self.assertEqual((), evidence.dependencies)
+        self.assertEqual(
+            {"requester", "home"},
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {"evict_request", "evict_completion"},
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            (ChiChannelKind.REQ, ChiChannelKind.RSP),
+            tuple(
+                flow.channel
+                for flow in CHI_CLEAN_EVICT_DEFINITION.flows
+            ),
+        )
+        self.assertEqual(
+            frozenset(),
+            CHI_CLEAN_EVICT_DEFINITION.dependencies,
+        )
+        self.assertEqual(
+            {"requester", "home"},
+            {role.role for role in CHI_CLEAN_EVICT_DEFINITION.roles},
+        )
+        self.assertEqual(
+            frozenset(
+                (
+                    CHI_REQUESTER_EVICT_ISSUE,
+                    CHI_REQUESTER_EVICT_COMP_ACCEPT,
+                )
+            ),
+            CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertEqual(
+            frozenset(
+                (
+                    CHI_HOME_EVICT_ACCEPT,
+                    CHI_HOME_EVICT_COMP_PRODUCE,
+                )
+            ),
+            CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+        )
+
+    def test_each_participant_atomic_capability_is_required(self) -> None:
+        role_cases = (
+            (
+                "rn0",
+                "requester",
+                CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+            ),
+            (
+                "hn0",
+                "home",
+                CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+            ),
+        )
+        for participant_name, role, capabilities in role_cases:
+            for missing in capabilities:
+                with self.subTest(role=role, missing=missing):
+                    arguments = {
+                        "requester": CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+                        "home": CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+                    }
+                    arguments[role] = capabilities - frozenset((missing,))
+                    resolved = resolve_chi_capabilities(
+                        self.contract(),
+                        participants=self.participants(**arguments),
+                        flows=self.flows(),
+                        system_capabilities=frozenset(
+                            (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,)
+                        ),
+                    )
+
+                    gaps = tuple(
+                        gap
+                        for gap in resolved.gaps(CHI_FEATURE_CLEAN_EVICT)
+                        if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+                        and gap.subject == participant_name
+                    )
+                    self.assertEqual(1, len(gaps))
+                    self.assertEqual((missing,), gaps[0].missing)
+
+    def test_each_protocol_path_is_required(self) -> None:
+        cases = (
+            ("evict_request", {"request": False}),
+            ("evict_completion", {"completion": False}),
+        )
+        for requirement, arguments in cases:
+            with self.subTest(requirement=requirement):
+                resolved = resolve_chi_capabilities(
+                    self.contract(),
+                    participants=self.participants(),
+                    flows=self.flows(**arguments),
+                    system_capabilities=frozenset(
+                        (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,)
+                    ),
+                )
+
+                gaps = tuple(
+                    gap
+                    for gap in resolved.gaps(CHI_FEATURE_CLEAN_EVICT)
+                    if gap.kind is ChiCapabilityGapKind.FLOW
+                )
+                self.assertEqual(1, len(gaps))
+                self.assertEqual(requirement, gaps[0].subject)
+
+    def test_clean_evict_requires_its_system_lifecycle(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_CLEAN_EVICT)
+            if gap.kind is ChiCapabilityGapKind.SYSTEM
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual(
+            (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,),
+            gaps[0].missing,
         )
 
 

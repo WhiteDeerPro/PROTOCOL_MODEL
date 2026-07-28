@@ -16,6 +16,8 @@ from typing import Mapping
 from urllib.parse import quote
 
 from ..participants.capability import (
+    CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+    CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_HOME_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
@@ -102,6 +104,9 @@ CHI_FEATURE_DIRTY_UNIQUE_TRANSFER = ChiFeatureKey(
 CHI_FEATURE_DIRTY_WRITEBACK = ChiFeatureKey(
     "chi.feature.dirty_writeback"
 )
+CHI_FEATURE_CLEAN_EVICT = ChiFeatureKey(
+    "chi.feature.clean_evict"
+)
 CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY = ChiFeatureKey(
     "chi.feature.mesi_read_not_shared_dirty"
 )
@@ -147,6 +152,9 @@ CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE = ChiCapabilityKey(
 )
 CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE = ChiCapabilityKey(
     "chi.system.dirty_writeback.lifecycle"
+)
+CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.clean_evict.lifecycle"
 )
 CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE = ChiCapabilityKey(
     "chi.system.mesi_read_not_shared_dirty.lifecycle"
@@ -810,6 +818,37 @@ CHI_DIRTY_WRITEBACK_DEFINITION = ChiFeatureDefinition(
     ),
 )
 
+CHI_CLEAN_EVICT_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_CLEAN_EVICT,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "evict_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "evict_completion",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,)
+    ),
+)
+
 CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION = ChiFeatureDefinition(
     CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
     roles=(
@@ -894,6 +933,7 @@ CHI_BUILTIN_FEATURE_CATALOG = ChiFeatureCatalog(
             CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION
         ),
         CHI_FEATURE_DIRTY_WRITEBACK: CHI_DIRTY_WRITEBACK_DEFINITION,
+        CHI_FEATURE_CLEAN_EVICT: CHI_CLEAN_EVICT_DEFINITION,
         CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY: (
             CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION
         ),
@@ -1497,6 +1537,7 @@ def resolve_chi_capabilities(
 __all__ = [
     "CHI_BASE_PATH_CAPABILITIES",
     "CHI_BUILTIN_FEATURE_CATALOG",
+    "CHI_CLEAN_EVICT_DEFINITION",
     "CHI_CLEAN_READ_SHARED_DEFINITION",
     "CHI_CLEAN_READ_UNIQUE_DEFINITION",
     "CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION",
@@ -1508,6 +1549,7 @@ __all__ = [
     "CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION",
     "CHI_FEATURE_READ_NO_SNP_NDERR",
     "CHI_FEATURE_CLEAN_READ_SHARED",
+    "CHI_FEATURE_CLEAN_EVICT",
     "CHI_FEATURE_CLEAN_READ_UNIQUE",
     "CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR",
     "CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY",
@@ -1525,6 +1567,7 @@ __all__ = [
     "CHI_READ_NO_SNP_NDERR_DEFINITION",
     "CHI_REQUEST_RETRY_DEFINITION",
     "CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE",
+    "CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE",

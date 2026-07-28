@@ -39,6 +39,7 @@ from .domain import (
 )
 from .req import (
     ChiCleanUniqueMessage,
+    ChiEvictMessage,
     ChiPCrdReturnMessage,
     ChiReadNoSnpMessage,
     ChiReadNotSharedDirtyMessage,
@@ -418,6 +419,13 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
         ChiReqOpcode.CLEAN_UNIQUE,
         7,
         ChiCleanUniqueMessage,
+        _READ_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
+        ChiReqOpcode.EVICT,
+        7,
+        ChiEvictMessage,
         _READ_FIELDS,
     ),
     _schema(

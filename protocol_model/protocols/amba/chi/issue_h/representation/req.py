@@ -2,7 +2,7 @@
 
 This module deliberately represents fields by meaning rather than packing a
 REQFLIT bit vector.  ``ReadNoSnp``, ``ReadShared``,
-``ReadNotSharedDirty``, ``ReadUnique``, ``CleanUnique``,
+``ReadNotSharedDirty``, ``ReadUnique``, ``CleanUnique``, ``Evict``,
 ``WriteBackFull``, and ``PCrdReturn`` are the currently implemented
 protocol messages;
 ``LCrdReturn`` is the REQ-channel link-maintenance flit.  Routing NodeIDs are
@@ -27,6 +27,7 @@ class ChiReqOpcode(IntEnum):
     PROTOCOL_CREDIT_RETURN = 0x05
     READ_UNIQUE = 0x07
     CLEAN_UNIQUE = 0x0B
+    EVICT = 0x0D
     WRITE_BACK_FULL = 0x1B
     READ_NOT_SHARED_DIRTY = 0x26
 
@@ -218,6 +219,23 @@ class ChiCleanUniqueMessage(_ChiCoherentRequestMessage):
 
 
 @dataclass(frozen=True)
+class ChiEvictMessage(_ChiCoherentRequestMessage):
+    """Dataless request to remove one clean resident line from coherence.
+
+    The ordinary initial form is a full-line, non-Exclusive Normal-memory
+    request with ``SnpAttr=1``, ``LikelyShared=0``, ``AllowRetry=1``,
+    ``PCrdType=0``, and ``ExpCompAck=0``.  Holder eligibility and directory
+    removal are lifecycle contracts above this representation.
+    """
+
+    expect_completion_ack: bool = False
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.EVICT
+
+
+@dataclass(frozen=True)
 class ChiWriteBackFullMessage:
     """One full-line CopyBack request from a coherent Request Node.
 
@@ -343,6 +361,7 @@ ChiReqProtocolMessage: TypeAlias = (
     | ChiReadNotSharedDirtyMessage
     | ChiReadUniqueMessage
     | ChiCleanUniqueMessage
+    | ChiEvictMessage
     | ChiWriteBackFullMessage
     | ChiPCrdReturnMessage
 )
@@ -385,6 +404,7 @@ class ChiIssueHReqProfile:
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
                 ChiCleanUniqueMessage,
+                ChiEvictMessage,
                 ChiWriteBackFullMessage,
                 ChiPCrdReturnMessage,
             ),
@@ -399,6 +419,7 @@ class ChiIssueHReqProfile:
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
                 ChiCleanUniqueMessage,
+                ChiEvictMessage,
                 ChiWriteBackFullMessage,
             ),
         ):
@@ -412,6 +433,23 @@ class ChiIssueHReqProfile:
                     reasons.append("LikelyShared must be zero for ReadNoSnp")
                 if message.snoop_attribute:
                     reasons.append("SnpAttr must be zero for ReadNoSnp")
+            elif isinstance(message, ChiEvictMessage):
+                if message.size != 6:
+                    reasons.append("Evict requires Size=6 (64 bytes)")
+                if not message.snoop_attribute:
+                    reasons.append("Evict requires SnpAttr=1")
+                if message.memory_attributes != 0b0101:
+                    reasons.append("Evict requires MemAttr 0101")
+                if message.order != 0:
+                    reasons.append("Evict requires Order=0")
+                if message.exclusive:
+                    reasons.append("Evict requires Excl=0")
+                if message.likely_shared:
+                    reasons.append("Evict requires LikelyShared=0")
+                if message.expect_completion_ack:
+                    reasons.append("Evict requires ExpCompAck=0")
+                if message.tag_operation != 0:
+                    reasons.append("Evict requires TagOp=0")
             elif isinstance(message, ChiWriteBackFullMessage):
                 if message.size != 6:
                     reasons.append(
@@ -486,6 +524,7 @@ class ChiIssueHReqProfile:
 
 __all__ = [
     "ChiCleanUniqueMessage",
+    "ChiEvictMessage",
     "ChiIssueHReqProfile",
     "ChiPCrdReturnMessage",
     "ChiReadNoSnpMessage",

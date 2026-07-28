@@ -98,6 +98,16 @@ witness 负责同址交错，单 XP witness 负责
 `RetryAck/PCrdGrant→credited reissue→CompData_I(NDERR)` 的 topology closure；DERR、同一 accepted
 request 已发出 Snoop 后的 error 与任意到达次序所需的 accepted-but-waiting queue 仍未闭合。
 
+第一条 clean eviction 切片也已闭合。RN 只从 `UC/UCE/SC` 发起，先原子失效为无 payload 的 `I` 再发送
+`Evict`；Home 将其作为 hint，只条件删除仍匹配 source 的 clean owner/sharer，stale/non-holder 或目录明确
+标记为 shared-dirty responsibility 的请求 no-op，
+随后返回 `Comp_I`。该 completion 不分配 DBID lease、不等待 `CompAck`，directory update 也不修改
+backing payload/version。packet-delivery session 保存 Home-produced completion evidence，拒绝 early/forged
+completion；pending Evict 遇同址 Snoop 返回 `SnpResp_I` 并保留 correlation。独立 feature 只声明
+Requester→Home REQ 与 Home→Requester RSP，两 packet topology witness 不产生 SNP/DAT/CompAck。
+自动 victim/LRU、普通 dirty replacement、deliberate dirty invalidate、WriteEvict family 与 Evict Retry
+没有并入该 slice。
+
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
 | 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
@@ -106,10 +116,10 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 1 · `CleanUnique` / `UCE` | `CleanUnique`、`SnpCleanInvalid`/`SnpUnique`、`SnpResp`、`Comp_UC`、`CompAck` | 既有 CleanUnique fanout/聚合、同址 reservation、full-line local write | `UCE` 空数据 unique authority；pending CU 的 post-Snoop line state | 本切片已闭合 |
 | 2 · WriteBack same-line/cancel outcome | `WriteBackFull`、invalidating Snoop、`CompDBIDResp`、post-Snoop `CopyBackWrData_I` | 既有 writeback DBID/correlation、dirty Snoop data transfer、directory/backing authority | RN `LIVE_UD/CANCELED_I`；system-derived stale-owner admission；Home snapshot/version guard 与零数据 retirement | 本切片已闭合 |
 | 3 · Retry/Snoop/error 窄组合 | `RetryAck`、`PCrdGrant`、独立 transaction 的 SNP、`CompData_I(NDERR)`；DERR 原子待来源 | 既有 Retry ledger、same-line transient、coherence pending 与 pre-Snoop NDERR modifier | 无新增；正交组合 `ChiRequestRetryPhase × ChiCacheState` | 本切片已闭合 |
-| 4 · clean `Evict` | `Evict` REQ form 尚未登记；通用 `Comp_I` 可复用 | 复用 clean directory removal、TxnID 与 completion retirement | 显式 victim/evict intent；不等于自动 replacement policy | 后续独立 opcode slice |
-| 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid` form 尚未登记，completion/ack 可复用 | 复用 `UCE`、失效 fanout、Home reservation 与 full-line write | 不再引入 payload 稳态；补 operation-specific correlation | `Evict` 后加入 |
+| 4 · clean `Evict` | `Evict`、`Comp_I`；无 DAT/CompAck/DBID lease | 复用 RN TxnID/line reservation、条件 directory removal、system return correlation 与 REQ/RSP topology | RN clean→I pending intent；Home-produced completion evidence；无新 cache 稳态 | 本切片已闭合 |
+| 5 · `MakeUnique` | `MakeUnique`、`SnpMakeInvalid` form 尚未登记，completion/ack 可复用 | 复用 `UCE`、失效 fanout、Home reservation 与 full-line write | 不再引入 payload 稳态；补 operation-specific correlation | 下一条独立 opcode slice |
 
-1. 下一条主线按表中依赖加入 clean `Evict`，随后是 `MakeUnique`；DERR 继续等待
+1. 下一条 opcode 主线按表中依赖加入 `MakeUnique`；DERR 继续等待
    ECC/Poison/DataCheck 来源，不用普通 decode/access failure 冒充；
 2. 只有验证目标需要观察 physical commit 时，才增加
    topology-visible HN→SN flow，而不是把已有 AXI/APB memory backend 暗绑为同一 state；

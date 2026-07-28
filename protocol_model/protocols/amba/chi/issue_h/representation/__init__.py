@@ -33,6 +33,7 @@ from .logical_fields import (
 from .packet import ChiNetworkPacket
 from .req import (
     ChiCleanUniqueMessage,
+    ChiEvictMessage,
     ChiIssueHReqProfile,
     ChiPCrdReturnMessage,
     ChiReadNoSnpMessage,
@@ -78,6 +79,7 @@ __all__ = [
     "ChiChannelKind",
     "ChiChannelProfile",
     "ChiCleanUniqueMessage",
+    "ChiEvictMessage",
     "ChiCompAckMessage",
     "ChiCompDBIDRespMessage",
     "ChiCompMessage",

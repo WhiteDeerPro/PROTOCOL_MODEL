@@ -9,8 +9,9 @@ The profile is intentionally narrow.  It closes clean ``ReadShared`` and
 ``ReadUnique`` lifecycles, clean- and restricted shared-dirty-peer
 ``CleanUnique`` permission upgrades, the ``UD`` owner-transfer path for
 ``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
-explicit ``UD`` ``WriteBackFull``, one successful clean ``ReadUnique``
-Request-Retry cycle, a pre-snoop ``ReadUnique`` NDERR completion, and their
+clean ``Evict``, explicit ``UD`` ``WriteBackFull``, one successful clean
+``ReadUnique`` Request-Retry cycle, a pre-snoop ``ReadUnique`` NDERR
+completion, and their
 narrow composition with an independent same-line Snoop while the Requester
 waits for P-Credit.  The ``SD`` state exists only for the CleanUnique
 memory-update slice; general shared-dirty behavior, post-snoop errors,
@@ -20,7 +21,7 @@ remain separate extensions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Mapping
 
@@ -43,6 +44,7 @@ from ..participants.coherence import (
     ChiHomeAcceptCompAck,
     ChiHomeAcceptCopyBackData,
     ChiHomeAcceptCoherentRead,
+    ChiHomeAcceptEvict,
     ChiHomeAcceptSnoopResponse,
     ChiHomeAcceptWriteBackFull,
     ChiHomeGrantPCredit,
@@ -55,6 +57,7 @@ from ..participants.coherence import (
     ChiRnAcceptSnoop,
     ChiRnIssueCleanUnique,
     ChiRnIssueCoherentRead,
+    ChiRnIssueEvict,
     ChiRnIssueWriteBackFull,
     ChiRnRetryCoherentRequest,
     ChiRnWriteBackOutcome,
@@ -69,12 +72,13 @@ from ..representation.dat import (
 from ..representation.packet import ChiNetworkPacket
 from ..representation.req import (
     ChiCleanUniqueMessage,
+    ChiEvictMessage,
     ChiReadNotSharedDirtyMessage,
     ChiReadSharedMessage,
     ChiReadUniqueMessage,
     ChiWriteBackFullMessage,
 )
-from ..representation.response import ChiRespErr
+from ..representation.response import ChiRespCode, ChiRespErr
 from ..representation.rsp import (
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
@@ -90,6 +94,7 @@ from ..representation.snp import (
     ChiSnpUniqueMessage,
 )
 from .capability import (
+    CHI_FEATURE_CLEAN_EVICT,
     CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
@@ -112,6 +117,7 @@ _CLEAN_READ_FEATURES = frozenset(
 _COHERENCE_FEATURES = frozenset(
     (
         *_CLEAN_READ_FEATURES,
+        CHI_FEATURE_CLEAN_EVICT,
         CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
         CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
         CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
@@ -173,6 +179,24 @@ class ChiSubmitCleanUnique:
             raise TypeError(
                 "CleanUnique submission requires CleanUnique"
             )
+
+
+@dataclass(frozen=True)
+class ChiSubmitEvict:
+    """Ask one Request Node to discard a clean line and notify Home."""
+
+    requester_node_id: int
+    request: ChiEvictMessage
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.requester_node_id, int)
+            or isinstance(self.requester_node_id, bool)
+            or self.requester_node_id < 0
+        ):
+            raise ValueError("CHI requester NodeID must be non-negative")
+        if not isinstance(self.request, ChiEvictMessage):
+            raise TypeError("Evict submission requires Evict")
 
 
 @dataclass(frozen=True)
@@ -258,6 +282,7 @@ class ChiRetryCoherentRequest:
 ChiCoherenceAction = (
     ChiSubmitCoherentRead
     | ChiSubmitCleanUnique
+    | ChiSubmitEvict
     | ChiSubmitWriteBackFull
     | ChiDeliverCoherencePacket
     | ChiWriteUniqueCacheLine
@@ -272,12 +297,49 @@ class ChiCoherenceState:
 
     home: ChiCoherentHomeState
     request_nodes: Mapping[int, ChiCoherentRnState]
+    expected_evict_completions: Mapping[
+        tuple[int, int],
+        ChiCompMessage,
+    ] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        request_nodes = dict(self.request_nodes)
         object.__setattr__(
             self,
             "request_nodes",
-            MappingProxyType(dict(self.request_nodes)),
+            MappingProxyType(request_nodes),
+        )
+        expected = dict(self.expected_evict_completions)
+        if any(
+            not isinstance(key, tuple)
+            or len(key) != 2
+            or any(
+                not isinstance(value, int)
+                or isinstance(value, bool)
+                or value < 0
+                for value in key
+            )
+            or key[1] >= (1 << 12)
+            or not isinstance(completion, ChiCompMessage)
+            or completion.transaction_id != key[1]
+            or completion.response is not ChiRespCode.I
+            or completion.response_error is not ChiRespErr.OK
+            or completion.tag_operation != 0
+            or key[0] not in request_nodes
+            or not isinstance(
+                request_nodes[key[0]].pending_transactions.get(key[1]),
+                ChiEvictMessage,
+            )
+            for key, completion in expected.items()
+        ):
+            raise ValueError(
+                "expected Evict completions require "
+                "(requester, TxnID)->Comp_I correlation"
+            )
+        object.__setattr__(
+            self,
+            "expected_evict_completions",
+            MappingProxyType(expected),
         )
 
 
@@ -830,6 +892,7 @@ class ChiCoherenceSession(
                 self.request_nodes[node_id].is_quiescent(item)
                 for node_id, item in state.request_nodes.items()
             )
+            and not state.expected_evict_completions
         )
 
     def step(
@@ -848,6 +911,8 @@ class ChiCoherenceSession(
             return self._issue(state, action)
         if isinstance(action, ChiSubmitCleanUnique):
             return self._issue_clean_unique(state, action)
+        if isinstance(action, ChiSubmitEvict):
+            return self._issue_evict(state, action)
         if isinstance(action, ChiSubmitWriteBackFull):
             return self._issue_writeback(state, action)
         if isinstance(action, ChiDeliverCoherencePacket):
@@ -878,8 +943,13 @@ class ChiCoherenceSession(
             in self.enabled_features
         )
         allows_empty_unique = (
-            CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
-            in self.enabled_features
+            bool(
+                {
+                    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+                    CHI_FEATURE_CLEAN_EVICT,
+                }
+                & self.enabled_features
+            )
         )
         for node_id, node_state in state.request_nodes.items():
             for address, line in node_state.lines.items():
@@ -946,6 +1016,7 @@ class ChiCoherenceSession(
         candidate = ChiCoherenceState(
             transition.state,
             state.request_nodes,
+            state.expected_evict_completions,
         )
         return self._finish(candidate, transition)
 
@@ -1194,6 +1265,47 @@ class ChiCoherenceSession(
             transition,
         )
 
+    def _issue_evict(
+        self,
+        state: ChiCoherenceState,
+        action: ChiSubmitEvict,
+    ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
+        authority_fault = self._address_authority_fault(
+            action.request.address,
+            1 << action.request.size,
+        )
+        if authority_fault is not None:
+            return SemanticStep(state, fault=authority_fault)
+        node = self.request_nodes.get(action.requester_node_id)
+        if node is None:
+            return self._fault(
+                state,
+                "requester_identity",
+                f"NodeID {action.requester_node_id} is not a registered RN",
+            )
+        if action.requester_node_id not in self.requester_node_ids:
+            return self._fault(
+                state,
+                "requester_authority",
+                f"NodeID {action.requester_node_id} is registered only as "
+                "a Snoopee in this construction",
+            )
+        if CHI_FEATURE_CLEAN_EVICT not in self.enabled_features:
+            return self._fault(
+                state,
+                "feature_enablement",
+                "clean Evict is not enabled by the resolved feature contract",
+            )
+        transition = node.step(
+            state.request_nodes[action.requester_node_id],
+            ChiRnIssueEvict(action.request),
+        )
+        return self._replace_request_node(
+            state,
+            action.requester_node_id,
+            transition,
+        )
+
     def _issue(
         self,
         state: ChiCoherenceState,
@@ -1260,7 +1372,50 @@ class ChiCoherenceSession(
             if authority_fault is not None:
                 return SemanticStep(state, fault=authority_fault)
         if packet.target_id == self.home.node_id:
-            if isinstance(message, ChiCleanUniqueMessage):
+            if isinstance(message, ChiEvictMessage):
+                if packet.source_id not in self.requester_node_ids:
+                    return self._fault(
+                        state,
+                        "requester_authority",
+                        f"NodeID {packet.source_id} is not the requester "
+                        "of this construction",
+                    )
+                if CHI_FEATURE_CLEAN_EVICT not in self.enabled_features:
+                    return self._fault(
+                        state,
+                        "feature_enablement",
+                        "clean Evict is not enabled by the resolved feature "
+                        "contract",
+                    )
+                requester_state = state.request_nodes[packet.source_id]
+                pending_request = requester_state.pending_transactions.get(
+                    message.transaction_id
+                )
+                line = requester_state.line_at(message.address)
+                if (
+                    pending_request != message
+                    or line is None
+                    or line.state is not ChiCacheState.I
+                    or line.data is not None
+                ):
+                    return self._fault(
+                        state,
+                        "evict_admission_evidence",
+                        "Evict lacks the issuing RN's matching pending "
+                        "clean-to-I transition",
+                    )
+                completion_key = (
+                    packet.source_id,
+                    message.transaction_id,
+                )
+                if completion_key in state.expected_evict_completions:
+                    return self._fault(
+                        state,
+                        "duplicate_evict_request",
+                        "this Evict request already produced its completion",
+                    )
+                action = ChiHomeAcceptEvict(packet)
+            elif isinstance(message, ChiCleanUniqueMessage):
                 if packet.source_id not in self.requester_node_ids:
                     return self._fault(
                         state,
@@ -1435,9 +1590,35 @@ class ChiCoherenceSession(
                     f"Home cannot consume {type(message).__name__}",
                 )
             transition = self.home.step(state.home, action)
+            expected_evict_completions = (
+                state.expected_evict_completions
+            )
+            if (
+                isinstance(message, ChiEvictMessage)
+                and transition.fault is None
+                and transition.blocked is None
+            ):
+                if (
+                    len(transition.emissions) != 1
+                    or not isinstance(
+                        transition.emissions[0].message,
+                        ChiCompMessage,
+                    )
+                ):
+                    return self._fault(
+                        state,
+                        "evict_completion_shape",
+                        "Home Evict acceptance must emit exactly one Comp",
+                    )
+                expected = dict(state.expected_evict_completions)
+                expected[
+                    (packet.source_id, message.transaction_id)
+                ] = transition.emissions[0].message
+                expected_evict_completions = expected
             candidate = ChiCoherenceState(
                 transition.state,
                 state.request_nodes,
+                expected_evict_completions,
             )
             return self._finish(candidate, transition)
 
@@ -1543,6 +1724,56 @@ class ChiCoherenceSession(
                     "requester_authority",
                     f"NodeID {packet.target_id} cannot receive Comp "
                     "in this construction",
+                )
+            pending_request = state.request_nodes[
+                packet.target_id
+            ].pending_transactions.get(message.transaction_id)
+            if isinstance(pending_request, ChiEvictMessage):
+                if CHI_FEATURE_CLEAN_EVICT not in self.enabled_features:
+                    return self._fault(
+                        state,
+                        "feature_enablement",
+                        "Comp_I is not enabled by the clean Evict feature",
+                    )
+                expected = state.expected_evict_completions.get(
+                    (packet.target_id, message.transaction_id)
+                )
+                if (
+                    packet.source_id != self.home.node_id
+                    or expected != message
+                ):
+                    return self._fault(
+                        state,
+                        "evict_completion_correlation",
+                        "Comp_I does not match a Home-produced Evict "
+                        "completion",
+                    )
+                action = ChiRnAcceptComp(packet)
+                transition = node.step(
+                    state.request_nodes[packet.target_id],
+                    action,
+                )
+                states = dict(state.request_nodes)
+                states[packet.target_id] = transition.state
+                completions = dict(state.expected_evict_completions)
+                if (
+                    transition.fault is None
+                    and transition.blocked is None
+                ):
+                    del completions[
+                        (packet.target_id, message.transaction_id)
+                    ]
+                candidate = ChiCoherenceState(
+                    state.home,
+                    states,
+                    completions,
+                )
+                return self._finish(candidate, transition)
+            if not isinstance(pending_request, ChiCleanUniqueMessage):
+                return self._fault(
+                    state,
+                    "dataless_completion_correlation",
+                    "Comp does not match an outstanding dataless request",
                 )
             if (
                 CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
@@ -1676,7 +1907,11 @@ class ChiCoherenceSession(
     ) -> SemanticStep[ChiCoherenceState, ChiNetworkPacket]:
         states = dict(state.request_nodes)
         states[node_id] = transition.state
-        candidate = ChiCoherenceState(state.home, states)
+        candidate = ChiCoherenceState(
+            state.home,
+            states,
+            state.expected_evict_completions,
+        )
         return self._finish(candidate, transition)
 
     def _finish(
@@ -1736,6 +1971,7 @@ __all__ = [
     "ChiRetryCoherentRequest",
     "ChiSubmitCleanUnique",
     "ChiSubmitCoherentRead",
+    "ChiSubmitEvict",
     "ChiSubmitWriteBackFull",
     "ChiWriteUniqueCacheLine",
 ]

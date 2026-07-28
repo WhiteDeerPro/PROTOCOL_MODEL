@@ -119,7 +119,9 @@ correlation，等该 transaction 退休后再以 P-Credit 重发，并由上述 
 当前 Home 固定选择“吸收 PassDirty、返回 `CompData_SC`、在 `CompAck` 后提交 backing/directory”这一种
 规范允许的 no-SD 结果；它没有覆盖所有可选 Home policy。`SC` holder 已可通过
 `CleanUnique→UC→local write→UD` 保留本地数据完成权限升级，也可通过
-`ReadUnique→UC→local write→UD` 走需要返回数据的路径。当前仍未实现 clean `Evict`、`MakeUnique`、
+`ReadUnique→UC→local write→UD` 走需要返回数据的路径。clean `Evict` 已闭合
+`UC/UCE/SC→I→Evict→Comp_I` 的 REQ/RSP-only lifecycle、条件 directory removal 和最小 topology
+witness。当前仍未实现 `MakeUnique`、
 packed bit/raw pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty
 victim/writeback scheduling、coherent DERR/同一 accepted request 已发出 Snoop 后的 error、
 coherent Retry cancel/multi-waiter
@@ -128,7 +130,7 @@ facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，�
 `SystemSession` action loop；有界 scheduler budget 耗尽给出 inconclusive，不作为 network deadlock
 证明。
 
-后续扩展继续以可执行 lifecycle 为单位增加。紧邻的增量先是 clean `Evict`，随后是 `MakeUnique`；
+后续扩展继续以可执行 lifecycle 为单位增加。紧邻的 opcode 增量是 `MakeUnique`；
 自动 dirty victim/writeback scheduling、一般 same-line transient/hazard，以及同一 Home/type 下多个
 waiter 的具名选择与公平性合同再按依赖推进。
 `PCrdGrant`、`RetryAck` 仍走 Home→Requester 的 RSP 路径；`PCrdReturn` 根据 CHI Issue H B2.5.6 走

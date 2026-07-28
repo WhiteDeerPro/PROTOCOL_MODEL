@@ -7,8 +7,11 @@ backing core and separately owns directory and transaction state.  ``SD`` is
 present only as the minimum shared-dirty authority needed by dirty-peer
 CleanUnique, while ``UCE`` records data-less Unique permission after an
 invalid/absent-line CleanUnique completion.  This is not a general MOESI
-profile.  Neither participant decides how a packet crosses a topology; output
-is another explicit ``ChiNetworkPacket`` that a transport runtime can enqueue.
+profile.  Clean Evict is a separate hint lifecycle that moves a clean RN line
+to ``I`` before REQ, conditionally removes the matching directory holder, and
+returns ``Comp_I`` without data or CompAck.  Neither participant decides how a
+packet crosses a topology; output is another explicit ``ChiNetworkPacket`` that
+a transport runtime can enqueue.
 """
 
 from __future__ import annotations
@@ -52,6 +55,7 @@ from ..representation.dat import (
 from ..representation.packet import ChiNetworkPacket
 from ..representation.req import (
     ChiCleanUniqueMessage,
+    ChiEvictMessage,
     ChiReadNotSharedDirtyMessage,
     ChiReadSharedMessage,
     ChiReadUniqueMessage,
@@ -174,6 +178,7 @@ ChiCoherentReadMessage = (
 ChiCoherenceRequestMessage = (
     ChiCoherentReadMessage
     | ChiCleanUniqueMessage
+    | ChiEvictMessage
 )
 ChiCoherentSnoopMessage = (
     ChiSnpCleanInvalidMessage
@@ -211,6 +216,17 @@ class ChiRnIssueCleanUnique:
     def __post_init__(self) -> None:
         if not isinstance(self.request, ChiCleanUniqueMessage):
             raise TypeError("RN CleanUnique issue requires CleanUnique")
+
+
+@dataclass(frozen=True)
+class ChiRnIssueEvict:
+    """Discard one clean local copy and notify its configured Home."""
+
+    request: ChiEvictMessage
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.request, ChiEvictMessage):
+            raise TypeError("RN Evict issue requires Evict")
 
 
 @dataclass(frozen=True)
@@ -349,6 +365,7 @@ class ChiRnAcceptCompDBIDResp:
 ChiCoherentRnAction = (
     ChiRnIssueCoherentRead
     | ChiRnIssueCleanUnique
+    | ChiRnIssueEvict
     | ChiRnAcceptSnoop
     | ChiRnAcceptComp
     | ChiRnAcceptCompData
@@ -418,6 +435,7 @@ class ChiCoherentRnState:
                 item,
                 (
                     ChiCleanUniqueMessage,
+                    ChiEvictMessage,
                     ChiReadSharedMessage,
                     ChiReadNotSharedDirtyMessage,
                     ChiReadUniqueMessage,
@@ -492,6 +510,15 @@ class ChiCoherentRnState:
         ):
             raise ValueError(
                 "RN pending CleanUnique requires an I or SC line state"
+            )
+        if any(
+            request.address in resident
+            or permissions.get(request.address) is not ChiCacheState.I
+            for request in pending.values()
+            if isinstance(request, ChiEvictMessage)
+        ):
+            raise ValueError(
+                "RN pending Evict requires I without resident payload"
             )
         if not isinstance(
             self.request_retry,
@@ -667,6 +694,8 @@ class ChiCoherentRnNode(
             return self._issue(state, action.request)
         if isinstance(action, ChiRnIssueCleanUnique):
             return self._issue_clean_unique(state, action.request)
+        if isinstance(action, ChiRnIssueEvict):
+            return self._issue_evict(state, action.request)
         if isinstance(action, ChiRnAcceptSnoop):
             return self._accept_snoop(state, action.packet)
         if isinstance(action, ChiRnAcceptComp):
@@ -985,6 +1014,126 @@ class ChiCoherentRnNode(
             ),
         )
 
+    def _issue_evict(
+        self,
+        state: ChiCoherentRnState,
+        request: ChiEvictMessage,
+    ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
+        """Silently move a clean line to I before emitting its Evict hint."""
+
+        if request.size != 6 or request.address % _CACHE_LINE_BYTES:
+            return self._fault(
+                state,
+                "evict_shape",
+                "Evict requires one aligned 64-byte cache line",
+            )
+        if (
+            not request.allow_retry
+            or request.protocol_credit_type != 0
+            or request.expect_completion_ack
+            or request.memory_attributes != 0b0101
+        ):
+            return self._fault(
+                state,
+                "evict_attributes",
+                "initial Evict requires MemAttr=0101, AllowRetry=1, "
+                "PCrdType=0, and ExpCompAck=0",
+            )
+        unsupported = tuple(
+            name
+            for name, enabled in (
+                ("likely shared", request.likely_shared),
+                ("non-snoopable", not request.snoop_attribute),
+                ("exclusive", request.exclusive),
+                ("ordered", request.order != 0),
+                ("reserved PAS", request.pas >= 6),
+                ("tag operation", request.tag_operation != 0),
+                ("trace tag", request.trace_tag),
+            )
+            if enabled
+        )
+        if unsupported:
+            return self._fault(
+                state,
+                "evict_attributes",
+                "clean Evict profile does not implement "
+                + ", ".join(unsupported),
+            )
+        if (
+            request.transaction_id in state.pending_transactions
+            or request.transaction_id in state.pending_writebacks
+        ):
+            return self._fault(
+                state,
+                "duplicate_transaction",
+                "RN already owns this coherence TxnID",
+            )
+        if state.pending_for_address(request.address):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    chi_line_resource_name(self.name, request.address),
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    capacity=1,
+                    reason=(
+                        "another RN-local coherent transaction reserves "
+                        "this cache line"
+                    ),
+                    location=self.name,
+                ),
+            )
+        if (
+            len(state.pending_transactions) + len(state.pending_writebacks)
+            >= self.outstanding_capacity
+        ):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    f"{self.name}.coherence_transaction_slot",
+                    ConstraintScope.VIRTUAL_DUT,
+                    available=0,
+                    capacity=self.outstanding_capacity,
+                    reason="RN coherence transaction table is full",
+                    location=self.name,
+                ),
+            )
+        line = state.line_at(request.address)
+        if line is None or line.state not in (
+            ChiCacheState.SC,
+            ChiCacheState.UC,
+            ChiCacheState.UCE,
+        ):
+            return self._fault(
+                state,
+                "evict_permission",
+                "clean Evict requires a local SC, UC, or UCE line",
+            )
+        cache = state.cache
+        if line.state is not ChiCacheState.UCE:
+            cache = self.cache_store.remove(cache, request.address).state
+        permissions = dict(state.permissions)
+        permissions[request.address] = ChiCacheState.I
+        pending = dict(state.pending_transactions)
+        pending[request.transaction_id] = request
+        candidate = ChiCoherentRnState(
+            cache,
+            permissions,
+            pending,
+            state.pending_writebacks,
+            state.request_retry,
+        )
+        return SemanticStep(
+            candidate,
+            (
+                ChiNetworkPacket.request(
+                    request,
+                    source_id=self.node_id,
+                    target_id=self.home_node_id,
+                ),
+            ),
+        )
+
     def _accept_retry_ack(
         self,
         state: ChiCoherentRnState,
@@ -1165,6 +1314,13 @@ class ChiCoherentRnNode(
                 for request in same_line
             )
         )
+        evict_overlap = (
+            bool(same_line)
+            and all(
+                isinstance(request, ChiEvictMessage)
+                for request in same_line
+            )
+        )
         writeback_overlap = (
             isinstance(
                 snoop,
@@ -1179,6 +1335,7 @@ class ChiCoherentRnNode(
         if same_line and not (
             read_unique_overlap
             or clean_unique_overlap
+            or evict_overlap
             or writeback_overlap
         ):
             return SemanticStep(
@@ -1191,9 +1348,10 @@ class ChiCoherentRnNode(
                     reason=(
                         "the staged transient policy defers the Snoop because "
                         "an RN-local transaction reserves this cache line; "
-                        "only ReadUnique/SnpUnique and CleanUnique/"
+                        "only ReadUnique/SnpUnique, CleanUnique/"
                         "invalidating-Snoop and WriteBackFull/"
-                        "invalidating-Snoop same-line transients are implemented"
+                        "invalidating-Snoop, plus Evict/I response "
+                        "same-line transients are implemented"
                     ),
                     location=self.name,
                 ),
@@ -1369,7 +1527,7 @@ class ChiCoherentRnNode(
         state: ChiCoherentRnState,
         packet: ChiNetworkPacket,
     ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
-        """Install ``UC``/``UCE`` and acknowledge the Home-owned DBID."""
+        """Complete one outstanding dataless request."""
 
         if packet.target_id != self.node_id:
             return self._fault(
@@ -1386,11 +1544,48 @@ class ChiCoherentRnNode(
         response = packet.message
         assert isinstance(response, ChiCompMessage)
         request = state.pending_transactions.get(response.transaction_id)
-        if not isinstance(request, ChiCleanUniqueMessage):
+        if not isinstance(
+            request,
+            (ChiCleanUniqueMessage, ChiEvictMessage),
+        ):
             return self._fault(
                 state,
                 "clean_unique_completion_identity",
-                "Comp does not match an outstanding CleanUnique TxnID",
+                "Comp does not match an outstanding dataless TxnID",
+            )
+        if isinstance(request, ChiEvictMessage):
+            if (
+                response.response_error != 0
+                or response.response is not ChiRespCode.I
+                or response.tag_operation != 0
+            ):
+                return self._fault(
+                    state,
+                    "evict_completion_state",
+                    "the clean Evict completion must be Comp_I without "
+                    "error or tag operation",
+                )
+            line = state.line_at(request.address)
+            if (
+                line is None
+                or line.state is not ChiCacheState.I
+                or line.data is not None
+            ):
+                return self._fault(
+                    state,
+                    "evict_reserved_line",
+                    "the reserved Evict line must remain I without payload",
+                )
+            pending = dict(state.pending_transactions)
+            del pending[request.transaction_id]
+            return SemanticStep(
+                ChiCoherentRnState(
+                    state.cache,
+                    state.permissions,
+                    pending,
+                    state.pending_writebacks,
+                    state.request_retry,
+                )
             )
         if (
             response.response_error != 0
@@ -1451,7 +1646,10 @@ class ChiCoherentRnNode(
         response = packet.message
         assert isinstance(response, ChiCompDataMessage)
         request = state.pending_transactions.get(response.transaction_id)
-        if request is None or isinstance(request, ChiCleanUniqueMessage):
+        if request is None or isinstance(
+            request,
+            (ChiCleanUniqueMessage, ChiEvictMessage),
+        ):
             return self._fault(
                 state,
                 "completion_identity",
@@ -2119,6 +2317,19 @@ class ChiHomeAcceptCleanUnique:
 
 
 @dataclass(frozen=True)
+class ChiHomeAcceptEvict:
+    """Consume one clean Evict hint and return ``Comp_I``."""
+
+    packet: ChiNetworkPacket
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
+            self.packet.message, ChiEvictMessage
+        ):
+            raise TypeError("Home Evict action requires an Evict packet")
+
+
+@dataclass(frozen=True)
 class ChiHomeAcceptSnoopResponse:
     packet: ChiNetworkPacket
 
@@ -2185,6 +2396,7 @@ class ChiHomeGrantPCredit:
 ChiCoherentHomeAction = (
     ChiHomeAcceptCoherentRead
     | ChiHomeAcceptCleanUnique
+    | ChiHomeAcceptEvict
     | ChiHomeAcceptSnoopResponse
     | ChiHomeAcceptCompAck
     | ChiHomeAcceptWriteBackFull
@@ -2482,6 +2694,8 @@ class ChiCoherentHomeNode(
             return self._accept_coherence_request(state, action.packet)
         if isinstance(action, ChiHomeAcceptCleanUnique):
             return self._accept_coherence_request(state, action.packet)
+        if isinstance(action, ChiHomeAcceptEvict):
+            return self._accept_evict(state, action.packet)
         if isinstance(action, ChiHomeAcceptSnoopResponse):
             return self._accept_snoop_response(state, action.packet)
         if isinstance(action, ChiHomeAcceptCompAck):
@@ -2497,6 +2711,114 @@ class ChiCoherentHomeNode(
         if isinstance(action, ChiHomeGrantPCredit):
             return self._grant_pcredit(state)
         raise TypeError("unknown coherent Home action")
+
+    def _accept_evict(
+        self,
+        state: ChiCoherentHomeState,
+        packet: ChiNetworkPacket,
+    ) -> SemanticStep[ChiCoherentHomeState, ChiNetworkPacket]:
+        """Conditionally consume an Evict hint without reserving Home state."""
+
+        request = packet.message
+        assert isinstance(request, ChiEvictMessage)
+        if packet.target_id != self.node_id:
+            return self._fault(
+                state,
+                "evict_target",
+                "Evict packet targets another Home",
+            )
+        if (
+            request.size != 6
+            or request.address % _CACHE_LINE_BYTES
+            or not request.allow_retry
+            or request.protocol_credit_type != 0
+            or request.expect_completion_ack
+            or request.memory_attributes != 0b0101
+            or not request.snoop_attribute
+            or request.likely_shared
+            or request.exclusive
+            or request.order != 0
+            or request.pas >= 6
+            or request.tag_operation != 0
+            or request.trace_tag
+        ):
+            return self._fault(
+                state,
+                "evict_profile",
+                "initial Evict requires the clean full-line dataless profile",
+            )
+        entry = state.directory.get(request.address)
+        if (
+            entry is None
+            and state.backing.line_at(request.address) is None
+        ):
+            return self._fault(
+                state,
+                "address_home",
+                "Home backing does not own this Evict address",
+            )
+        if any(
+            item.request.address == request.address
+            for item in state.pending.values()
+        ) or any(
+            item.request.address == request.address
+            for item in state.pending_writebacks.values()
+        ):
+            return SemanticStep(
+                state,
+                blocked=ResourceDemand(
+                    chi_line_resource_name(self.name, request.address),
+                    ConstraintScope.SYSTEM,
+                    available=0,
+                    capacity=1,
+                    reason="same-line coherent transaction is in progress",
+                    location=self.name,
+                ),
+            )
+
+        directory = state.directory
+        if (
+            entry is not None
+            and entry.shared_dirty_owner != packet.source_id
+            and (
+                entry.unique_owner == packet.source_id
+                or packet.source_id in entry.sharers
+            )
+        ):
+            sharers = set(entry.sharers)
+            sharers.discard(packet.source_id)
+            updated = ChiHomeDirectoryEntry(
+                entry.address,
+                sharers=frozenset(sharers),
+                unique_owner=(
+                    None
+                    if entry.unique_owner == packet.source_id
+                    else entry.unique_owner
+                ),
+                shared_dirty_owner=entry.shared_dirty_owner,
+            )
+            mutable = dict(state.directory)
+            mutable[entry.address] = updated
+            directory = mutable
+        candidate = ChiCoherentHomeState(
+            directory=directory,
+            backing=state.backing,
+            pending=state.pending,
+            next_snoop_transaction_id=state.next_snoop_transaction_id,
+            next_data_buffer_id=state.next_data_buffer_id,
+            pending_writebacks=state.pending_writebacks,
+            request_retry=state.request_retry,
+        )
+        completion = ChiNetworkPacket.response(
+            ChiCompMessage(
+                transaction_id=request.transaction_id,
+                data_buffer_id=0,
+                response=ChiRespCode.I,
+            ),
+            source_id=self.node_id,
+            target_id=packet.source_id,
+        )
+        return SemanticStep(candidate, (completion,))
 
     def _accept_coherence_request(
         self,
@@ -3680,6 +4002,7 @@ __all__ = [
     "ChiHomeAcceptCleanUnique",
     "ChiHomeAcceptCopyBackData",
     "ChiHomeAcceptCoherentRead",
+    "ChiHomeAcceptEvict",
     "ChiHomeAcceptSnoopResponse",
     "ChiHomeAcceptWriteBackFull",
     "ChiHomeGrantPCredit",
@@ -3692,6 +4015,7 @@ __all__ = [
     "ChiRnAcceptSnoop",
     "ChiRnIssueCleanUnique",
     "ChiRnIssueCoherentRead",
+    "ChiRnIssueEvict",
     "ChiRnIssueWriteBackFull",
     "ChiRnRetryCoherentRequest",
     "ChiRnWriteBackOutcome",

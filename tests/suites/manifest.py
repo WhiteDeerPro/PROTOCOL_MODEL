@@ -26,6 +26,8 @@ CHI_MODULES = (
     "tests.test_chi_issue_h_address_home",
     "tests.test_chi_issue_h_cache_vdut",
     "tests.test_chi_issue_h_capability",
+    "tests.test_chi_issue_h_clean_evict",
+    "tests.test_chi_issue_h_clean_evict_network",
     "tests.test_chi_issue_h_clean_unique_participants",
     "tests.test_chi_issue_h_clean_unique_system",
     "tests.test_chi_issue_h_coherence_authority",
@@ -157,6 +159,8 @@ SMOKE_MODULES = (
 INTEGRATION_MODULES = (
     "tests.test_amba_bridge_chain",
     "tests.test_chi_issue_h_capability",
+    "tests.test_chi_issue_h_clean_evict",
+    "tests.test_chi_issue_h_clean_evict_network",
     "tests.test_chi_issue_h_clean_unique_system",
     "tests.test_chi_issue_h_coherence_authority",
     "tests.test_chi_issue_h_coherence_network",

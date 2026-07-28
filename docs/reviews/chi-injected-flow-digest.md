@@ -29,6 +29,10 @@
   `sh assets/chi-injected-flow-digest/render.sh` 可重建 SVG。当前阅读件使用 Graphviz 2.43.0 和
   `Noto Sans CJK SC` 生成；图的语义由 DOT 决定，跨 Graphviz/字体版本不承诺 SVG 字节完全相同。
 
+这些图是 `b4e5aba` 评审快照，不随每个 opcode slice 滚动改写；实现汇总应从已验证的 canonical
+status/model 另生成 architecture/showcase 资产。只有发现提炼错误、重新审计一批有 provenance 的输入，
+或评审解释结构本身改变时，才同时修改 DOT 并用上述脚本重建 SVG。
+
 完成逐项覆盖、视觉和重建检查后，未受 Git 跟踪的原始 `figs/` 已删除；仓库长期保留的是本文、DOT 源和
 SVG 阅读件，而不是第三方像素副本。
 
@@ -95,18 +99,23 @@ eligibility/final-state、Home holder removal、feature/flow closure 以及负�
   不宣称已有 topology-visible HN→SN physical write。
 - 输入 #30 的无数据 permission upgrade 与标注的 `I→UD` 不自洽；只保留
   `MakeUnique/SnpMakeInvalid/Comp/CompAck` 作为待核对线索。
-- 输入 #38 清楚表达“clean copy 退出、Home 删除 holder、无 DAT”，但首个 Evict profile 的合法初态、
-  字段和 response 仍须查 Issue H。
+- 输入 #38 清楚表达“clean copy 退出、可选 directory/filter update、无 DAT”，但没有完整表达
+  `UC/UCE/SC→I-before-REQ`、固定字段、Retry rule、`ExpCompAck=0`、DBID 无 lease、stale hint、
+  same-line Snoop 与 error 边界；这些合同必须独立核对 Issue H。
 - 输入 #46 使用的 WriteBack completion 形态与当前 Issue H slice 不同；不用于 normative claim。
 - 输入 #54–55 和第二份 #65 只有箭头图且存在解释歧义；这里只抽取 invariant，不固化具体序列。
 - 这批材料没有 Retry/Snoop/error 组合、DERR 来源或 `UCE`，不能为这些能力增加实现 claim。
 
-## 对后续切片的实际输入
+## 后续规范裁决（不更新本评审实现快照）
 
 1. 在本评审基线中，roadmap 的 Retry/Snoop/error 窄组合仍必须直接核对 Issue H；本批材料只补充
    wait-for 与 phase 表达方法，没有提供该组合的协议证据。该切片后续是否闭合仍查实时实现状态。
-2. clean `Evict` 可以采用最小候选边界：clean resident line 发 REQ、RN 进入 `I`、Home 原子删除匹配 holder、
-   返回普通 completion、无 DAT/backing write；dirty line、non-holder、重复/迟到 completion 必须是负例。
+2. clean `Evict` 的核准边界是：RN 从 `UC/UCE/SC` 先转 `I` 再发 REQ；Home 可条件删除匹配 clean holder，
+   也必须容忍 stale/non-holder 或仍标记 shared-dirty responsibility 的 hint，并 no-op 返回 `Comp_I`；
+   无 DAT、CompAck、DBID lease 或 backing
+   write。本次核准的 clean profile 对 RN 从 `I/UD/SD` 主动发起是负例，但 Issue H 另有 deliberate dirty
+   invalidate 后用 Evict 通知的旁支，所以该旁支是非目标，不是“协议永远禁止 dirty→Evict”。迟到或
+   TxnID 不匹配的 completion 仍是 RN correlation 负例。
 3. `WriteEvictFull`、`WriteEvictOrEvict`、自动 victim policy 与 replacement scheduler 是相邻机会，不与第一版
    clean `Evict` 混成一个工作包。
 4. same-line、OWO 与 deadlock 继续采用“phase + authority/payload + held/wait/release”三类事实，避免把一张

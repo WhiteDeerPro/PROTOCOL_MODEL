@@ -7,7 +7,7 @@ digraph chi_concurrency_progress {
     ranksep=0.52,
     compound=true,
     fontname="Noto Sans CJK SC",
-    label="CHI same-line lifecycle、ordering point 与 progress 输入",
+    label="评审快照 b4e5aba · 非实时实现状态\nCHI same-line lifecycle、ordering point 与 progress 输入",
     labelloc=t,
     fontsize=20
   ];

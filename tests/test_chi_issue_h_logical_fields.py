@@ -9,6 +9,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiCompDBIDRespMessage,
     ChiCompDataMessage,
     ChiCopyBackWrDataMessage,
+    ChiEvictMessage,
     ChiIssueHDatProfile,
     ChiIssueHReqProfile,
     ChiLogicalCodecError,
@@ -55,6 +56,7 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
             (ChiReadNotSharedDirtyMessage(3, 0xA000), None),
             (ChiReadUniqueMessage(4, 0xC000), None),
             (ChiCleanUniqueMessage(5, 0xD000), None),
+            (ChiEvictMessage(6, 0xD040), None),
             (
                 ChiWriteBackFullMessage(
                     0x12,
@@ -82,6 +84,14 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
                     qos=2,
                     completer_busy=3,
                     trace_tag=True,
+                ),
+                None,
+            ),
+            (
+                ChiCompMessage(
+                    0x16,
+                    0xABC,
+                    response=ChiRespCode.I,
                 ),
                 None,
             ),
@@ -249,6 +259,147 @@ class ChiIssueHLogicalFieldCodecTest(unittest.TestCase):
         self.assertEqual(0x235, completion.data_buffer_id)
         self.assertTrue(snoop.do_not_go_to_shared_dirty)
         self.assertFalse(snoop.return_to_source)
+
+    def test_evict_and_comp_i_have_spec_forms(self) -> None:
+        request = ChiEvictMessage(0x16, 0xD040)
+        completion = ChiCompMessage(
+            0x16,
+            0xABC,
+            response=ChiRespCode.I,
+        )
+
+        self.assertEqual(0x0D, int(ChiReqOpcode.EVICT))
+        self.assertIs(ChiReqOpcode.EVICT, request.opcode)
+        self.assertEqual(6, request.size)
+        self.assertFalse(request.exclusive)
+        self.assertTrue(request.snoop_attribute)
+        self.assertEqual(0b0101, request.memory_attributes)
+        self.assertEqual(0, request.order)
+        self.assertFalse(request.likely_shared)
+        self.assertFalse(request.expect_completion_ack)
+        self.assertTrue(request.allow_retry)
+        self.assertEqual(0, request.protocol_credit_type)
+        self.assertTrue(ChiIssueHReqProfile().contains(request))
+
+        request_record = self.codec.encode(request)
+        self.assertEqual(
+            (
+                "Opcode",
+                "TxnID",
+                "Addr",
+                "Size",
+                "QoS",
+                "PAS",
+                "LikelyShared",
+                "AllowRetry",
+                "Order",
+                "PCrdType",
+                "MemAttr",
+                "SnpAttr",
+                "Excl",
+                "ExpCompAck",
+                "TagOp",
+                "TraceTag",
+            ),
+            tuple(request_record.fields),
+        )
+        self.assertEqual(request, self.codec.decode(request_record))
+
+        self.assertIs(ChiRespCode.I, completion.response)
+        self.assertEqual(0x16, completion.semantic_key)
+        self.assertEqual(0xABC, completion.data_buffer_id)
+        completion_record = self.codec.encode(completion)
+        self.assertEqual(0xABC, completion_record.fields["DBID"])
+        self.assertEqual(ChiRespCode.I, completion_record.fields["Resp"])
+        self.assertEqual(
+            completion,
+            self.codec.decode(completion_record),
+        )
+
+    def test_evict_profile_checks_shape_but_allows_retry_form(self) -> None:
+        invalid_cases = (
+            (ChiEvictMessage(1, 0x8000, size=5), "Size=6"),
+            (
+                ChiEvictMessage(
+                    1,
+                    0x8000,
+                    snoop_attribute=False,
+                ),
+                "SnpAttr=1",
+            ),
+            (
+                ChiEvictMessage(
+                    1,
+                    0x8000,
+                    memory_attributes=0,
+                ),
+                "MemAttr 0101",
+            ),
+            (
+                ChiEvictMessage(
+                    1,
+                    0x8000,
+                    memory_attributes=0b1101,
+                ),
+                "MemAttr 0101",
+            ),
+            (ChiEvictMessage(1, 0x8000, order=1), "Order=0"),
+            (
+                ChiEvictMessage(1, 0x8000, exclusive=True),
+                "Excl=0",
+            ),
+            (
+                ChiEvictMessage(
+                    1,
+                    0x8000,
+                    likely_shared=True,
+                ),
+                "LikelyShared=0",
+            ),
+            (
+                ChiEvictMessage(
+                    1,
+                    0x8000,
+                    expect_completion_ack=True,
+                ),
+                "ExpCompAck=0",
+            ),
+            (
+                ChiEvictMessage(1, 0x8000, tag_operation=1),
+                "TagOp=0",
+            ),
+            (
+                ChiEvictMessage(1, 0x8000, pas=6),
+                "PAS encodings 6 and 7",
+            ),
+            (
+                ChiEvictMessage(
+                    1,
+                    0x8000,
+                    allow_retry=True,
+                    protocol_credit_type=2,
+                ),
+                "PCrdType",
+            ),
+        )
+
+        for message, expected in invalid_cases:
+            with self.subTest(expected=expected):
+                reasons = self.codec.explain_encode(message)
+                self.assertTrue(
+                    any(expected in reason for reason in reasons)
+                )
+                with self.assertRaises(ChiLogicalCodecError):
+                    self.codec.encode(message)
+
+        retry = ChiEvictMessage(
+            2,
+            0x8000,
+            allow_retry=False,
+            protocol_credit_type=7,
+        )
+        self.assertTrue(ChiIssueHReqProfile().contains(retry))
+        self.assertEqual(retry, self.codec.decode(self.codec.encode(retry)))
 
     def test_clean_unique_profile_rejects_out_of_slice_fields(self) -> None:
         invalid_cases = (

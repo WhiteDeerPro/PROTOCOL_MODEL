@@ -156,12 +156,14 @@ class ChiCompAckMessage:
 
 @dataclass(frozen=True)
 class ChiCompMessage:
-    """Completion carrying the original TxnID and a Home-owned DBID.
+    """Completion carrying the original TxnID and the architectural DBID field.
 
     The generic RSP form keeps the legal completion-state encodings distinct
-    from the current executable profile.  That profile deliberately accepts
-    only ``Comp_UC`` for the first ``CleanUnique`` lifecycle; cross-message
-    TxnID/DBID correlation remains a transaction contract.
+    from the current executable profile.  The profile accepts ``Comp_UC`` for
+    ``CleanUnique`` and ``Comp_I`` for ``Evict``.  In the former lifecycle the
+    Home-owned DBID correlates a later ``CompAck``; in ``Comp_I`` its encoded
+    value is unconstrained and does not establish a buffer lease.  Such
+    cross-message interpretation remains a transaction contract.
     """
 
     chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.RSP
@@ -371,9 +373,12 @@ class ChiIssueHRspProfile:
                 "CompDBIDResp requires Resp=0 for a Write completion",
             )
         if isinstance(message, ChiCompMessage):
-            if message.response is not ChiRespCode.UC:
+            if message.response not in (
+                ChiRespCode.UC,
+                ChiRespCode.I,
+            ):
                 reasons.append(
-                    "the current Comp profile requires Resp=UC"
+                    "the current Comp profile requires Resp=UC or Resp=I"
                 )
             if message.response_error != 0:
                 reasons.append(

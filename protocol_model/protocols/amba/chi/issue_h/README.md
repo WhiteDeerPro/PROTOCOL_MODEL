@@ -81,7 +81,7 @@ integer/enum 字段规范化为非负整数；缺字段、额外字段、错误�
 边界得到可解释诊断。相同 opcode 数值必须与 channel 联合判别，例如 REQ、RSP 和 SNP 的 `0x07` 分别选择
 不同 message form。
 
-当前 codec 覆盖已实现的 20 个 protocol-message form，包括 read、dataless permission upgrade、snoop、
+当前 codec 覆盖已实现的 21 个 protocol-message form，包括 read、dataless permission upgrade/eviction、snoop、
 completion、Retry/P-Credit 与 writeback 使用的 REQ/RSP/SNP/DAT form。因此
 `CleanUnique→SnpCleanInvalid→SnpResp/SnpRespData→Comp→CompAck`、clean ReadUnique、dirty unique
 responsibility transfer、`WriteBackFull→CompDBIDResp→CopyBackWrData`，以及
@@ -94,8 +94,10 @@ full byte address，packed SNPFLIT 省略低位的处理留给未来 bit codec�
 codec 复用 channel profile 作为合法性权威。本轮同时补齐了 coherent Read 的 Issue H 属性限制：
 `Size=6`、`SnpAttr=1`、`MemAttr∈{0101,1101}`、`Order=0` 和 `ExpCompAck=1`；`ReadUnique` 还要求
 `Excl=0`、`LikelyShared=0`。当前 `CleanUnique` profile 同样固定 full-line、snoopable、
-`ExpCompAck=1`，`SnpCleanInvalid` 固定 `DoNotGoToSD=1/RetToSrc=0`，`Comp` 固定普通
-`Comp_UC`。非数据 `SnpResp` 拒绝所有 PassDirty 编码，PassDirty 只能由带数据的
+`ExpCompAck=1`，`SnpCleanInvalid` 固定 `DoNotGoToSD=1/RetToSrc=0`。`Evict` 则固定
+`Size=6/SnpAttr=1/MemAttr=0101/Order=0/PAS∈{0..5}/LikelyShared=0/Excl=0/ExpCompAck=0`；通用 `Comp`
+profile 接受当前 lifecycle 所需的 `Comp_UC` 与 `Comp_I`，具体操作再判定 response 与 DBID 是否建立
+lease。非数据 `SnpResp` 拒绝所有 PassDirty 编码，PassDirty 只能由带数据的
 `SnpRespData` 携带。受限 `SD` peer 即使看到 `RetToSrc=0`，仍必须以 `SnpRespData_I_PD` 交回 dirty
 data/responsibility；`RetToSrc` 不把 dirty response 降成无数据响应。这些规则留在相应 message/profile，
 codec 不维护第二份判定逻辑。
@@ -166,7 +168,7 @@ lane 或 channel 内重排，lineage 仍需进一步绑定 packet-copy identity�
 默认视为歧义，只有同一 VirtualDut、相同逻辑 port boundary 和显式 share group 才可共享。
 
 feature catalog 把 direct `ReadNoSnp`、direct NDERR/Request Retry modifier、clean `ReadShared`、clean
-`ReadUnique`、clean `ReadUnique` NDERR/Request Retry modifier、clean/shared-dirty peer `CleanUnique`、
+`ReadUnique`、clean `ReadUnique` NDERR/Request Retry modifier、clean/shared-dirty peer `CleanUnique`、clean `Evict`、
 dirty unique transfer、dirty writeback 和 MESI `ReadNotSharedDirty` profile 展开为 participant
 capability、channel flow 与 system lifecycle requirement。flow projector 只处理合同所需 feature 及其依赖，
 并只从已成功构造的 `ChiTransportNetworkSession` 产生证据：一条 topology edge 的存在本身不足以证明
@@ -378,6 +380,24 @@ directory，迟到 `CopyBackWrData_UD_PD` 会 fault 并保留 state。
 full-line local write 原子安装 payload 并进入 `UD`。这避免了旧路径用 `ReadUnique` 重取整行；旧路径仍
 保留给真正需要数据的 read lifecycle。clean-only feature 继续拒绝 dirty peer 的 DAT 路径。
 
+`CHI_FEATURE_CLEAN_EVICT` 是独立的两段 dataless lifecycle：
+
+```text
+RN clean UC/UCE/SC → I, then Evict(TxnID=A)
+  → Home conditionally removes only that source clean holder
+  → Home Comp_I(TxnID=A, DBID=0)
+  → RN retires A; no DAT and no CompAck
+```
+
+REQ 发出时 RN 已经是无 payload 的 `I`，pending record 只保留 operation/correlation。Home 把 Evict
+作为 hint：source 仍是 clean owner/sharer 时删除匹配 membership；stale/non-holder 或目录明确记录
+shared-dirty responsibility 时保持 directory 不变并照常完成。所有情况都不修改 backing payload/version，
+也不分配 DBID lease。packet-delivery composition
+另保存一项 Home-produced completion evidence，阻止 early/forged `Comp_I` 直接退休 RN pending。
+outstanding Evict 遇同址 Snoop 时 RN 返回 `SnpResp_I` 并保留 Evict correlation。当前 clean profile
+拒绝从 `I/UD/SD` 主动发起，不包含自动 victim/LRU、普通 dirty replacement、deliberate dirty
+invalidate、WriteEvict family 或 Evict Retry。
+
 `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 依赖上述 clean feature，并增加一个受限分支：
 
 ```text
@@ -467,6 +487,11 @@ witness；runtime 以它统一许可 CleanUnique 的 PassDirty DAT，所以当�
 该 modifier 约束。后续稳定公开 feature API 前应泛化名称或拆分 profile，而不是把 `UD` 与 `SD` 合并成
 一个状态。
 
+`CHI_FEATURE_CLEAN_EVICT` 不依赖上述 read/CleanUnique feature，也没有 Snoopee role。它只要求
+Requester→Home `evict_request` REQ、Home→Requester `evict_completion` RSP、四个独立 participant
+原子能力和 `CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE`。`Comp_I` 中编码的 DBID 不形成 Home buffer lease，
+所以 capability contract 不虚构 DBID/CompAck flow。
+
 clean coherent read 合同则检查三种参与角色和五种有向 flow schema：
 Requester→Home REQ、Home→Snoopee SNP、Snoopee→Home RSP、Home→Requester DAT，以及
 Requester→Home CompAck RSP。dirty-data 路径再增加 Snoopee→Home DAT；RSP 与 DAT 回程不会因目标相同
@@ -489,6 +514,8 @@ profile 要求每个绑定只提供其 component 的单一 NodeID；
 等 flow evidence 保存所选 identity 后才适合放宽 compound binding。
 
 packet-delivery session 继续作为较小的 participant runtime；topology-driven 组合 session 已闭合
+clean Evict 经最小 REQ/RSP topology 的两 packet witness，并检查零 SNP/DAT/CompAck、directory 条件删除、
+backing payload/version 不变与最终 quiescence；
 clean-peer `CleanUnique` 经 direct 与单 XP topology 的五 packet witness，并为 restricted `SD` peer
 增加 `SnpRespData_I_PD` 的五 packet witness；后者检查 `dirty_result`、prepared backing intent、
 `CompAck` 后 backing/directory commit 和 `SD→I`，但不声称独立 Memory/SN physical commit。clean `ReadUnique`
@@ -537,7 +564,7 @@ Snoop 只返回无数据 `SnpResp_I` 并进入 `I`。pending WriteBack 接收同
 CleanUnique 与延迟 WriteBack cancel，但 resolved system 仍只有一个构造期 Requester authority，不能据此
 声称一般多 Requester topology 已闭合。
 
-仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、clean `Evict`、`MakeUnique`、自动
+仍属功能缺口的是同 Home/type 多 waiter 的具名选择/公平性合同、`MakeUnique`、自动
 victim/writeback scheduling、coherent DERR 与同一 accepted request 已发出 Snoop 后的错误路径、
 Retry 与 writeback 的组合、
 超出当前窄 witness 的 Retry/Snoop 到达次序、超出已闭合 invalidating-Snoop cancel 的其他 WriteBack phase、

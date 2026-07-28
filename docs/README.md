@@ -70,6 +70,8 @@
 - [当前实现状态](architecture/implementation-status.md)是“已经实现/尚未实现”的唯一汇总页；
 - [近期实施顺序](architecture/technical-route/08-roadmap.md)只记录下一批能力的依赖关系；
 - [项目 Roadmap](../ROADMAP.md)记录长期研究和工程方向；
+- [CHI 注入流程资料摘录](reviews/chi-injected-flow-digest.md)保存一次带 provenance 的非权威来源审查，
+  只用于发现候选功能和回溯判断，不作为规范、架构或实时实现状态；
 - [社区传播与宣称治理](community/README.md)保存维护者使用的定位、推广计划和证据审计，不作为架构定义或直接发布稿；
 - [Release archive](releases/README.md)保留已发布 tag 当时的术语和边界。
 

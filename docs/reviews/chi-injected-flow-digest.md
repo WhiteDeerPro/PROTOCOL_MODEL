@@ -2,6 +2,7 @@
 
 本文记录 2026-07-28 用户注入的一组 CHI 流程图与中文速记经过治理后留下的**概念摘录**。它用于发现候选
 功能、比较可复用建模方法和 opcode-specific lifecycle，不是 CHI 规范、架构权威入口或实现状态汇总。
+文中“当前工程判断”以提交 `b4e5aba` 为评审基线；后续实时状态仍只查实现状态与 roadmap。
 
 - 稳定架构边界仍由
   [`chi-coherence-network-session.md`](../architecture/chi-coherence-network-session.md) 定义；

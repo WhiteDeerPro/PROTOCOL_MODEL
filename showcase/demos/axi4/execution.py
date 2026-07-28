@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from protocol_model import AtomicFrame, CanonicalEvent, ReadyValidSignals, Verdict
-from protocol_model.link.amba.axi.axi4 import Axi4ObservationSession
-from protocol_model.semantics import SemanticFault
+from protocol_model.observation import AtomicFrame, ReadyValidSignals
+from protocol_model.protocols.amba.axi.axi4 import Axi4ObservationSession
+from protocol_model.semantics import CanonicalEvent, SemanticFault, Verdict
 
 from common import AXI4_CHANNELS, ExecutionMode, ExampleCase
 
@@ -73,8 +73,8 @@ def _fault_record(fault: SemanticFault | None) -> dict[str, object] | None:
 def _resource_projection(component, states, *, observation: bool):
     snapshots = []
     for state in states:
-        link_state = state.link_state if observation else state
-        snapshots.append(dict(component.resource_usage(link_state)))
+        interface_state = state.interface_state if observation else state
+        snapshots.append(dict(component.resource_usage(interface_state)))
     names = {name for snapshot in snapshots for name in snapshot}
     peak = {
         name: max(snapshot.get(name, 0) for snapshot in snapshots)
@@ -87,9 +87,9 @@ def _resource_projection(component, states, *, observation: bool):
 def execute(case: ExampleCase) -> ExampleRun:
     """Run a case and compare its declared expectation with model evidence."""
 
-    if case.mode is ExecutionMode.LINK:
+    if case.mode is ExecutionMode.INTERFACE:
         if not all(isinstance(item, CanonicalEvent) for item in case.actions):
-            raise TypeError(f"link case {case.name!r} contains a non-event input")
+            raise TypeError(f"interface case {case.name!r} contains a non-event input")
         component = case.protocol.open_session()
         semantic_run = component.run(case.actions)
         peak, final = _resource_projection(
@@ -104,11 +104,11 @@ def execute(case: ExampleCase) -> ExampleRun:
         observer = Axi4ObservationSession(case.protocol)
         semantic_run = observer.run(case.actions)
         peak, final = _resource_projection(
-            observer.link_session,
+            observer.interface_session,
             semantic_run.state_history,
             observation=True,
         )
-        causal_edges = semantic_run.final_state.link_state.causal_edges
+        causal_edges = semantic_run.final_state.interface_state.causal_edges
 
     fault = (
         semantic_run.violations[0].fault if semantic_run.violations else None
@@ -159,8 +159,8 @@ def result_record(run: ExampleRun) -> dict[str, object]:
             "mode": run.case.mode.value,
             "protocol": run.case.protocol.name,
             "model": (
-                "LinkSession"
-                if run.case.mode is ExecutionMode.LINK
+                "InterfaceSession"
+                if run.case.mode is ExecutionMode.INTERFACE
                 else "Axi4ObservationSession"
             ),
         },

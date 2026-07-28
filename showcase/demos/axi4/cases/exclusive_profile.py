@@ -1,7 +1,7 @@
 """Exclusive-access and bounded-resource profile examples."""
 
-from protocol_model import Verdict
-from protocol_model.link.amba.axi.axi4 import build_axi4_link
+from protocol_model.protocols.amba.axi.axi4 import build_axi4_interface
+from protocol_model.semantics import Verdict
 
 from common import (
     ExecutionMode,
@@ -14,7 +14,7 @@ from common import (
 
 
 def exclusive_profile_cases() -> tuple[ExampleCase, ...]:
-    protocol = build_axi4_link()
+    protocol = build_axi4_interface()
     exclusive_read = address("AR", key=5, addr=0xC00, lock=1)
     exclusive_write = address("AW", key=5, addr=0xC00, lock=1)
     unmatched_write = address("AW", key=6, addr=0xC80, lock=1)
@@ -32,7 +32,7 @@ def exclusive_profile_cases() -> tuple[ExampleCase, ...]:
             "The completed exclusive read makes one matching write eligible for EXOKAY.",
             "已完成的独占读使一笔匹配写事务具备返回 EXOKAY 的资格。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 exclusive_read,
                 read_data(key=5, last=True, response="EXOKAY"),
@@ -50,7 +50,7 @@ def exclusive_profile_cases() -> tuple[ExampleCase, ...]:
             "The second AR exceeds a configured capacity of one and is rolled back.",
             "在容量配置为一时，第二个 AR 超限并被回滚。",
             bounded,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 address("AR", key=6, addr=0xD00),
                 address("AR", key=7, addr=0xD08),
@@ -67,7 +67,7 @@ def exclusive_profile_cases() -> tuple[ExampleCase, ...]:
             "An exclusive write without a reservation may complete, but not with EXOKAY.",
             "没有 reservation 的独占写可以完成，但不能返回 EXOKAY。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 unmatched_write,
                 write_data(last=True, strobe=0x0F),

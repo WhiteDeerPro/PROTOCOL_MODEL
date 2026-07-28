@@ -1,7 +1,7 @@
 """Read response ordering and cross-ID interleave examples."""
 
-from protocol_model import Verdict
-from protocol_model.link.amba.axi.axi4 import build_axi4_link
+from protocol_model.protocols.amba.axi.axi4 import build_axi4_interface
+from protocol_model.semantics import Verdict
 
 from common import (
     ExecutionMode,
@@ -14,7 +14,7 @@ from common import (
 
 
 def ordering_cases() -> tuple[ExampleCase, ...]:
-    protocol = build_axi4_link()
+    protocol = build_axi4_interface()
     first = address("AR", key=1, addr=0x400, length=1)
     second = address("AR", key=2, addr=0x500, length=1)
     same_id_oldest = address("AR", key=3, addr=0x600, length=1)
@@ -31,7 +31,7 @@ def ordering_cases() -> tuple[ExampleCase, ...]:
             "Each ID keeps its own beat count while the link alternates IDs.",
             "链路交替返回不同 ID，同时分别维护各自的拍数。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 first,
                 second,
@@ -50,7 +50,7 @@ def ordering_cases() -> tuple[ExampleCase, ...]:
             "A final beat shaped for the later one-beat read is early for the oldest read.",
             "面向后一笔单拍读的末拍，对最早的两拍读而言属于过早结束。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 same_id_oldest,
                 same_id_later,
@@ -68,7 +68,7 @@ def ordering_cases() -> tuple[ExampleCase, ...]:
             "W remains FIFO-correlated with AW while B selects pending writes by ID.",
             "W 仍按 FIFO 与 AW 关联，而 B 可以按 ID 选择待完成写事务。",
             protocol,
-            ExecutionMode.LINK,
+            ExecutionMode.INTERFACE,
             (
                 first_write,
                 second_write,

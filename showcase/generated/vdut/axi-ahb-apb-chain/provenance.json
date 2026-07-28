@@ -1,0 +1,21 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "axi-ahb-apb-chain",
+  "source": "showcase/demos/vdut/axi_ahb_apb_chain/run.py",
+  "command": "python3 showcase/demos/vdut/axi_ahb_apb_chain/run.py",
+  "protocol_model_version": "0.4.0",
+  "execution_models": [
+    "SystemSession",
+    "AddressOperationTranslationBridgeBackend",
+    "SingleIngressAddressFabricBackend",
+    "PassiveAddressSpaceBackend"
+  ],
+  "renderers": {
+    "waveform": "WaveDrom 3.6.2 + shared visualization publisher",
+    "topology": "Graphviz dot + demo-local arranged overview",
+    "expanded_topology": "Graphviz dot + one-off hand-arranged expanded view",
+    "vdut_structure": "Graphviz dot + shared projection, vertical arrangement",
+    "causality": "Graphviz dot + shared trace, hand-arranged in two columns"
+  },
+  "presentation_boundary": "canonical event/operation composition; not AMBA pin cycles, RTL, arbitration, or coherence"
+}

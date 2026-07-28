@@ -1,0 +1,68 @@
+digraph sensor_dma_structure {
+  rankdir=LR;
+  label="Sensor capture system · constructed VirtualDuts and AXI4-Lite links";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.3, nodesep=0.45, ranksep=0.72,
+         splines=polyline, ordering=out];
+  node [fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d", penwidth=1.3];
+
+  scheduler [shape=note, style="rounded,dashed,filled", fillcolor="#fff7ed",
+    color="#ea580c", label="scenario scheduler\nexplicit service opportunities\n(no implicit clock)"];
+
+  dma [shape=plain, label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#7c3aed">
+      <TR><TD BGCOLOR="#ede9fe"><B>dma · VirtualDut</B></TD></TR>
+      <TR><TD BGCOLOR="#f5f3ff">descriptor: src 0x1000 fixed<BR/>dst 0x2000 + 4 · 2 × 4-byte beats</TD></TR>
+      <TR><TD BGCOLOR="#f5f3ff">serialized FSM: read → buffer → write<BR/>one outstanding</TD></TR>
+      <TR><TD PORT="axi" BGCOLOR="#dbeafe">AXI4-Lite manager attachment</TD></TR>
+    </TABLE>>];
+
+  crossbar [shape=plain, label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#ea580c">
+      <TR><TD BGCOLOR="#ffedd5" COLSPAN="2"><B>crossbar · VirtualDut</B></TD></TR>
+      <TR><TD PORT="s" BGCOLOR="#dbeafe" COLSPAN="2">s_dma interface port · subordinate</TD></TR>
+      <TR><TD BGCOLOR="#e0f2fe" COLSPAN="2">AXI4-Lite completer attachment<BR/><FONT POINT-SIZE="9">AR/AW/W → AddressAccess · AccessResult → R/B</FONT></TD></TR>
+      <TR><TD BGCOLOR="#fff7ed" COLSPAN="2">ingress request FIFO · capacity 2</TD></TR>
+      <TR><TD BGCOLOR="#fff7ed" COLSPAN="2">decode/remap + egress arbitration + owner table</TD></TR>
+      <TR><TD BGCOLOR="#e0f2fe">AXI4-Lite requester attachment<BR/><FONT POINT-SIZE="9">sensor access</FONT></TD><TD BGCOLOR="#e0f2fe">AXI4-Lite requester attachment<BR/><FONT POINT-SIZE="9">memory access</FONT></TD></TR>
+      <TR><TD PORT="sensor" BGCOLOR="#dbeafe">m_sensor interface port<BR/><FONT POINT-SIZE="9">manager</FONT></TD><TD PORT="memory" BGCOLOR="#dbeafe">m_memory interface port<BR/><FONT POINT-SIZE="9">manager</FONT></TD></TR>
+    </TABLE>>];
+
+  sensor [shape=plain, label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#0f766e">
+      <TR><TD BGCOLOR="#ccfbf1"><B>sensor · VirtualDut</B></TD></TR>
+      <TR><TD PORT="axi" BGCOLOR="#dbeafe">AXI4-Lite subordinate attachment</TD></TR>
+      <TR><TD BGCOLOR="#f0fdfa">fixed data register @ local 0x0<BR/>read pops oldest sample</TD></TR>
+      <TR><TD BGCOLOR="#f0fdfa">sample FIFO · capacity 2 · DROP_NEWEST<BR/>overrun counter</TD></TR>
+      <TR><TD BGCOLOR="#ecfeff">deterministic policy<BR/>0x10203040 + service_index</TD></TR>
+    </TABLE>>];
+
+  memory [shape=plain, label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#16a34a">
+      <TR><TD BGCOLOR="#dcfce7"><B>memory · VirtualDut</B></TD></TR>
+      <TR><TD PORT="axi" BGCOLOR="#dbeafe">AXI4-Lite subordinate attachment</TD></TR>
+      <TR><TD BGCOLOR="#f0fdf4">complete-request FIFO · capacity 2</TD></TR>
+      <TR><TD BGCOLOR="#f0fdf4">MemoryRegion · local 0x0..0xff</TD></TR>
+    </TABLE>>];
+
+  { rank=same; scheduler; dma; }
+  { rank=same; sensor; memory; }
+  sensor -> memory [style=invis, weight=80];
+
+  scheduler -> dma [style=dashed, color="#ea580c", constraint=false,
+    label="advance DMA"];
+  scheduler -> crossbar [style=dashed, color="#ea580c", constraint=false,
+    label="advance interconnect"];
+  scheduler -> sensor [style=dashed, color="#ea580c", constraint=false,
+    label="produce samples"];
+  scheduler -> memory [style=dashed, color="#ea580c", constraint=false,
+    label="service queued write"];
+
+  dma:axi -> crossbar:s [dir=both, arrowtail=normal,
+    label=<<B>AXI4-Lite</B><BR/><FONT POINT-SIZE="8" COLOR="#64748b">dma_bus</FONT><BR/><FONT POINT-SIZE="8">request → · completion ←</FONT>>];
+  crossbar:sensor -> sensor:axi [dir=both, arrowtail=normal,
+    label=<<B>AXI4-Lite</B><BR/><FONT POINT-SIZE="8" COLOR="#64748b">sensor_bus</FONT><BR/><FONT POINT-SIZE="8">read → · data ←</FONT>>];
+  crossbar:memory -> memory:axi [dir=both, arrowtail=normal,
+    label=<<B>AXI4-Lite</B><BR/><FONT POINT-SIZE="8" COLOR="#64748b">memory_bus</FONT><BR/><FONT POINT-SIZE="8">write → · completion ←</FONT>>];
+}

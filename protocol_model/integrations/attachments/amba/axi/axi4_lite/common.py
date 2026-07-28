@@ -6,9 +6,9 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping
 
-from protocol_model.link import LinkProtocol
-from protocol_model.link.amba import transfer_container_lane_bounds
-from protocol_model.link.amba.axi.axi4_lite import AXI4_LITE_FAMILY
+from protocol_model.interface import InterfaceProtocol
+from protocol_model.protocols.amba import transfer_container_lane_bounds
+from protocol_model.protocols.amba.axi.axi4_lite import AXI4_LITE_FAMILY
 from protocol_model.virtual_dut.address.access import (
     AccessStatus,
     ByteOrder,
@@ -57,17 +57,17 @@ class Axi4LiteRequesterState:
 
 
 def require_axi4_lite_address_profile(
-    protocol: LinkProtocol, role: str, byte_order: ByteOrder | str
+    protocol: InterfaceProtocol, role: str, byte_order: ByteOrder | str
 ) -> ByteOrder:
     """Validate the native AXI4-Lite profile used by AddressAccess."""
 
-    if protocol.family != AXI4_LITE_FAMILY:
+    if protocol.interface_family != AXI4_LITE_FAMILY:
         raise ValueError(
-            "AXI4-Lite attachment requires an AXI4-Lite LinkProtocol family"
+            "AXI4-Lite attachment requires an AXI4-Lite InterfaceProtocol family"
         )
     if role not in protocol.roles:
         raise ValueError(f"AXI4-Lite protocol has no {role} role")
-    if set(protocol.channels) != _AXI4_LITE_CHANNELS:
+    if set(protocol.event_kinds) != _AXI4_LITE_CHANNELS:
         raise ValueError(
             "AXI4-Lite address attachment requires native five-channel events"
         )

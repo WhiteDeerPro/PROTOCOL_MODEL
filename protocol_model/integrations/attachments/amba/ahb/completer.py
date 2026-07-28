@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import CanonicalEvent, ConstraintScope, SemanticFault
 from protocol_model.virtual_dut.address.access import (
     AccessResult,
@@ -38,7 +38,7 @@ class AhbCompleterAttachment(AddressCompleterAttachment):
 
     def __init__(
         self,
-        protocol: LinkProtocol,
+        protocol: InterfaceProtocol,
         *,
         byte_order: ByteOrder | str = ByteOrder.LITTLE,
     ) -> None:
@@ -49,7 +49,7 @@ class AhbCompleterAttachment(AddressCompleterAttachment):
         self.data_width = int(protocol.parameters["data_width"])
         self.bus_bytes = self.data_width // 8
         self.write_data_fields = frozenset(
-            protocol.channels["WRITE_DATA"].event.fields
+            protocol.event_kinds["WRITE_DATA"].schema.fields
         )
 
     def initial_state(self) -> AhbCompleterState:
@@ -172,7 +172,7 @@ class AhbCompleterAttachment(AddressCompleterAttachment):
             if context.request_kind == "READ"
             else "WRITE_RESPONSE"
         )
-        fields = self.protocol.channels[response_kind].event.fields
+        fields = self.protocol.event_kinds[response_kind].schema.fields
         payload = {
             name: default_payload_value(field)
             for name, field in fields.items()

@@ -1,15 +1,29 @@
 """Constructed routing backends within one VirtualDut boundary."""
 
+from .crossbar import ScheduledAddressCrossbarBackend
+from .crossbar_state import (
+    QueuedRoutedAddressRequest,
+    ScheduledAddressCrossbarState,
+)
+from .projection import (
+    ADDRESS_ROUTER_PROJECTION,
+    AddressRouterBoundaryProjection,
+)
 from .route import AddressRoute
-from .single_ingress import SingleIngressAddressFabricBackend
-from .state import (
-    AddressFabricState,
-    RoutedAddressRequest,
+from .ownership import RoutedAddressRequest
+from .single_ingress import (
+    SingleIngressAddressFabricBackend,
+    SingleIngressAddressFabricState,
 )
 
 __all__ = [
-    "AddressFabricState",
     "AddressRoute",
+    "AddressRouterBoundaryProjection",
+    "ADDRESS_ROUTER_PROJECTION",
+    "QueuedRoutedAddressRequest",
     "RoutedAddressRequest",
+    "ScheduledAddressCrossbarBackend",
+    "ScheduledAddressCrossbarState",
     "SingleIngressAddressFabricBackend",
+    "SingleIngressAddressFabricState",
 ]

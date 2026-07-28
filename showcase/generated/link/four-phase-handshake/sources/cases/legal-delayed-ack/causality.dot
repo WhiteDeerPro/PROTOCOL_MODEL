@@ -1,0 +1,24 @@
+digraph four_phase_case {
+  rankdir=TB;
+  label="合法传输：接收端任意等待后确认 · observation-order evidence";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.3, ranksep=0.38, splines=polyline];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9, color="#5f7280"];
+  s0 [label="S0 · t=0 ns\n00 idle", fillcolor="#e8f1fb", color="#537a99"];
+  s1 [label="S1 · t=2.7 ns\n10 requested", fillcolor="#e8f1fb", color="#537a99"];
+  s0 -> s1 [label="observed next"];
+  s2 [label="S2 · t=5.2 ns\n10 requested", fillcolor="#e8f1fb", color="#537a99"];
+  s1 -> s2 [label="observed next"];
+  s3 [label="S3 · t=9.9 ns\n10 requested", fillcolor="#e8f1fb", color="#537a99"];
+  s2 -> s3 [label="observed next"];
+  s4 [label="S4 · t=12.4 ns\n11 acknowledged", fillcolor="#e8f1fb", color="#537a99"];
+  s3 -> s4 [label="observed next"];
+  s5 [label="S5 · t=15 ns\n01 returning", fillcolor="#e8f1fb", color="#537a99"];
+  s4 -> s5 [label="observed next"];
+  s6 [label="S6 · t=18.6 ns\n00 idle", fillcolor="#e8f1fb", color="#537a99"];
+  s5 -> s6 [label="observed next"];
+  e0 [shape=diamond, label="TRANSFER accepted\nref=17 data=0x5A", fillcolor="#dcfce7", color="#2f855a"];
+  s4 -> e0 [label="ACK↑ lowers to event", color="#2f855a"];
+  note [shape=note, label="Edges above preserve observation order;\nthey are not physical delay or cross-event CausalGraph edges", fillcolor="#fff7d6", color="#b7791f"];
+}

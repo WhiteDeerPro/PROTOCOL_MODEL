@@ -1,0 +1,737 @@
+{
+  "schema": "protocol-model.showcase.axi4-read-demux/v1",
+  "system": {
+    "name": "axi4_single_manager_read_demux",
+    "virtual_duts": [
+      "manager",
+      "target0",
+      "target1",
+      "read_fabric"
+    ],
+    "connections": [
+      "manager_bus",
+      "target0_bus",
+      "target1_bus"
+    ]
+  },
+  "address_windows": {
+    "target0": [
+      4096,
+      4352
+    ],
+    "target1": [
+      8192,
+      8448
+    ]
+  },
+  "route_table_profile": {
+    "active_id_capacity": 2,
+    "outstanding_bursts_per_id": 4
+  },
+  "steps": [
+    {
+      "label": "S0 · issue RID1 to target0",
+      "action": "AR RID1 target0 · 2 beats",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 1,
+        "owners": [
+          {
+            "rid": 1,
+            "egress": "m0",
+            "remaining_beats": [
+              2
+            ]
+          }
+        ]
+      },
+      "manager_response": "—",
+      "emissions": [
+        {
+          "index": 0,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "read_fabric.s_axi",
+          "kind": "AR",
+          "key": 1,
+          "payload": {
+            "addr": 4096,
+            "len": 1,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 1,
+          "connection": "target0_bus",
+          "source": "read_fabric.m0",
+          "destination": "target0.axi",
+          "kind": "AR",
+          "key": 1,
+          "payload": {
+            "addr": 0,
+            "len": 1,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S1 · issue RID2 to target1",
+      "action": "AR RID2 target1 · 2 beats",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 2,
+        "owners": [
+          {
+            "rid": 1,
+            "egress": "m0",
+            "remaining_beats": [
+              2
+            ]
+          },
+          {
+            "rid": 2,
+            "egress": "m1",
+            "remaining_beats": [
+              2
+            ]
+          }
+        ]
+      },
+      "manager_response": "—",
+      "emissions": [
+        {
+          "index": 2,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "read_fabric.s_axi",
+          "kind": "AR",
+          "key": 2,
+          "payload": {
+            "addr": 8192,
+            "len": 1,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 3,
+          "connection": "target1_bus",
+          "source": "read_fabric.m1",
+          "destination": "target1.axi",
+          "kind": "AR",
+          "key": 2,
+          "payload": {
+            "addr": 0,
+            "len": 1,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S2 · target1 returns first beat",
+      "action": "advance target1",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 2,
+        "owners": [
+          {
+            "rid": 1,
+            "egress": "m0",
+            "remaining_beats": [
+              2
+            ]
+          },
+          {
+            "rid": 2,
+            "egress": "m1",
+            "remaining_beats": [
+              1
+            ]
+          }
+        ]
+      },
+      "manager_response": "R id=2 data=0x21",
+      "emissions": [
+        {
+          "index": 4,
+          "connection": "target1_bus",
+          "source": "target1.axi",
+          "destination": "read_fabric.m1",
+          "kind": "R",
+          "key": 2,
+          "payload": {
+            "data": 33,
+            "resp": "OKAY",
+            "last": false
+          }
+        },
+        {
+          "index": 5,
+          "connection": "manager_bus",
+          "source": "read_fabric.s_axi",
+          "destination": "manager.axi",
+          "kind": "R",
+          "key": 2,
+          "payload": {
+            "data": 33,
+            "resp": "OKAY",
+            "last": false
+          }
+        }
+      ]
+    },
+    {
+      "label": "S3 · target0 returns first beat",
+      "action": "advance target0",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 2,
+        "owners": [
+          {
+            "rid": 1,
+            "egress": "m0",
+            "remaining_beats": [
+              1
+            ]
+          },
+          {
+            "rid": 2,
+            "egress": "m1",
+            "remaining_beats": [
+              1
+            ]
+          }
+        ]
+      },
+      "manager_response": "R id=1 data=0x11",
+      "emissions": [
+        {
+          "index": 6,
+          "connection": "target0_bus",
+          "source": "target0.axi",
+          "destination": "read_fabric.m0",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 17,
+            "resp": "OKAY",
+            "last": false
+          }
+        },
+        {
+          "index": 7,
+          "connection": "manager_bus",
+          "source": "read_fabric.s_axi",
+          "destination": "manager.axi",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 17,
+            "resp": "OKAY",
+            "last": false
+          }
+        }
+      ]
+    },
+    {
+      "label": "S4 · target1 completes RID2",
+      "action": "advance target1",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 1,
+        "owners": [
+          {
+            "rid": 1,
+            "egress": "m0",
+            "remaining_beats": [
+              1
+            ]
+          }
+        ]
+      },
+      "manager_response": "R id=2 data=0x22 last",
+      "emissions": [
+        {
+          "index": 8,
+          "connection": "target1_bus",
+          "source": "target1.axi",
+          "destination": "read_fabric.m1",
+          "kind": "R",
+          "key": 2,
+          "payload": {
+            "data": 34,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 9,
+          "connection": "manager_bus",
+          "source": "read_fabric.s_axi",
+          "destination": "manager.axi",
+          "kind": "R",
+          "key": 2,
+          "payload": {
+            "data": 34,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    },
+    {
+      "label": "S5 · target0 completes RID1",
+      "action": "advance target0",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 0,
+        "owners": []
+      },
+      "manager_response": "R id=1 data=0x12 last",
+      "emissions": [
+        {
+          "index": 10,
+          "connection": "target0_bus",
+          "source": "target0.axi",
+          "destination": "read_fabric.m0",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 18,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 11,
+          "connection": "manager_bus",
+          "source": "read_fabric.s_axi",
+          "destination": "manager.axi",
+          "kind": "R",
+          "key": 1,
+          "payload": {
+            "data": 18,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    },
+    {
+      "label": "S6 · issue RID3 to target0",
+      "action": "AR RID3 target0",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 1,
+        "owners": [
+          {
+            "rid": 3,
+            "egress": "m0",
+            "remaining_beats": [
+              1
+            ]
+          }
+        ]
+      },
+      "manager_response": "—",
+      "emissions": [
+        {
+          "index": 12,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "read_fabric.s_axi",
+          "kind": "AR",
+          "key": 3,
+          "payload": {
+            "addr": 4104,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 13,
+          "connection": "target0_bus",
+          "source": "read_fabric.m0",
+          "destination": "target0.axi",
+          "kind": "AR",
+          "key": 3,
+          "payload": {
+            "addr": 8,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S7 · same RID targets another device",
+      "action": "AR RID3 target1 · first attempt",
+      "verdict": "BLOCK · read_fabric.axi4_read_id_destination",
+      "blocked": {
+        "resource": "read_fabric.axi4_read_id_destination",
+        "reason": "s_axi RID 3 is locked to 'm0'; request for 'm1' waits for prior RLAST",
+        "capacity": 1
+      },
+      "fault": null,
+      "fabric": {
+        "active_ids": 1,
+        "owners": [
+          {
+            "rid": 3,
+            "egress": "m0",
+            "remaining_beats": [
+              1
+            ]
+          }
+        ]
+      },
+      "manager_response": "—",
+      "emissions": []
+    },
+    {
+      "label": "S8 · target0 releases RID3",
+      "action": "advance target0",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 0,
+        "owners": []
+      },
+      "manager_response": "R id=3 data=0x13 last",
+      "emissions": [
+        {
+          "index": 14,
+          "connection": "target0_bus",
+          "source": "target0.axi",
+          "destination": "read_fabric.m0",
+          "kind": "R",
+          "key": 3,
+          "payload": {
+            "data": 19,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 15,
+          "connection": "manager_bus",
+          "source": "read_fabric.s_axi",
+          "destination": "manager.axi",
+          "kind": "R",
+          "key": 3,
+          "payload": {
+            "data": 19,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    },
+    {
+      "label": "S9 · retry RID3 to target1",
+      "action": "AR RID3 target1 · retry",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 1,
+        "owners": [
+          {
+            "rid": 3,
+            "egress": "m1",
+            "remaining_beats": [
+              1
+            ]
+          }
+        ]
+      },
+      "manager_response": "—",
+      "emissions": [
+        {
+          "index": 16,
+          "connection": "manager_bus",
+          "source": "manager.axi",
+          "destination": "read_fabric.s_axi",
+          "kind": "AR",
+          "key": 3,
+          "payload": {
+            "addr": 8200,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        },
+        {
+          "index": 17,
+          "connection": "target1_bus",
+          "source": "read_fabric.m1",
+          "destination": "target1.axi",
+          "kind": "AR",
+          "key": 3,
+          "payload": {
+            "addr": 8,
+            "len": 0,
+            "size": 2,
+            "burst": "INCR",
+            "lock": 0,
+            "cache": 0,
+            "prot": 0,
+            "qos": 0,
+            "region": 0
+          }
+        }
+      ]
+    },
+    {
+      "label": "S10 · target1 completes retry",
+      "action": "advance target1",
+      "verdict": "accepted",
+      "blocked": null,
+      "fault": null,
+      "fabric": {
+        "active_ids": 0,
+        "owners": []
+      },
+      "manager_response": "R id=3 data=0x23 last",
+      "emissions": [
+        {
+          "index": 18,
+          "connection": "target1_bus",
+          "source": "target1.axi",
+          "destination": "read_fabric.m1",
+          "kind": "R",
+          "key": 3,
+          "payload": {
+            "data": 35,
+            "resp": "OKAY",
+            "last": true
+          }
+        },
+        {
+          "index": 19,
+          "connection": "manager_bus",
+          "source": "read_fabric.s_axi",
+          "destination": "manager.axi",
+          "kind": "R",
+          "key": 3,
+          "payload": {
+            "data": 35,
+            "resp": "OKAY",
+            "last": true
+          }
+        }
+      ]
+    }
+  ],
+  "manager_responses": [
+    {
+      "kind": "R",
+      "rid": 2,
+      "payload": {
+        "data": 33,
+        "resp": "OKAY",
+        "last": false
+      }
+    },
+    {
+      "kind": "R",
+      "rid": 1,
+      "payload": {
+        "data": 17,
+        "resp": "OKAY",
+        "last": false
+      }
+    },
+    {
+      "kind": "R",
+      "rid": 2,
+      "payload": {
+        "data": 34,
+        "resp": "OKAY",
+        "last": true
+      }
+    },
+    {
+      "kind": "R",
+      "rid": 1,
+      "payload": {
+        "data": 18,
+        "resp": "OKAY",
+        "last": true
+      }
+    },
+    {
+      "kind": "R",
+      "rid": 3,
+      "payload": {
+        "data": 19,
+        "resp": "OKAY",
+        "last": true
+      }
+    },
+    {
+      "kind": "R",
+      "rid": 3,
+      "payload": {
+        "data": 35,
+        "resp": "OKAY",
+        "last": true
+      }
+    }
+  ],
+  "assertions": {
+    "fault_free": true,
+    "different_rids_return_independently": true,
+    "same_rid_cross_target_blocks": true,
+    "same_rid_retry_after_rlast": true,
+    "final_quiescent": true
+  },
+  "event_count": 20,
+  "causal_edges": [
+    [
+      0,
+      1
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      4
+    ],
+    [
+      2,
+      5
+    ],
+    [
+      4,
+      5
+    ],
+    [
+      1,
+      6
+    ],
+    [
+      0,
+      7
+    ],
+    [
+      6,
+      7
+    ],
+    [
+      4,
+      8
+    ],
+    [
+      5,
+      9
+    ],
+    [
+      8,
+      9
+    ],
+    [
+      6,
+      10
+    ],
+    [
+      7,
+      11
+    ],
+    [
+      10,
+      11
+    ],
+    [
+      12,
+      13
+    ],
+    [
+      13,
+      14
+    ],
+    [
+      12,
+      15
+    ],
+    [
+      14,
+      15
+    ],
+    [
+      16,
+      17
+    ],
+    [
+      17,
+      18
+    ],
+    [
+      16,
+      19
+    ],
+    [
+      18,
+      19
+    ]
+  ]
+}

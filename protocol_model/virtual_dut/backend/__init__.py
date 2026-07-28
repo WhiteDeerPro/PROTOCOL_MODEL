@@ -5,25 +5,79 @@ leaf modules so loading the transition foundation does not pull higher layers
 back into itself.
 """
 
-from .base import VirtualDutModel
+from .advance import ExplicitlyAdvanceableBackend
+from .base import VirtualDutBackend
+from .backing import (
+    BackingCommitConflict,
+    BackingLine,
+    BackingLineRecord,
+    BackingMutation,
+    FullLineBackingCore,
+    LineBackingState,
+    PreparedBackingWrite,
+)
+from .cache import (
+    CacheCore,
+    CacheLinePayload,
+    CacheLineStore,
+    CacheLineStoreMutation,
+    CacheLineStoreState,
+    StoredCacheLine,
+)
 from .simple import (
-    CaptureModel,
+    CaptureBackend,
     CaptureState,
-    FunctionModel,
-    FunctionModelState,
-    NoOpModel,
+    FunctionBackend,
+    FunctionBackendState,
+    NoOpBackend,
+)
+from .stepped_emission import (
+    DeferredPortEmission,
+    EmissionBatchOrderingKeyPolicy,
+    EmissionBatchScheduling,
+    EmissionOffer,
+    EmissionWaitContext,
+    EmissionWaitPolicy,
+    SteppedEmissionBackend,
+    SteppedEmissionProfile,
+    SteppedEmissionState,
+    constant_emission_wait,
 )
 from .transition import DutEffect, DutTransition, PortEmission, PortInput
 
 __all__ = [
-    "CaptureModel",
+    "BackingCommitConflict",
+    "BackingLine",
+    "BackingLineRecord",
+    "BackingMutation",
+    "CaptureBackend",
     "CaptureState",
+    "CacheCore",
+    "CacheLinePayload",
+    "CacheLineStore",
+    "CacheLineStoreMutation",
+    "CacheLineStoreState",
+    "DeferredPortEmission",
     "DutEffect",
     "DutTransition",
-    "FunctionModel",
-    "FunctionModelState",
-    "NoOpModel",
+    "EmissionBatchOrderingKeyPolicy",
+    "EmissionBatchScheduling",
+    "EmissionOffer",
+    "EmissionWaitContext",
+    "EmissionWaitPolicy",
+    "ExplicitlyAdvanceableBackend",
+    "FunctionBackend",
+    "FunctionBackendState",
+    "FullLineBackingCore",
+    "LineBackingState",
+    "NoOpBackend",
     "PortEmission",
     "PortInput",
-    "VirtualDutModel",
+    "PreparedBackingWrite",
+    "SteppedEmissionBackend",
+    "SteppedEmissionProfile",
+    "SteppedEmissionState",
+    "StoredCacheLine",
+    "VirtualDutBackend",
+    "constant_emission_wait",
 ]

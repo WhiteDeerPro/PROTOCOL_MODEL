@@ -1,0 +1,13 @@
+digraph system_trace {
+  rankdir=TB;
+  label="APB4 queued VirtualDut causal trace / 因果轨迹";
+  labelloc="t";
+  graph [nodesep=0.4, ranksep=0.55, splines=polyline];
+  node [shape=box, fontname="monospace", margin="0.08,0.05"];
+  event0 [label="[0] apb4_bus.WRITE\nrandom_source.apb → queued_memory.apb\nWRITE(key=None, addr=4100, prot=4, data=3970748089, strb=15)"];
+  event1 [label="[1] apb4_bus.WRITE_RESPONSE\nqueued_memory.apb → random_source.apb\nWRITE_RESPONSE(key=None, error=False)"];
+  event2 [label="[2] apb4_bus.READ\nrandom_source.apb → queued_memory.apb\nREAD(key=None, addr=4100, prot=1)"];
+  event3 [label="[3] apb4_bus.READ_RESPONSE\nqueued_memory.apb → random_source.apb\nREAD_RESPONSE(key=None, data=3970748089, error=False)"];
+  event0 -> event1;
+  event2 -> event3;
+}

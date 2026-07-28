@@ -3,7 +3,7 @@
   "demo": "axi4",
   "source": "showcase/demos/axi4/run.py",
   "command": "python3 showcase/demos/axi4/run.py",
-  "protocol_model_version": "0.3.0",
+  "protocol_model_version": "0.4.0",
   "catalog_modules": [
     "cases.lifecycle",
     "cases.geometry",
@@ -12,7 +12,7 @@
     "cases.exclusive_profile"
   ],
   "execution_models": [
-    "LinkSession",
+    "InterfaceSession",
     "Axi4ObservationSession"
   ],
   "case_count": 24,

@@ -11,9 +11,9 @@
     "zh-CN": "链路交替返回不同 ID，同时分别维护各自的拍数。"
   },
   "execution": {
-    "mode": "link-events",
+    "mode": "interface-events",
     "protocol": "axi4",
-    "model": "LinkSession"
+    "model": "InterfaceSession"
   },
   "presentation": {
     "level": "catalog",
@@ -247,12 +247,12 @@
       "axi4.write.pending_descriptors": 0
     },
     "final": {
-      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
       "axi4.write.pending_descriptors": 0,
       "axi4.read.pending_transactions": 0,
+      "axi4.write.pending_completions": 0,
       "axi4.write.assembling_data": 0,
-      "axi4.exclusive.reservations": 0,
-      "axi4.write.pending_data_bursts": 0
+      "axi4.exclusive.reservations": 0
     }
   },
   "fault": null

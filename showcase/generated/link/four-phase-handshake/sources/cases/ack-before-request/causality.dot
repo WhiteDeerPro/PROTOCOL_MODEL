@@ -1,0 +1,14 @@
+digraph four_phase_case {
+  rankdir=TB;
+  label="非法传输：ACK 在 REQ 前出现 · observation-order evidence";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.3, ranksep=0.38, splines=polyline];
+  node [shape=box, style="rounded,filled", fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9, color="#5f7280"];
+  s0 [label="S0 · t=0 ns\n00 idle", fillcolor="#e8f1fb", color="#537a99"];
+  s1 [label="S1 · t=3.1 ns\n01 returning", fillcolor="#fee2e2", color="#537a99"];
+  s0 -> s1 [label="observed next"];
+  fault [shape=octagon, label="showcase.ack-before-request.phase_order\nillegal four-phase transition from idle_00 to REQ=0, ACK=1", fillcolor="#fecaca", color="#b91c1c"];
+  s1 -> fault [label="diagnostic", color="#b91c1c"];
+  note [shape=note, label="Edges above preserve observation order;\nthey are not physical delay or cross-event CausalGraph edges", fillcolor="#fff7d6", color="#b7791f"];
+}

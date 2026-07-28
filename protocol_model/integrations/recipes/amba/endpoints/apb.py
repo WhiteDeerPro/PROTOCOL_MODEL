@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from protocol_model.integrations.attachments.amba.apb import ApbCompleterAttachment
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.virtual_dut.address.space import AddressSpace
 from protocol_model.virtual_dut.boundary.module import VirtualDut
 
@@ -12,7 +12,7 @@ from ._address_space import build_passive_address_space_vdut
 
 def build_apb_address_space_vdut(
     name: str,
-    protocol: LinkProtocol,
+    protocol: InterfaceProtocol,
     address_space: AddressSpace,
     *,
     port_name: str = "apb",

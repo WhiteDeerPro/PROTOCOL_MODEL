@@ -11,9 +11,9 @@
     "zh-CN": "该首拍位于地址 0x3，只有字节通道 3 合法。"
   },
   "execution": {
-    "mode": "link-events",
+    "mode": "interface-events",
     "protocol": "axi4",
-    "model": "LinkSession"
+    "model": "InterfaceSession"
   },
   "presentation": {
     "level": "catalog",
@@ -97,18 +97,18 @@
       "axi4.write.pending_descriptors": 1
     },
     "final": {
-      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
       "axi4.write.pending_descriptors": 1,
       "axi4.read.pending_transactions": 0,
+      "axi4.write.pending_completions": 0,
       "axi4.write.assembling_data": 0,
-      "axi4.exclusive.reservations": 0,
-      "axi4.write.pending_data_bursts": 0
+      "axi4.exclusive.reservations": 0
     }
   },
   "fault": {
     "rule": "axi4.write.byte_lanes",
     "reason": "WSTRB 0x10 asserts lanes outside allowed mask 0x8 at beat 1",
-    "scope": "link",
+    "scope": "interface",
     "location": ""
   }
 }

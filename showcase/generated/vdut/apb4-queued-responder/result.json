@@ -1,0 +1,212 @@
+{
+  "schema": "protocol-model.showcase.vdut-apb4-queued/v1",
+  "seed": 20260717,
+  "system": {
+    "name": "apb4_random_to_queued_memory",
+    "virtual_duts": [
+      "queued_memory",
+      "random_source"
+    ],
+    "link": "apb4_bus",
+    "protocol": "apb4"
+  },
+  "integration_result": {
+    "virtual_dut": "queued_memory",
+    "port": "apb",
+    "attachment": "ApbCompleterAttachment",
+    "backend": "QueuedAddressResponderBackend",
+    "realization": "constructed",
+    "fifo_capacity": 2,
+    "handler": "AddressSpace(MemoryRegion)",
+    "visible_components": [
+      {
+        "kind": "port",
+        "label": "apb\ninterface port"
+      },
+      {
+        "kind": "attachment",
+        "label": "address completer\nattachment"
+      },
+      {
+        "kind": "storage",
+        "label": "complete-request FIFO"
+      },
+      {
+        "kind": "control",
+        "label": "delay / service controller"
+      },
+      {
+        "kind": "behavior",
+        "label": "address access handler"
+      }
+    ]
+  },
+  "steps": [
+    {
+      "label": "S0 initial",
+      "action": "none",
+      "fault": null,
+      "emissions": [],
+      "target": {
+        "fifo_occupancy": 0,
+        "fifo_capacity": 2,
+        "head_phase": "empty",
+        "head_remaining_delay": null,
+        "advance_index": 0,
+        "quiescent": true
+      }
+    },
+    {
+      "label": "S1 random WRITE",
+      "action": "generate WRITE",
+      "fault": null,
+      "emissions": [
+        {
+          "index": 0,
+          "link": "apb4_bus",
+          "event_kind": "WRITE",
+          "source": "random_source.apb",
+          "destination": "queued_memory.apb",
+          "event": {
+            "kind": "WRITE",
+            "payload": {
+              "addr": 4100,
+              "prot": 4,
+              "data": 3970748089,
+              "strb": 15
+            },
+            "trace_index": 0
+          }
+        }
+      ],
+      "target": {
+        "fifo_occupancy": 1,
+        "fifo_capacity": 2,
+        "head_phase": "delaying",
+        "head_remaining_delay": 2,
+        "advance_index": 0,
+        "quiescent": false
+      }
+    },
+    {
+      "label": "S2 write waits",
+      "action": "advance #1",
+      "fault": null,
+      "emissions": [],
+      "target": {
+        "fifo_occupancy": 1,
+        "fifo_capacity": 2,
+        "head_phase": "delaying",
+        "head_remaining_delay": 1,
+        "advance_index": 1,
+        "quiescent": false
+      }
+    },
+    {
+      "label": "S3 write completes",
+      "action": "advance #2",
+      "fault": null,
+      "emissions": [
+        {
+          "index": 1,
+          "link": "apb4_bus",
+          "event_kind": "WRITE_RESPONSE",
+          "source": "queued_memory.apb",
+          "destination": "random_source.apb",
+          "event": {
+            "kind": "WRITE_RESPONSE",
+            "payload": {
+              "error": false
+            },
+            "trace_index": 1
+          }
+        }
+      ],
+      "target": {
+        "fifo_occupancy": 0,
+        "fifo_capacity": 2,
+        "head_phase": "empty",
+        "head_remaining_delay": null,
+        "advance_index": 2,
+        "quiescent": true
+      }
+    },
+    {
+      "label": "S4 random READ",
+      "action": "generate READ",
+      "fault": null,
+      "emissions": [
+        {
+          "index": 2,
+          "link": "apb4_bus",
+          "event_kind": "READ",
+          "source": "random_source.apb",
+          "destination": "queued_memory.apb",
+          "event": {
+            "kind": "READ",
+            "payload": {
+              "addr": 4100,
+              "prot": 1
+            },
+            "trace_index": 2
+          }
+        }
+      ],
+      "target": {
+        "fifo_occupancy": 1,
+        "fifo_capacity": 2,
+        "head_phase": "delaying",
+        "head_remaining_delay": 1,
+        "advance_index": 2,
+        "quiescent": false
+      }
+    },
+    {
+      "label": "S5 read completes",
+      "action": "advance #3",
+      "fault": null,
+      "emissions": [
+        {
+          "index": 3,
+          "link": "apb4_bus",
+          "event_kind": "READ_RESPONSE",
+          "source": "queued_memory.apb",
+          "destination": "random_source.apb",
+          "event": {
+            "kind": "READ_RESPONSE",
+            "payload": {
+              "data": 3970748089,
+              "error": false
+            },
+            "trace_index": 3
+          }
+        }
+      ],
+      "target": {
+        "fifo_occupancy": 0,
+        "fifo_capacity": 2,
+        "head_phase": "empty",
+        "head_remaining_delay": null,
+        "advance_index": 3,
+        "quiescent": true
+      }
+    }
+  ],
+  "assertions": {
+    "fault_free": true,
+    "readback_matches_random_write": true,
+    "random_write_data": 3970748089,
+    "readback_data": 3970748089,
+    "final_quiescent": true
+  },
+  "causal_edges": [
+    [
+      0,
+      1
+    ],
+    [
+      2,
+      3
+    ]
+  ]
+}

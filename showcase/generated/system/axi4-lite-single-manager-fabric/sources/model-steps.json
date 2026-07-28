@@ -1,0 +1,176 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP · not clock",
+      "wave": "========",
+      "data": [
+        "S0",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7"
+      ]
+    },
+    [
+      "scenario",
+      {
+        "name": "injected event",
+        "wave": "========",
+        "data": [
+          "W control=0x11223344",
+          "AW 0x1000",
+          "AR 0x1000",
+          "AR 0x2000",
+          "AW 0x4000",
+          "W memory=0xdeadbeef",
+          "AR 0x4000",
+          "AR 0x3000"
+        ]
+      },
+      {
+        "name": "manager response",
+        "wave": "========",
+        "data": [
+          "—",
+          "B OKAY",
+          "R OKAY 0x11223344",
+          "R OKAY 0xa5a50001",
+          "—",
+          "B OKAY",
+          "R OKAY 0xdeadbeef",
+          "R DECERR 0x00000000"
+        ]
+      }
+    ],
+    [
+      "accepted interface events",
+      {
+        "name": "manager ↔ fabric",
+        "wave": "========",
+        "data": [
+          "e0 W=0x11223344",
+          "e1 AW@0x1000 · e5 B OKAY",
+          "e6 AR@0x1000 · e9 R OKAY 0x11223344",
+          "e10 AR@0x2000 · e13 R OKAY 0xa5a50001",
+          "e14 AW@0x4000",
+          "e15 W=0xdeadbeef · e19 B OKAY",
+          "e20 AR@0x4000 · e23 R OKAY 0xdeadbeef",
+          "e24 AR@0x3000 · e25 R DECERR 0x00000000"
+        ]
+      },
+      {
+        "name": "fabric ↔ control",
+        "wave": "========",
+        "data": [
+          "—",
+          "e2 AW@0x0000 · e3 W=0x11223344 · e4 B OKAY",
+          "e7 AR@0x0000 · e8 R OKAY 0x11223344",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "fabric ↔ status",
+        "wave": "========",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "e11 AR@0x0000 · e12 R OKAY 0xa5a50001",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "fabric ↔ memory",
+        "wave": "========",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "e16 AW@0x0000 · e17 W=0xdeadbeef · e18 B OKAY",
+          "e21 AR@0x0000 · e22 R OKAY 0xdeadbeef",
+          "—"
+        ]
+      }
+    ],
+    [
+      "fabric post-state",
+      {
+        "name": "AW join entries",
+        "wave": "========",
+        "data": [
+          "0",
+          "0",
+          "0",
+          "0",
+          "1",
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      {
+        "name": "W join entries",
+        "wave": "========",
+        "data": [
+          "1",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      {
+        "name": "active response owner",
+        "wave": "========",
+        "data": [
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0",
+          "0"
+        ]
+      },
+      {
+        "name": "next fabric request id",
+        "wave": "========",
+        "data": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "3",
+          "4",
+          "5",
+          "5"
+        ]
+      }
+    ]
+  ],
+  "head": {
+    "text": "AXI4-Lite one-manager fabric · route, response mux, DECERR"
+  },
+  "foot": {
+    "text": "1 column = 1 completed SystemSession action · POST-STATE · not ACLK, pin timing, RTL or VCD"
+  },
+  "config": {
+    "hscale": 5
+  }
+}

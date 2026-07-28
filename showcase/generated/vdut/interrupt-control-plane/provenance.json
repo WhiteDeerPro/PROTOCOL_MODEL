@@ -1,0 +1,21 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "interrupt-control-plane",
+  "source": "showcase/demos/vdut/interrupt_control_plane/run.py",
+  "command": ".venv/bin/python showcase/demos/vdut/interrupt_control_plane/run.py",
+  "protocol_model_version": "0.4.0",
+  "execution_models": [
+    "SystemSession",
+    "PriorityInterruptControllerBackend",
+    "ExplicitEoiInterruptTargetBackend",
+    "CaptureBackend notifier boundaries"
+  ],
+  "renderers": {
+    "topology": "Graphviz dot + demo-local fixed topology layout",
+    "controller_structure": "Graphviz dot + shared VirtualDut structure projection",
+    "model_steps": "WaveDrom + model-step state projection",
+    "message_sequence": "Graphviz dot + demo-local SystemTrace MSC projection",
+    "causality": "Graphviz dot + shared SystemTrace projection"
+  },
+  "presentation_boundary": "edge-notification transaction-semantic witness; not an RTL clock waveform, addressable interrupt architecture, GIC, PLIC, APIC, or complete delayed-causality proof"
+}

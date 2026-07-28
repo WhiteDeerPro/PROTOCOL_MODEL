@@ -2,19 +2,20 @@
 
 from __future__ import annotations
 
-from .model import ConstraintEvidence, ProtocolRecord
+from .model import ConstraintRecord, ProtocolRecord
 
 
-def protocol_record_from_link(protocol, *, identity: str | None = None):
+def protocol_record_from_interface(protocol, *, identity: str | None = None):
     return ProtocolRecord(
-        scope="link",
+        scope="interface",
         identity=identity or protocol.name,
         definition=protocol.name,
         parameters=protocol.parameters,
         lineage=protocol.lineage,
         metadata={
+            "interface_family": protocol.interface_family,
             "roles": sorted(protocol.roles),
-            "channels": sorted(protocol.channels),
+            "event_kinds": sorted(protocol.event_kinds),
             "monitors": sorted(protocol.monitors),
             "resources": tuple(
                 {
@@ -39,24 +40,26 @@ def protocol_record_from_system(system):
         parameters={},
         metadata={
             "virtual_duts": sorted(system.virtual_duts),
-            "links": sorted(system.links),
+            "connections": sorted(system.connections),
             "boundary": sorted(system.boundary),
         },
     )
 
 
-def constraints_from_link_protocols(*protocols) -> tuple[ConstraintEvidence, ...]:
+def constraint_records_from_interface_protocols(
+    *protocols,
+) -> tuple[ConstraintRecord, ...]:
     result = []
     for protocol in protocols:
         for constraint in protocol.semantics.constraints:
             result.append(
-                ConstraintEvidence(
+                ConstraintRecord(
                     id=constraint.name,
-                    source="LINK_PROTOCOL",
+                    source="INTERFACE_PROTOCOL",
                     target=", ".join(constraint.targets) or protocol.name,
                     rule=constraint.rule,
                     foundation=constraint.foundation or constraint.kind.value,
-                    status="implemented",
+                    status="declared",
                     instances=(protocol.name,),
                 )
             )

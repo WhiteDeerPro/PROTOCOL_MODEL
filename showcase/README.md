@@ -1,57 +1,49 @@
 # Protocol Model Showcase
 
-本目录是项目的公开展示工作区，但不同内容具有不同生命周期。稳定架构定义仍以
-[`docs/architecture`](../docs/architecture/README.md) 为准，当前实现边界以
-[`implementation-status.md`](../docs/architecture/implementation-status.md) 为准。
+这里汇集可运行的场景与由同一次执行生成的证据。稳定架构定义仍以
+[架构文档](../docs/architecture/README.md)为准；当前支持范围和缺口以
+[实现状态](../docs/architecture/implementation-status.md)为准。
 
-## 三个入口
+## 精选 Gallery
 
-| 入口 | 内容 | 何时修改 |
-|---|---|---|
-| [可直接发布材料](materials/README.md) | 双语 one-pager、deck、launch post、录屏脚本和手工总览图 | 准备网页、帖子、演讲或录屏时 |
-| [统一 AXI4 示例](demos/axi4/README.md) | 场景声明、运行方法，以及同一集合内由概览到重点讲解的入口 | 示例实现或教学导航变化时 |
-| `generated/` | 具名脚本发布的波形、因果图、机器结果、source IR、provenance 和 manifest | 只由对应发布脚本重建 |
+| 场景 | 学习目标 | 可浏览结果 | 重建入口 |
+|---|---|---|---|
+| AXI4 场景集 | 从事务生命周期、字节几何、ordering、observation 与 exclusive/profile 五个主题检查合法和违规输入 | [中文](generated/axi4/README.zh-CN.md) / [English](generated/axi4/README.en.md) | [`demos/axi4/run.py`](demos/axi4/run.py) |
+| CHI 2×2 clean-coherence mesh | 在较小有环拓扑中观察 `ReadUnique`、两路 Snoop、四类 channel 和 clean authority 转移 | [生成证据](generated/system/chi-issue-h-clean-2x2-mesh/README.md) | [`demos/system/chi_issue_h_clean_2x2_mesh/`](demos/system/chi_issue_h_clean_2x2_mesh/README.md) |
+| CHI topology shapes | 比较非均匀环形骨干/星形叶节点与 4×4 mesh，检查 exact route、长路径和最终静止 | [生成证据](generated/system/chi-issue-h-topology-shapes/README.md) | [`demos/system/chi_issue_h_topology_shapes/`](demos/system/chi_issue_h_topology_shapes/README.md) |
 
-宣传稿不定义实现状态，生成结果也不由人工改写。三个入口通过链接协作，不复制逐场景清单或手写第二套统计。
+2×2 clean-coherence 示例的重点是协议事务和状态闭合；4×4 mesh 的重点是构造规模和多跳路径。较大的 mesh
+不会自动覆盖更多 opcode、Retry/error、容量替换策略或 deadlock/fairness 性质。
 
-## 一句话定位
+更多 bridge、fabric、VirtualDut 和异步握手示例见
+[可执行示例目录](demos/README.md)；所有已发布结果按职责列在
+[生成证据目录](generated/README.md)。
 
-> Protocol Model 是一种从基础通信属性逐层构造 LinkProtocol、VirtualDut 和 SystemProtocol，并把构造结果
-> 用于场景生成、约束检查与可解释证据的方法及参考实现。
+## 怎样阅读一份 Showcase
 
-当前更适合称为“通信语义建模与验证研究原型”，而不是 RTL 模拟器、完整 AXI compliance checker，或
-UVM、cocotb、形式化工具的替代品。具体能力和证据限定见
-[当前实现状态](../docs/architecture/implementation-status.md)。
+每份公开场景把以下内容连接到同一次确定性执行：
 
-## 首轮阅读路径
+1. `demos/` 中的输入、装配代码和具名 runner；
+2. 预期与实际 verdict，以及相应的规则或状态断言；
+3. `generated/` 中的拓扑、波形、序列或因果视图；
+4. 机器可读结果、可检查的 DOT/WaveJSON 等 source IR；
+5. `manifest.json` 与 `provenance.json` 中的生成入口和能力边界。
 
-```text
-第一次接触
-    ↓
-双语项目总览 / one-pager
-    ↓
-统一 AXI4 导航：先扫主题和 verdict
-    ↓
-打开任意场景：波形 + 因果图 + 机器结果
-    ↓
-选择同一集合中的重点场景：逐步解释源码与诊断
-    ↓
-继续阅读架构或参与 requirement / scenario 校正
+图是模型执行的投影，不是 raw RTL/VCD 采样。场景通过并不表示完整协议 compliance；场景数也不能换算成
+规范条款覆盖率。
+
+## 源码与生成结果的边界
+
+- `showcase/demos/` 保存场景编排、runner 和展示投影，不重新实现协议规则；
+- `showcase/generated/` 只由拥有相应子树的具名发布脚本重建；
+- 发布脚本保存 SVG 及其 DOT/WaveJSON/JSON 源、manifest 和 provenance；
+- 普通运行写入临时目录或调用方指定的 run root，不隐式改写发布材料；
+- 测试可以执行 Showcase 模型以防止示例腐化，但可复用实现仍属于 `protocol_model/`。
+
+重建统一 AXI4 Gallery：
+
+```bash
+npm ci
+dot -V
+make showcase-axi4
 ```
-
-- [中文版总览 SVG](materials/assets/overview/protocol-model-overview.zh.svg) / [English overview SVG](materials/assets/overview/protocol-model-overview.en.svg)
-- [中文版总览 PNG](materials/assets/overview/protocol-model-overview.zh.png) / [English overview PNG](materials/assets/overview/protocol-model-overview.en.png)
-- [统一 AXI4 示例说明](demos/axi4/README.md)
-- [中文 one-pager](materials/one-pager.zh-CN.md) / [English one-pager](materials/one-pager.en.md)
-
-AXI4 示例共 24 个场景，每个场景都提供模型波形、因果图和机器结果，其中两个场景增加逐步精讲。精讲只改变
-阅读密度，不再作为与场景集合分离的“Quick Start 产品”。场景数量描述当前展示样本，不能直接换算为规范
-条款覆盖率。
-
-## 文件生命周期
-
-- `showcase/materials/`：可直接发布的文字和手工视觉源；
-- `showcase/demos/`：示例声明、runner 与教学导航；
-- `showcase/generated/`：具名发布脚本拥有并显式重建的执行证据；
-- 普通运行使用临时目录、调用方指定目录或默认 `out/`，不隐式改写发布树；
-- 全量回归产物不进入 showcase，也不因一次普通运行改写文档。

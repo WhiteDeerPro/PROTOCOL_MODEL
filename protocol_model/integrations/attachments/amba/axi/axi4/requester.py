@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import CanonicalEvent, ConstraintScope, SemanticFault
 from protocol_model.virtual_dut.address.access import (
     AccessResult,
@@ -57,7 +57,7 @@ class Axi4RequesterAttachment(AddressRequesterAttachment):
 
     def __init__(
         self,
-        protocol: LinkProtocol,
+        protocol: InterfaceProtocol,
         *,
         wire_id: int = 0,
         byte_order: ByteOrder | str = ByteOrder.LITTLE,
@@ -155,7 +155,7 @@ class Axi4RequesterAttachment(AddressRequesterAttachment):
                 return AttachmentEmission(
                     state,
                     fault=self._fault(
-                        "profile", f"AXI4 link profile disables {event.kind}"
+                        "profile", f"AXI4 interface profile disables {event.kind}"
                     ),
                 )
             fault = outgoing_event_fault(

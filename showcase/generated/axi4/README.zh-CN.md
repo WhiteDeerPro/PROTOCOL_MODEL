@@ -14,13 +14,13 @@
 
 | Case | Input view | Expected → observed | Rule | Evidence |
 | --- | --- | --- | --- | --- |
-| `read-single-lifecycle`<br>单拍读事务打开并解除一个义务<br><sub>AR 建立一个待读资源，匹配的末拍 R 将其释放。</sub> | `link-events` | `PASS` → `PASS` | `—` | [wave](cases/read-single-lifecycle/waveform.svg) · [cause](cases/read-single-lifecycle/causality.svg) · [JSON](cases/read-single-lifecycle/result.json) |
-| `read-orphan-response`<br>R 响应必须对应已接受的 AR<br><sub>没有待读请求的响应会在单链路范围内被拒绝。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.read.orphan_beat` | [wave](cases/read-orphan-response/waveform.svg) · [cause](cases/read-orphan-response/causality.svg) · [JSON](cases/read-orphan-response/result.json) |
-| `write-single-lifecycle`<br>AW 与 W 关联后再由 B 完成<br><sub>关联后的写事务占用一个 completion 资源，直到 B 到达。</sub> | `link-events` | `PASS` → `PASS` | `—` | [wave](cases/write-single-lifecycle/waveform.svg) · [cause](cases/write-single-lifecycle/causality.svg) · [JSON](cases/write-single-lifecycle/result.json) |
-| `write-data-before-address`<br>完整 W burst 可以先于 AW 描述符到达<br><sub>无 ID 的 W burst 按 FIFO 顺序等待并关联后续 AW。</sub> | `link-events` | `PASS` → `PASS` | `—` | [wave](cases/write-data-before-address/waveform.svg) · [cause](cases/write-data-before-address/causality.svg) · [JSON](cases/write-data-before-address/result.json) |
+| `read-single-lifecycle`<br>单拍读事务打开并解除一个义务<br><sub>AR 建立一个待读资源，匹配的末拍 R 将其释放。</sub> | `interface-events` | `PASS` → `PASS` | `—` | [wave](cases/read-single-lifecycle/waveform.svg) · [cause](cases/read-single-lifecycle/causality.svg) · [JSON](cases/read-single-lifecycle/result.json) |
+| `read-orphan-response`<br>R 响应必须对应已接受的 AR<br><sub>没有待读请求的响应会在单链路范围内被拒绝。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.read.orphan_beat` | [wave](cases/read-orphan-response/waveform.svg) · [cause](cases/read-orphan-response/causality.svg) · [JSON](cases/read-orphan-response/result.json) |
+| `write-single-lifecycle`<br>AW 与 W 关联后再由 B 完成<br><sub>关联后的写事务占用一个 completion 资源，直到 B 到达。</sub> | `interface-events` | `PASS` → `PASS` | `—` | [wave](cases/write-single-lifecycle/waveform.svg) · [cause](cases/write-single-lifecycle/causality.svg) · [JSON](cases/write-single-lifecycle/result.json) |
+| `write-data-before-address`<br>完整 W burst 可以先于 AW 描述符到达<br><sub>无 ID 的 W burst 按 FIFO 顺序等待并关联后续 AW。</sub> | `interface-events` | `PASS` → `PASS` | `—` | [wave](cases/write-data-before-address/waveform.svg) · [cause](cases/write-data-before-address/causality.svg) · [JSON](cases/write-data-before-address/result.json) |
 | `write-early-wlast` **精讲**<br>WLAST 必须符合最早 AW 声明的拍数<br><sub>AWLEN=3 表示四拍，因此首拍置 WLAST 属于过早结束。</sub> | `atomic-frames` | `FAIL` → `FAIL` | `axi4.write.final_marker` | [wave](cases/write-early-wlast/waveform.svg) · [cause](cases/write-early-wlast/causality.svg) · [JSON](cases/write-early-wlast/result.json) |
-| `write-missing-wlast`<br>最后一拍必需的 W 传输必须置 WLAST<br><sub>单拍 AW 要求唯一的 W 传输同时也是末拍。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.write.final_marker` | [wave](cases/write-missing-wlast/waveform.svg) · [cause](cases/write-missing-wlast/causality.svg) · [JSON](cases/write-missing-wlast/result.json) |
-| `write-wrong-bid`<br>BID 必须标识一笔待完成写事务<br><sub>ID 13 的 B 响应不能完成 ID 12 的已关联写事务。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.exclusive.orphan_write_response` | [wave](cases/write-wrong-bid/waveform.svg) · [cause](cases/write-wrong-bid/causality.svg) · [JSON](cases/write-wrong-bid/result.json) |
+| `write-missing-wlast`<br>最后一拍必需的 W 传输必须置 WLAST<br><sub>单拍 AW 要求唯一的 W 传输同时也是末拍。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.write.final_marker` | [wave](cases/write-missing-wlast/waveform.svg) · [cause](cases/write-missing-wlast/causality.svg) · [JSON](cases/write-missing-wlast/result.json) |
+| `write-wrong-bid`<br>BID 必须标识一笔待完成写事务<br><sub>ID 13 的 B 响应不能完成 ID 12 的已关联写事务。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.exclusive.orphan_write_response` | [wave](cases/write-wrong-bid/waveform.svg) · [cause](cases/write-wrong-bid/causality.svg) · [JSON](cases/write-wrong-bid/result.json) |
 
 <details>
 <summary>查看 `read-single-lifecycle` 的波形与因果图</summary>
@@ -116,13 +116,13 @@
 
 | Case | Input view | Expected → observed | Rule | Evidence |
 | --- | --- | --- | --- | --- |
-| `read-crosses-4kb-boundary`<br>INCR burst 必须位于同一个 4KB 区域<br><sub>从 0xFFC 开始的两个四字节传输会跨越该边界。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.link_session.AR.event_schema` | [wave](cases/read-crosses-4kb-boundary/waveform.svg) · [cause](cases/read-crosses-4kb-boundary/causality.svg) · [JSON](cases/read-crosses-4kb-boundary/result.json) |
+| `read-crosses-4kb-boundary`<br>INCR burst 必须位于同一个 4KB 区域<br><sub>从 0xFFC 开始的两个四字节传输会跨越该边界。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.interface_session.AR.event_schema` | [wave](cases/read-crosses-4kb-boundary/waveform.svg) · [cause](cases/read-crosses-4kb-boundary/causality.svg) · [JSON](cases/read-crosses-4kb-boundary/result.json) |
 | `write-narrow-unaligned-incr` **精讲**<br>窄位宽非对齐传输轮换合法字节通道<br><sub>四拍合法 WSTRB 由 AW 几何信息派生。</sub> | `atomic-frames` | `PASS` → `PASS` | `—` | [wave](cases/write-narrow-unaligned-incr/waveform.svg) · [cause](cases/write-narrow-unaligned-incr/causality.svg) · [JSON](cases/write-narrow-unaligned-incr/result.json) |
-| `write-strobe-outside-lanes`<br>WSTRB 不得选择传输容器之外的字节<br><sub>该首拍位于地址 0x3，只有字节通道 3 合法。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.write.byte_lanes` | [wave](cases/write-strobe-outside-lanes/waveform.svg) · [cause](cases/write-strobe-outside-lanes/causality.svg) · [JSON](cases/write-strobe-outside-lanes/result.json) |
-| `read-wrap-four-legal`<br>四拍 WRAP burst 在自身窗口内回绕<br><sub>从 0x2C 开始的四拍传输会在 0x20–0x2F 窗口内合法回绕。</sub> | `link-events` | `PASS` → `PASS` | `—` | [wave](cases/read-wrap-four-legal/waveform.svg) · [cause](cases/read-wrap-four-legal/causality.svg) · [JSON](cases/read-wrap-four-legal/result.json) |
-| `read-wrap-three-illegal`<br>WRAP 必须使用协议允许的传输拍数<br><sub>三拍不是 AXI4 允许的 WRAP 长度。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.link_session.AR.event_schema` | [wave](cases/read-wrap-three-illegal/waveform.svg) · [cause](cases/read-wrap-three-illegal/causality.svg) · [JSON](cases/read-wrap-three-illegal/result.json) |
-| `read-fixed-sixteen-legal`<br>FIXED 允许在同一地址容器上传输十六拍<br><sub>即使位于 0xFFF，每一拍仍复用同一个页内传输容器。</sub> | `link-events` | `PASS` → `PASS` | `—` | [wave](cases/read-fixed-sixteen-legal/waveform.svg) · [cause](cases/read-fixed-sixteen-legal/causality.svg) · [JSON](cases/read-fixed-sixteen-legal/result.json) |
-| `read-fixed-seventeen-illegal`<br>FIXED 长度不超过十六拍<br><sub>AxLEN=16 表示十七拍，因此不适用于 FIXED。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.link_session.AR.event_schema` | [wave](cases/read-fixed-seventeen-illegal/waveform.svg) · [cause](cases/read-fixed-seventeen-illegal/causality.svg) · [JSON](cases/read-fixed-seventeen-illegal/result.json) |
+| `write-strobe-outside-lanes`<br>WSTRB 不得选择传输容器之外的字节<br><sub>该首拍位于地址 0x3，只有字节通道 3 合法。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.write.byte_lanes` | [wave](cases/write-strobe-outside-lanes/waveform.svg) · [cause](cases/write-strobe-outside-lanes/causality.svg) · [JSON](cases/write-strobe-outside-lanes/result.json) |
+| `read-wrap-four-legal`<br>四拍 WRAP burst 在自身窗口内回绕<br><sub>从 0x2C 开始的四拍传输会在 0x20–0x2F 窗口内合法回绕。</sub> | `interface-events` | `PASS` → `PASS` | `—` | [wave](cases/read-wrap-four-legal/waveform.svg) · [cause](cases/read-wrap-four-legal/causality.svg) · [JSON](cases/read-wrap-four-legal/result.json) |
+| `read-wrap-three-illegal`<br>WRAP 必须使用协议允许的传输拍数<br><sub>三拍不是 AXI4 允许的 WRAP 长度。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.interface_session.AR.event_schema` | [wave](cases/read-wrap-three-illegal/waveform.svg) · [cause](cases/read-wrap-three-illegal/causality.svg) · [JSON](cases/read-wrap-three-illegal/result.json) |
+| `read-fixed-sixteen-legal`<br>FIXED 允许在同一地址容器上传输十六拍<br><sub>即使位于 0xFFF，每一拍仍复用同一个页内传输容器。</sub> | `interface-events` | `PASS` → `PASS` | `—` | [wave](cases/read-fixed-sixteen-legal/waveform.svg) · [cause](cases/read-fixed-sixteen-legal/causality.svg) · [JSON](cases/read-fixed-sixteen-legal/result.json) |
+| `read-fixed-seventeen-illegal`<br>FIXED 长度不超过十六拍<br><sub>AxLEN=16 表示十七拍，因此不适用于 FIXED。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.interface_session.AR.event_schema` | [wave](cases/read-fixed-seventeen-illegal/waveform.svg) · [cause](cases/read-fixed-seventeen-illegal/causality.svg) · [JSON](cases/read-fixed-seventeen-illegal/result.json) |
 
 <details>
 <summary>查看 `read-crosses-4kb-boundary` 的波形与因果图</summary>
@@ -218,9 +218,9 @@
 
 | Case | Input view | Expected → observed | Rule | Evidence |
 | --- | --- | --- | --- | --- |
-| `read-cross-id-interleave`<br>不同 ID 的读响应可以交织<br><sub>链路交替返回不同 ID，同时分别维护各自的拍数。</sub> | `link-events` | `PASS` → `PASS` | `—` | [wave](cases/read-cross-id-interleave/waveform.svg) · [cause](cases/read-cross-id-interleave/causality.svg) · [JSON](cases/read-cross-id-interleave/result.json) |
-| `read-same-id-later-cannot-overtake`<br>同 ID 的最早读请求优先消费响应<br><sub>面向后一笔单拍读的末拍，对最早的两拍读而言属于过早结束。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.read.final_marker` | [wave](cases/read-same-id-later-cannot-overtake/waveform.svg) · [cause](cases/read-same-id-later-cannot-overtake/causality.svg) · [JSON](cases/read-same-id-later-cannot-overtake/result.json) |
-| `write-multiple-outstanding-reverse-b`<br>不同写 ID 可以按请求的逆序完成<br><sub>W 仍按 FIFO 与 AW 关联，而 B 可以按 ID 选择待完成写事务。</sub> | `link-events` | `PASS` → `PASS` | `—` | [wave](cases/write-multiple-outstanding-reverse-b/waveform.svg) · [cause](cases/write-multiple-outstanding-reverse-b/causality.svg) · [JSON](cases/write-multiple-outstanding-reverse-b/result.json) |
+| `read-cross-id-interleave`<br>不同 ID 的读响应可以交织<br><sub>链路交替返回不同 ID，同时分别维护各自的拍数。</sub> | `interface-events` | `PASS` → `PASS` | `—` | [wave](cases/read-cross-id-interleave/waveform.svg) · [cause](cases/read-cross-id-interleave/causality.svg) · [JSON](cases/read-cross-id-interleave/result.json) |
+| `read-same-id-later-cannot-overtake`<br>同 ID 的最早读请求优先消费响应<br><sub>面向后一笔单拍读的末拍，对最早的两拍读而言属于过早结束。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.read.final_marker` | [wave](cases/read-same-id-later-cannot-overtake/waveform.svg) · [cause](cases/read-same-id-later-cannot-overtake/causality.svg) · [JSON](cases/read-same-id-later-cannot-overtake/result.json) |
+| `write-multiple-outstanding-reverse-b`<br>不同写 ID 可以按请求的逆序完成<br><sub>W 仍按 FIFO 与 AW 关联，而 B 可以按 ID 选择待完成写事务。</sub> | `interface-events` | `PASS` → `PASS` | `—` | [wave](cases/write-multiple-outstanding-reverse-b/waveform.svg) · [cause](cases/write-multiple-outstanding-reverse-b/causality.svg) · [JSON](cases/write-multiple-outstanding-reverse-b/result.json) |
 
 <details>
 <summary>查看 `read-cross-id-interleave` 的波形与因果图</summary>
@@ -340,9 +340,9 @@
 
 | Case | Input view | Expected → observed | Rule | Evidence |
 | --- | --- | --- | --- | --- |
-| `exclusive-matching-exokay`<br>匹配的链路内独占序列可以成功<br><sub>已完成的独占读使一笔匹配写事务具备返回 EXOKAY 的资格。</sub> | `link-events` | `PASS` → `PASS` | `—` | [wave](cases/exclusive-matching-exokay/waveform.svg) · [cause](cases/exclusive-matching-exokay/causality.svg) · [JSON](cases/exclusive-matching-exokay/result.json) |
-| `profile-bounded-read-capacity`<br>细化 profile 可以限制 outstanding read<br><sub>在容量配置为一时，第二个 AR 超限并被回滚。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4_one_read.axi4.read.pending_transactions.capacity` | [wave](cases/profile-bounded-read-capacity/waveform.svg) · [cause](cases/profile-bounded-read-capacity/causality.svg) · [JSON](cases/profile-bounded-read-capacity/result.json) |
-| `exclusive-unmatched-success`<br>EXOKAY 要求存在匹配且已完成的独占读<br><sub>没有 reservation 的独占写可以完成，但不能返回 EXOKAY。</sub> | `link-events` | `FAIL` → `FAIL` | `axi4.exclusive.unmatched_success` | [wave](cases/exclusive-unmatched-success/waveform.svg) · [cause](cases/exclusive-unmatched-success/causality.svg) · [JSON](cases/exclusive-unmatched-success/result.json) |
+| `exclusive-matching-exokay`<br>匹配的链路内独占序列可以成功<br><sub>已完成的独占读使一笔匹配写事务具备返回 EXOKAY 的资格。</sub> | `interface-events` | `PASS` → `PASS` | `—` | [wave](cases/exclusive-matching-exokay/waveform.svg) · [cause](cases/exclusive-matching-exokay/causality.svg) · [JSON](cases/exclusive-matching-exokay/result.json) |
+| `profile-bounded-read-capacity`<br>细化 profile 可以限制 outstanding read<br><sub>在容量配置为一时，第二个 AR 超限并被回滚。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4_one_read.axi4.read.pending_transactions.capacity` | [wave](cases/profile-bounded-read-capacity/waveform.svg) · [cause](cases/profile-bounded-read-capacity/causality.svg) · [JSON](cases/profile-bounded-read-capacity/result.json) |
+| `exclusive-unmatched-success`<br>EXOKAY 要求存在匹配且已完成的独占读<br><sub>没有 reservation 的独占写可以完成，但不能返回 EXOKAY。</sub> | `interface-events` | `FAIL` → `FAIL` | `axi4.exclusive.unmatched_success` | [wave](cases/exclusive-unmatched-success/waveform.svg) · [cause](cases/exclusive-unmatched-success/causality.svg) · [JSON](cases/exclusive-unmatched-success/result.json) |
 
 <details>
 <summary>查看 `exclusive-matching-exokay` 的波形与因果图</summary>

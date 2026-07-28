@@ -1,6 +1,18 @@
-"""VirtualDut recipes whose exposed ports use AMBA link families."""
+"""VirtualDut recipes whose exposed ports use AMBA interface families."""
 
+from .chi import (
+    ChiIssueHCacheVdutAssembly,
+    ChiIssueHHomeVdutAssembly,
+    attach_chi_issue_h_coherence,
+    attach_chi_issue_h_home,
+    bind_chi_issue_h_cache_vdut,
+    bind_chi_issue_h_home_vdut,
+    build_chi_issue_h_cache_vdut,
+)
 from .endpoints import (
+    build_amba_queued_address_responder_vdut,
+    build_amba_sensor_fifo_vdut,
+    build_amba_serialized_memory_copy_vdut,
     build_ahb_address_space_vdut,
     build_ahb_blackhole_sink_vdut,
     build_ahb_idle_source_vdut,
@@ -14,17 +26,42 @@ from .endpoints import (
     build_axi4_stream_capture_vdut,
 )
 from .fabrics import (
+    Axi4BurstAssemblyProfile,
+    Axi4ReadRouteTableProfile,
+    Axi4WriteRouteTableProfile,
     build_ahb_address_fabric_vdut,
     build_apb_address_fabric_vdut,
+    build_axi4_read_crossbar_vdut,
+    build_axi4_read_demux_vdut,
+    build_axi4_write_crossbar_vdut,
+    build_axi4_lite_address_crossbar_vdut,
     build_axi4_lite_address_fabric_vdut,
 )
 from .bridges import (
-    Axi4ToApbBridgeProfile,
+    build_amba_serial_bridge_vdut,
+    build_amba_serial_address_bridge_vdut,
+    build_amba_serial_burst_bridge_vdut,
     build_axi4_lite_to_apb_bridge_vdut,
+    build_axi4_to_ahb_lite_bridge_vdut,
     build_axi4_to_apb_bridge_vdut,
 )
 
 __all__ = [
+    "Axi4BurstAssemblyProfile",
+    "Axi4ReadRouteTableProfile",
+    "Axi4WriteRouteTableProfile",
+    "ChiIssueHCacheVdutAssembly",
+    "ChiIssueHHomeVdutAssembly",
+    "attach_chi_issue_h_coherence",
+    "attach_chi_issue_h_home",
+    "bind_chi_issue_h_cache_vdut",
+    "bind_chi_issue_h_home_vdut",
+    "build_amba_queued_address_responder_vdut",
+    "build_amba_sensor_fifo_vdut",
+    "build_amba_serialized_memory_copy_vdut",
+    "build_amba_serial_bridge_vdut",
+    "build_amba_serial_address_bridge_vdut",
+    "build_amba_serial_burst_bridge_vdut",
     "build_ahb_address_fabric_vdut",
     "build_ahb_address_space_vdut",
     "build_ahb_blackhole_sink_vdut",
@@ -33,13 +70,18 @@ __all__ = [
     "build_apb_address_space_vdut",
     "build_apb_blackhole_sink_vdut",
     "build_apb_idle_source_vdut",
+    "build_axi4_read_crossbar_vdut",
+    "build_axi4_read_demux_vdut",
+    "build_axi4_write_crossbar_vdut",
     "build_axi4_address_space_vdut",
     "build_axi4_blackhole_sink_vdut",
     "build_axi4_idle_source_vdut",
+    "build_axi4_lite_address_crossbar_vdut",
     "build_axi4_lite_address_fabric_vdut",
     "build_axi4_lite_address_space_vdut",
     "build_axi4_lite_to_apb_bridge_vdut",
+    "build_axi4_to_ahb_lite_bridge_vdut",
     "build_axi4_to_apb_bridge_vdut",
     "build_axi4_stream_capture_vdut",
-    "Axi4ToApbBridgeProfile",
+    "build_chi_issue_h_cache_vdut",
 ]

@@ -81,7 +81,7 @@
         "en": "Single read opens and discharges one obligation",
         "zh-CN": "单拍读事务打开并解除一个义务"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "PASS",
       "observed": "PASS",
@@ -99,7 +99,7 @@
         "en": "An R response requires a pending AR",
         "zh-CN": "R 响应必须对应已接受的 AR"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",
@@ -117,7 +117,7 @@
         "en": "AW and W join before B completion",
         "zh-CN": "AW 与 W 关联后再由 B 完成"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "PASS",
       "observed": "PASS",
@@ -135,7 +135,7 @@
         "en": "A complete W burst may precede its AW descriptor",
         "zh-CN": "完整 W burst 可以先于 AW 描述符到达"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "PASS",
       "observed": "PASS",
@@ -171,7 +171,7 @@
         "en": "The final required W transfer asserts WLAST",
         "zh-CN": "最后一拍必需的 W 传输必须置 WLAST"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",
@@ -189,7 +189,7 @@
         "en": "BID identifies a pending write context",
         "zh-CN": "BID 必须标识一笔待完成写事务"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",
@@ -207,11 +207,11 @@
         "en": "An INCR burst stays within one 4KB region",
         "zh-CN": "INCR burst 必须位于同一个 4KB 区域"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",
-      "rule": "axi4.link_session.AR.event_schema",
+      "rule": "axi4.interface_session.AR.event_schema",
       "expectation": "MET",
       "result": "cases/read-crosses-4kb-boundary/result.json",
       "waveform": "cases/read-crosses-4kb-boundary/waveform.svg",
@@ -243,7 +243,7 @@
         "en": "WSTRB cannot select bytes outside the transfer container",
         "zh-CN": "WSTRB 不得选择传输容器之外的字节"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",
@@ -261,7 +261,7 @@
         "en": "A four-transfer WRAP burst rotates inside its wrap window",
         "zh-CN": "四拍 WRAP burst 在自身窗口内回绕"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "PASS",
       "observed": "PASS",
@@ -279,11 +279,11 @@
         "en": "WRAP uses one of the protocol's permitted transfer counts",
         "zh-CN": "WRAP 必须使用协议允许的传输拍数"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",
-      "rule": "axi4.link_session.AR.event_schema",
+      "rule": "axi4.interface_session.AR.event_schema",
       "expectation": "MET",
       "result": "cases/read-wrap-three-illegal/result.json",
       "waveform": "cases/read-wrap-three-illegal/waveform.svg",
@@ -297,7 +297,7 @@
         "en": "FIXED permits sixteen transfers at one address container",
         "zh-CN": "FIXED 允许在同一地址容器上传输十六拍"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "PASS",
       "observed": "PASS",
@@ -315,11 +315,11 @@
         "en": "FIXED length does not exceed sixteen transfers",
         "zh-CN": "FIXED 长度不超过十六拍"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",
-      "rule": "axi4.link_session.AR.event_schema",
+      "rule": "axi4.interface_session.AR.event_schema",
       "expectation": "MET",
       "result": "cases/read-fixed-seventeen-illegal/result.json",
       "waveform": "cases/read-fixed-seventeen-illegal/waveform.svg",
@@ -333,7 +333,7 @@
         "en": "Responses for different IDs may interleave",
         "zh-CN": "不同 ID 的读响应可以交织"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "PASS",
       "observed": "PASS",
@@ -351,7 +351,7 @@
         "en": "The oldest same-ID read consumes responses first",
         "zh-CN": "同 ID 的最早读请求优先消费响应"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",
@@ -369,7 +369,7 @@
         "en": "Different write IDs may complete in reverse request order",
         "zh-CN": "不同写 ID 可以按请求的逆序完成"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "PASS",
       "observed": "PASS",
@@ -459,7 +459,7 @@
         "en": "A matching link-local exclusive sequence may succeed",
         "zh-CN": "匹配的链路内独占序列可以成功"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "PASS",
       "observed": "PASS",
@@ -477,7 +477,7 @@
         "en": "A refined profile can bound outstanding reads",
         "zh-CN": "细化 profile 可以限制 outstanding read"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4_one_read",
       "expected": "FAIL",
       "observed": "FAIL",
@@ -495,7 +495,7 @@
         "en": "EXOKAY requires a matching completed exclusive read",
         "zh-CN": "EXOKAY 要求存在匹配且已完成的独占读"
       },
-      "mode": "link-events",
+      "mode": "interface-events",
       "protocol": "axi4",
       "expected": "FAIL",
       "observed": "FAIL",

@@ -9,7 +9,7 @@ from typing import Hashable, Mapping
 
 from protocol_model.semantics import CanonicalEvent, SemanticFault
 
-from .base import AttachmentEmission, ProtocolAttachment
+from .base import AttachmentEmission, InterfaceAttachment
 
 
 @dataclass(frozen=True)
@@ -73,7 +73,7 @@ class StreamTransferDecode:
     fault: SemanticFault | None = None
 
 
-class StreamReceiverAttachment(ProtocolAttachment, ABC):
+class StreamReceiverAttachment(InterfaceAttachment, ABC):
     """Decode incoming protocol events into accepted stream transfers."""
 
     @abstractmethod
@@ -83,8 +83,8 @@ class StreamReceiverAttachment(ProtocolAttachment, ABC):
         raise NotImplementedError
 
 
-class StreamTransmitterAttachment(ProtocolAttachment, ABC):
-    """Encode stream transfers emitted by a backend onto one protocol port."""
+class StreamTransmitterAttachment(InterfaceAttachment, ABC):
+    """Encode stream transfers emitted by a backend onto one interface port."""
 
     @abstractmethod
     def encode_transfer(

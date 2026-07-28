@@ -1,0 +1,22 @@
+digraph system_bus_strip {
+  rankdir=TB;
+  label="AXI4-Lite · one manager / three subordinate bus view";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.28, nodesep=0.48, ranksep=0.66, splines=polyline];
+  node [fontname="sans-serif", fontsize=10, shape=box, style="rounded,filled", fillcolor="#ffffff"];
+  edge [fontname="sans-serif", fontsize=8, color="#52606d", penwidth=1.3];
+  bus [shape=plain, label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="0">
+    <TR><TD PORT="tap0" WIDTH="150" HEIGHT="14" BGCOLOR="#2563eb"></TD><TD PORT="tap1" WIDTH="150" HEIGHT="14" BGCOLOR="#2563eb"></TD><TD PORT="tap2" WIDTH="150" HEIGHT="14" BGCOLOR="#2563eb"></TD><TD PORT="tap3" WIDTH="150" HEIGHT="14" BGCOLOR="#2563eb"></TD></TR>
+    <TR><TD COLSPAN="4" CELLPADDING="5"><B>axi4_lite</B> · folded bus-strip view<BR/><FONT POINT-SIZE="9">fabric · decoder + response mux</FONT></TD></TR>
+  </TABLE>>];
+  endpoint0 [fillcolor="#eff6ff", color="#2563eb", label="manager\naxi · manager"];
+  endpoint0 -> bus:tap0:n [dir=both, arrowhead=normal, arrowtail=normal, label="upstream"];
+  endpoint1 [fillcolor="#ecfdf5", color="#059669", label="control\naxi · subordinate"];
+  bus:tap1:s -> endpoint1 [dir=both, arrowhead=normal, arrowtail=normal, label="control\n0x1000..0x1003"];
+  endpoint2 [fillcolor="#ecfdf5", color="#059669", label="status\naxi · subordinate"];
+  bus:tap2:s -> endpoint2 [dir=both, arrowhead=normal, arrowtail=normal, label="status\n0x2000..0x2003"];
+  endpoint3 [fillcolor="#ecfdf5", color="#059669", label="memory\naxi · subordinate"];
+  bus:tap3:s -> endpoint3 [dir=both, arrowhead=normal, arrowtail=normal, label="memory\n0x4000..0x40ff"];
+  { rank=source; endpoint0; }
+  { rank=sink; endpoint1; endpoint2; endpoint3; }
+}

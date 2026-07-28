@@ -1,249 +1,61 @@
-"""Composable communication semantics from link rules to system protocols."""
+"""Conceptual entry points for the Protocol Model package.
 
-__version__ = "0.3.0"
+The package root is an orientation facade, not the ownership location of the
+full API.  Import detailed declarations, policies, state, and construction
+recipes from their named packages.  The four concepts below remain available
+as lazy anchors so that importing :mod:`protocol_model` does not load every
+protocol family and integration recipe.
+"""
 
-from .link import (
-    ChannelProtocol,
-    EventField,
-    EventSchema,
-    LinkProtocol,
-    LinkSession,
-    LinkSessionState,
-    LinkTrace,
-)
-from .integrations.recipes.amba import (
-    Axi4ToApbBridgeProfile,
-    build_ahb_address_fabric_vdut,
-    build_ahb_address_space_vdut,
-    build_ahb_blackhole_sink_vdut,
-    build_ahb_idle_source_vdut,
-    build_apb_address_fabric_vdut,
-    build_apb_address_space_vdut,
-    build_apb_blackhole_sink_vdut,
-    build_apb_idle_source_vdut,
-    build_axi4_blackhole_sink_vdut,
-    build_axi4_address_space_vdut,
-    build_axi4_idle_source_vdut,
-    build_axi4_lite_address_fabric_vdut,
-    build_axi4_lite_address_space_vdut,
-    build_axi4_lite_to_apb_bridge_vdut,
-    build_axi4_to_apb_bridge_vdut,
-    build_axi4_stream_capture_vdut,
-)
-from .observation import (
-    AtomicFrame,
-    ReadyValidObserver,
-    ReadyValidSignals,
-    ReadyValidState,
-    ResetEpochObserver,
-    ResetEpochState,
-)
-from .patterns import (
-    BurstAssembler,
-    BurstAssemblerState,
-    BurstToken,
-    CardinalityMonitor,
-    CardinalityState,
-    CardinalityToken,
-    CompletionLedger,
-    CompletionLedgerState,
-    DescriptorToken,
-    FifoJoin,
-    FifoJoinState,
-    ForbiddenEventMonitor,
-    InOrderCompletionMonitor,
-    InOrderState,
-    InOrderToken,
-    JoinedToken,
-    QuietConstraint,
-    QuietMode,
-    QuietState,
-)
-from .semantics import (
-    BitVectorDomain,
-    CanonicalEvent,
-    CausalGraph,
-    ConstantDomain,
-    ConstraintKind,
-    ConstraintScope,
-    EnumDomain,
-    EventConstraint,
-    EventOffer,
-    IntDomain,
-    NaturalDomain,
-    ObligationDecl,
-    PartialOrderViolation,
-    ResourceDecl,
-    SemanticComponent,
-    SemanticConstraint,
-    SemanticFault,
-    SemanticFragment,
-    SemanticRun,
-    SemanticStep,
-    Verdict,
-    compose_fragments,
-)
-from .system import (
-    ElaboratedSystemProtocol,
-    ProtocolLink,
-    SystemAction,
-    SystemEvent,
-    SystemProtocol,
-    SystemSession,
-    SystemSessionState,
-    SystemTrace,
-    VirtualDutPortRef,
-)
-from .virtual_dut import (
-    AccessResult,
-    AccessStatus,
-    AddressAccess,
-    AddressRead,
-    AddressRoute,
-    AddressSpace,
-    AddressSpaceState,
-    AddressStep,
-    AddressWrite,
-    ByteOrder,
-    CaptureModel,
-    CaptureState,
-    DutEffect,
-    DutFacet,
-    DutTransition,
-    FunctionModel,
-    FunctionModelState,
-    MemoryRegion,
-    MemoryRegionState,
-    NoOpModel,
-    PortEmission,
-    PortAttachmentBinding,
-    PortInput,
-    ProtocolPort,
-    RegisterPermission,
-    RegisterRegion,
-    RegisterRegionState,
-    RegisterSpec,
-    StreamTransfer,
-    VirtualDut,
-    VirtualDutBuilder,
-    VirtualDutModel,
-    build_blackhole_sink_vdut,
-    build_idle_source_vdut,
-)
+from __future__ import annotations
+
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
+
+
+__version__ = "0.4.0"
+
+
+_PUBLIC_ANCHORS = {
+    "CanonicalEvent": (".semantics", "CanonicalEvent"),
+    "InterfaceProtocol": (".interface", "InterfaceProtocol"),
+    "VirtualDut": (".virtual_dut.boundary", "VirtualDut"),
+    "SystemProtocol": (".system", "SystemProtocol"),
+}
+
+
+if TYPE_CHECKING:
+    from .interface import InterfaceProtocol
+    from .semantics import CanonicalEvent
+    from .system import SystemProtocol
+    from .virtual_dut.boundary import VirtualDut
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve a conceptual anchor on first use and cache it locally."""
+
+    try:
+        module_name, attribute_name = _PUBLIC_ANCHORS[name]
+    except KeyError as error:
+        raise AttributeError(
+            f"module {__name__!r} has no attribute {name!r}"
+        ) from error
+
+    value = getattr(import_module(module_name, __name__), attribute_name)
+    globals()[name] = value
+    return value
+
+
+def __dir__() -> list[str]:
+    """Expose lazy anchors to interactive discovery tools."""
+
+    return sorted(set(globals()) | set(_PUBLIC_ANCHORS))
+
 
 __all__ = [
-    "ChannelProtocol",
-    "AccessResult",
-    "AccessStatus",
-    "AddressAccess",
-    "AddressRead",
-    "AddressRoute",
-    "AddressSpace",
-    "AddressSpaceState",
-    "AddressStep",
-    "AddressWrite",
-    "Axi4ToApbBridgeProfile",
-    "AtomicFrame",
-    "BitVectorDomain",
-    "ByteOrder",
-    "BurstAssembler",
-    "BurstAssemblerState",
-    "BurstToken",
     "CanonicalEvent",
-    "CausalGraph",
-    "CardinalityMonitor",
-    "CardinalityState",
-    "CardinalityToken",
-    "CaptureModel",
-    "CaptureState",
-    "ConstantDomain",
-    "ConstraintKind",
-    "ConstraintScope",
-    "CompletionLedger",
-    "CompletionLedgerState",
-    "DescriptorToken",
-    "ElaboratedSystemProtocol",
-    "EnumDomain",
-    "EventConstraint",
-    "EventOffer",
-    "EventField",
-    "EventSchema",
-    "DutEffect",
-    "DutFacet",
-    "DutTransition",
-    "FunctionModel",
-    "FunctionModelState",
-    "FifoJoin",
-    "FifoJoinState",
-    "ForbiddenEventMonitor",
-    "InOrderCompletionMonitor",
-    "InOrderState",
-    "InOrderToken",
-    "IntDomain",
-    "LinkProtocol",
-    "LinkSession",
-    "LinkSessionState",
-    "LinkTrace",
-    "MemoryRegion",
-    "MemoryRegionState",
-    "JoinedToken",
-    "NaturalDomain",
-    "NoOpModel",
-    "ObligationDecl",
-    "PartialOrderViolation",
-    "ProtocolLink",
-    "ProtocolPort",
-    "PortAttachmentBinding",
-    "PortEmission",
-    "PortInput",
-    "RegisterPermission",
-    "RegisterRegion",
-    "RegisterRegionState",
-    "RegisterSpec",
-    "StreamTransfer",
-    "QuietConstraint",
-    "QuietMode",
-    "QuietState",
-    "ReadyValidObserver",
-    "ReadyValidSignals",
-    "ReadyValidState",
-    "ResourceDecl",
-    "ResetEpochObserver",
-    "ResetEpochState",
-    "SemanticConstraint",
-    "SemanticComponent",
-    "SemanticFault",
-    "SemanticFragment",
-    "SemanticRun",
-    "SemanticStep",
-    "SystemAction",
-    "SystemEvent",
+    "InterfaceProtocol",
     "SystemProtocol",
-    "SystemSession",
-    "SystemSessionState",
-    "SystemTrace",
-    "Verdict",
     "VirtualDut",
-    "VirtualDutBuilder",
-    "VirtualDutModel",
-    "VirtualDutPortRef",
-    "build_apb_address_fabric_vdut",
-    "build_apb_address_space_vdut",
-    "build_ahb_address_fabric_vdut",
-    "build_ahb_address_space_vdut",
-    "build_ahb_blackhole_sink_vdut",
-    "build_ahb_idle_source_vdut",
-    "build_apb_blackhole_sink_vdut",
-    "build_apb_idle_source_vdut",
-    "build_axi4_blackhole_sink_vdut",
-    "build_axi4_address_space_vdut",
-    "build_axi4_idle_source_vdut",
-    "build_axi4_lite_address_fabric_vdut",
-    "build_axi4_lite_address_space_vdut",
-    "build_axi4_lite_to_apb_bridge_vdut",
-    "build_axi4_to_apb_bridge_vdut",
-    "build_axi4_stream_capture_vdut",
-    "build_blackhole_sink_vdut",
-    "build_idle_source_vdut",
-    "compose_fragments",
+    "__version__",
 ]

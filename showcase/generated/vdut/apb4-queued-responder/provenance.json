@@ -1,0 +1,20 @@
+{
+  "schema": "protocol-model.showcase.provenance/v1",
+  "demo": "apb4-queued-responder",
+  "source": "showcase/demos/vdut/apb4_queued_responder/run.py",
+  "command": "python3 showcase/demos/vdut/apb4_queued_responder/run.py",
+  "protocol_model_version": "0.4.0",
+  "seed": 20260717,
+  "execution_models": [
+    "RandomTrafficController",
+    "SystemSession",
+    "QueuedAddressResponderBackend"
+  ],
+  "renderers": {
+    "waveform": "WaveDrom 3.6.2 (package.json)",
+    "topology": "Graphviz dot",
+    "vdut_structure": "Graphviz dot",
+    "causality": "Graphviz dot"
+  },
+  "presentation_boundary": "WaveDrom shows canonical events, explicit service steps and VirtualDut state; it is not APB pin/cycle or RTL/VCD output"
+}

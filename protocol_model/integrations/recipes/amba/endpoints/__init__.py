@@ -13,8 +13,14 @@ from .empty import (
     build_axi4_blackhole_sink_vdut,
     build_axi4_idle_source_vdut,
 )
+from .queued import build_amba_queued_address_responder_vdut
+from .memory_copy import build_amba_serialized_memory_copy_vdut
+from .sensor_fifo import build_amba_sensor_fifo_vdut
 
 __all__ = [
+    "build_amba_queued_address_responder_vdut",
+    "build_amba_sensor_fifo_vdut",
+    "build_amba_serialized_memory_copy_vdut",
     "build_ahb_address_space_vdut",
     "build_ahb_blackhole_sink_vdut",
     "build_ahb_idle_source_vdut",

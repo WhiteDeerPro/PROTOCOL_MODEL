@@ -10,8 +10,8 @@ from protocol_model.semantics import ConstraintScope, SemanticFault
 
 from ..address.space import AddressSpace, AddressSpaceState
 from ..attachments.address import AddressCompleterAttachment
-from ..binding.port import PortAttachmentBinding
-from .base import VirtualDutModel
+from ..binding.port import InterfaceAttachmentBinding
+from .base import VirtualDutBackend
 from .transition import DutTransition, PortEmission, PortInput
 
 
@@ -28,19 +28,19 @@ class AddressSpaceBackendState:
         )
 
 
-class PassiveAddressSpaceBackend(VirtualDutModel):
+class PassiveAddressSpaceBackend(VirtualDutBackend):
     """Endpoint backend with no autonomous or unhandled internal effects."""
 
     def __init__(
         self,
         address_space: AddressSpace,
-        bindings: Mapping[str, PortAttachmentBinding],
+        bindings: Mapping[str, InterfaceAttachmentBinding],
     ) -> None:
         bindings = dict(bindings)
         if not bindings:
             raise ValueError("passive address-space backend requires a binding")
         if any(
-            not isinstance(item, PortAttachmentBinding)
+            not isinstance(item, InterfaceAttachmentBinding)
             for item in bindings.values()
         ):
             raise TypeError(
@@ -66,7 +66,7 @@ class PassiveAddressSpaceBackend(VirtualDutModel):
 
     def local_attachment_bindings(
         self,
-    ) -> Mapping[str, PortAttachmentBinding]:
+    ) -> Mapping[str, InterfaceAttachmentBinding]:
         return self.bindings
 
     def initial_state(self) -> AddressSpaceBackendState:

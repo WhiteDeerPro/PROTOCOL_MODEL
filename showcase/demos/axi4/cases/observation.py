@@ -1,7 +1,7 @@
 """AtomicFrame, ready/valid, same-edge, and reset examples."""
 
-from protocol_model import Verdict
-from protocol_model.link.amba.axi.axi4 import build_axi4_link
+from protocol_model.protocols.amba.axi.axi4 import build_axi4_interface
+from protocol_model.semantics import Verdict
 
 from common import (
     ExecutionMode,
@@ -15,7 +15,7 @@ from common import (
 
 
 def observation_cases() -> tuple[ExampleCase, ...]:
-    protocol = build_axi4_link()
+    protocol = build_axi4_interface()
     same_frame_aw = address("AW", key=1, addr=0x800)
     same_frame_w = write_data(last=True, strobe=0x0F, data=0xAA)
     same_frame_ar = address("AR", key=2, addr=0x900)

@@ -1,0 +1,143 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP · not clock",
+      "wave": "=====",
+      "data": [
+        "S0",
+        "S1",
+        "S2",
+        "S3",
+        "S4"
+      ]
+    },
+    [
+      "scheduler",
+      {
+        "name": "completed action / service opportunity",
+        "wave": "=====",
+        "data": [
+          "A NOTIFY · 40/p7",
+          "B NOTIFY · 11/p1",
+          "select · 11/p1",
+          "EOI 11 → deliver 40",
+          "EOI 40"
+        ]
+      }
+    ],
+    [
+      "accepted canonical events",
+      {
+        "name": "sources → controller",
+        "wave": "=====",
+        "data": [
+          "e0 NOTIFY id=40 p=7",
+          "e2 NOTIFY id=11 p=1",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "controller → sources · retained ACK",
+        "wave": "=====",
+        "data": [
+          "e1 COMPLETE id=40",
+          "e3 COMPLETE id=11",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "controller → CPU target",
+        "wave": "=====",
+        "data": [
+          "—",
+          "—",
+          "e4 NOTIFY id=11 p=1",
+          "e6 NOTIFY id=40 p=7",
+          "—"
+        ]
+      },
+      {
+        "name": "CPU target → controller · EOI",
+        "wave": "=====",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "e5 COMPLETE id=11",
+          "e7 COMPLETE id=40"
+        ]
+      }
+    ],
+    [
+      "post-state",
+      {
+        "name": "controller pending queue",
+        "wave": "=====",
+        "data": [
+          "id=40 p=7 a=0",
+          "id=40 p=7 a=0 | id=11 p=1 a=1",
+          "id=40 p=7 a=0",
+          "empty",
+          "empty"
+        ]
+      },
+      {
+        "name": "controller active delivery",
+        "wave": "=====",
+        "data": [
+          "none",
+          "none",
+          "id=11 p=1 · ref=0",
+          "id=40 p=7 · ref=1",
+          "none"
+        ]
+      },
+      {
+        "name": "CPU active interrupt",
+        "wave": "=====",
+        "data": [
+          "none",
+          "none",
+          "11",
+          "40",
+          "none"
+        ]
+      },
+      {
+        "name": "CPU handled order",
+        "wave": "=====",
+        "data": [
+          "empty",
+          "empty",
+          "empty",
+          "11",
+          "11, 40"
+        ]
+      },
+      {
+        "name": "controller completed count",
+        "wave": "=====",
+        "data": [
+          "0",
+          "0",
+          "0",
+          "1",
+          "2"
+        ]
+      }
+    ]
+  ],
+  "head": {
+    "text": "Edge-interrupt notification · priority select and explicit EOI"
+  },
+  "foot": {
+    "text": "1 column = 1 completed SystemSession action/service opportunity · POST-STATE · NOT clock, RTL pins, latency, GIC or PLIC timing"
+  },
+  "config": {
+    "hscale": 6
+  }
+}

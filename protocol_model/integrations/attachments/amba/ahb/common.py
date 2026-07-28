@@ -6,13 +6,13 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import Mapping
 
-from protocol_model.link import LinkProtocol
-from protocol_model.link.amba import transfer_container_lane_bounds
-from protocol_model.link.amba.ahb import AHB_FAMILY
+from protocol_model.interface import InterfaceProtocol
+from protocol_model.protocols.amba import transfer_container_lane_bounds
+from protocol_model.protocols.amba.ahb import AHB_FAMILY
 from protocol_model.virtual_dut.address.access import ByteOrder
 
 
-_AHB_CHANNELS = {
+_AHB_EVENT_KINDS = {
     "READ",
     "WRITE",
     "WRITE_DATA",
@@ -40,16 +40,16 @@ class AhbCompleterState:
 
 
 def require_ahb_address_profile(
-    protocol: LinkProtocol, role: str, byte_order: ByteOrder | str
+    protocol: InterfaceProtocol, role: str, byte_order: ByteOrder | str
 ) -> ByteOrder:
     """Validate the current AddressAccess-compatible AHB profile."""
 
-    if protocol.family != AHB_FAMILY:
-        raise ValueError("AHB attachment requires an AHB LinkProtocol family")
+    if protocol.interface_family != AHB_FAMILY:
+        raise ValueError("AHB attachment requires an AHB InterfaceProtocol family")
     if role not in protocol.roles:
         raise ValueError(f"AHB protocol has no {role} role")
-    if set(protocol.channels) != _AHB_CHANNELS:
-        raise ValueError("AHB address attachment requires native five-event channels")
+    if set(protocol.event_kinds) != _AHB_EVENT_KINDS:
+        raise ValueError("AHB address attachment requires five native event kinds")
     if bool(protocol.parameters.get("exclusive_transfers", False)):
         raise ValueError(
             "generic AHB AddressAccess attachment does not implement an "

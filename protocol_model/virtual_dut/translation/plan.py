@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Union
 
 from .contract import (
-    BridgeProfile,
+    TranslationProfile,
     CapabilityGap,
     CapabilitySet,
     EquivalenceLevel,
@@ -101,7 +101,7 @@ class TranslationPlan:
     Python side effects inside a stage cannot be made immutable by this DTO.
     """
 
-    profile: BridgeProfile
+    profile: TranslationProfile
     source: OperationSignature
     target: OperationSignature
     prefix_stages: tuple[UnaryTranslationStage, ...]
@@ -150,7 +150,7 @@ class TranslationPlan:
 
 
 def compile_translation_plan(
-    profile: BridgeProfile,
+    profile: TranslationProfile,
     *,
     prefix_stages: tuple[UnaryTranslationStage, ...] = (),
     expansion: FanoutTranslationStage | None = None,
@@ -158,8 +158,8 @@ def compile_translation_plan(
 ) -> TranslationPlan:
     """Validate signatures, both capability directions, and semantic loss."""
 
-    if not isinstance(profile, BridgeProfile):
-        raise TypeError("translation plan requires a BridgeProfile")
+    if not isinstance(profile, TranslationProfile):
+        raise TypeError("translation plan requires a TranslationProfile")
     prefix_stages = tuple(prefix_stages)
     suffix_stages = tuple(suffix_stages)
     if any(not isinstance(stage, UnaryTranslationStage) for stage in prefix_stages):
@@ -212,7 +212,7 @@ def compile_translation_plan(
     return TranslationPlan(*payload, witness)
 
 
-def _validate_supported_profile(profile: BridgeProfile) -> None:
+def _validate_supported_profile(profile: TranslationProfile) -> None:
     supported = (
         ("ordering", profile.ordering, ()),
         (
@@ -317,7 +317,7 @@ def _validate_stage_metadata(stages: tuple[TranslationStage, ...]) -> None:
 
 
 def _validate_signatures(
-    profile: BridgeProfile, stages: tuple[TranslationStage, ...]
+    profile: TranslationProfile, stages: tuple[TranslationStage, ...]
 ) -> None:
     current = profile.source
     for index, stage in enumerate(stages):
@@ -353,7 +353,7 @@ def _require_boundary_signature(
 
 
 def _close_capabilities(
-    profile: BridgeProfile, stages: tuple[TranslationStage, ...]
+    profile: TranslationProfile, stages: tuple[TranslationStage, ...]
 ) -> CapabilityClosure:
     request = profile.source_request_capabilities
     request_path = [CapabilitySnapshot("source", request)]
@@ -412,7 +412,7 @@ def _raise_capability_gap(
 
 
 def _validate_semantic_loss(
-    profile: BridgeProfile, stages: tuple[TranslationStage, ...]
+    profile: TranslationProfile, stages: tuple[TranslationStage, ...]
 ) -> None:
     lossy = {SemanticEffectKind.WEAKEN, SemanticEffectKind.DROP}
     for index, stage in enumerate(stages):

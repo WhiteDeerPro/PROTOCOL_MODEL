@@ -1,0 +1,307 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP · not ACLK",
+      "wave": "=============",
+      "data": [
+        "S0",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7",
+        "S8",
+        "S9",
+        "S10",
+        "S11",
+        "S12"
+      ]
+    },
+    [
+      "scenario",
+      {
+        "name": "attempted action",
+        "wave": "=============",
+        "data": [
+          "M0 R1→T0 ×2",
+          "M1 R1→T3",
+          "M0 R2→T2",
+          "M1 R2→T2",
+          "M0 R1→T1 try 1",
+          "advance T3",
+          "advance T2",
+          "advance T2",
+          "advance T0 beat 1",
+          "M0 R1→T1 try 2",
+          "advance T0 RLAST",
+          "M0 R1→T1 retry",
+          "advance T1"
+        ]
+      },
+      {
+        "name": "admission",
+        "wave": "=============",
+        "data": [
+          "OK",
+          "OK",
+          "OK",
+          "OK",
+          "BLOCK · RID route lock",
+          "OK",
+          "OK",
+          "OK",
+          "OK",
+          "BLOCK · RID route lock",
+          "OK",
+          "OK",
+          "OK"
+        ]
+      },
+      {
+        "name": "manager0 R",
+        "wave": "=============",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "R2=31/L",
+          "—",
+          "R1=11",
+          "—",
+          "R1=12/L",
+          "—",
+          "R1=21/L"
+        ]
+      },
+      {
+        "name": "manager1 R",
+        "wave": "=============",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "R1=41/L",
+          "—",
+          "R2=32/L",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      }
+    ],
+    [
+      "accepted interface events",
+      {
+        "name": "manager0 ↔ crossbar",
+        "wave": "=============",
+        "data": [
+          "AR R1@1000 ×2",
+          "—",
+          "AR R2@3000 ×1",
+          "—",
+          "—",
+          "—",
+          "R2=31/L",
+          "—",
+          "R1=11",
+          "—",
+          "R1=12/L",
+          "AR R1@2000 ×1",
+          "R1=21/L"
+        ]
+      },
+      {
+        "name": "manager1 ↔ crossbar",
+        "wave": "=============",
+        "data": [
+          "—",
+          "AR R1@4000 ×1",
+          "—",
+          "AR R2@3004 ×1",
+          "—",
+          "R1=41/L",
+          "—",
+          "R2=32/L",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "crossbar ↔ target0",
+        "wave": "=============",
+        "data": [
+          "AR R1@0000 ×2",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "R1=11",
+          "—",
+          "R1=12/L",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "crossbar ↔ target1",
+        "wave": "=============",
+        "data": [
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "AR R1@0000 ×1",
+          "R1=21/L"
+        ]
+      },
+      {
+        "name": "crossbar ↔ target2",
+        "wave": "=============",
+        "data": [
+          "—",
+          "—",
+          "AR R2@0000 ×1",
+          "AR R2@0004 ×1",
+          "—",
+          "—",
+          "R2=31/L",
+          "R2=32/L",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "crossbar ↔ target3",
+        "wave": "=============",
+        "data": [
+          "—",
+          "AR R1@0000 ×1",
+          "—",
+          "—",
+          "—",
+          "R1=41/L",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      }
+    ],
+    [
+      "crossbar post-state",
+      {
+        "name": "pending burst count",
+        "wave": "=============",
+        "data": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "4",
+          "3",
+          "2",
+          "1",
+          "1",
+          "1",
+          "0",
+          "1",
+          "0"
+        ]
+      },
+      {
+        "name": "M0/R1 destination lock",
+        "wave": "=============",
+        "data": [
+          "T0",
+          "T0",
+          "T0",
+          "T0",
+          "T0",
+          "T0",
+          "T0",
+          "T0",
+          "T0",
+          "T0",
+          "—",
+          "T1",
+          "—"
+        ]
+      },
+      {
+        "name": "M1/R1 destination lock",
+        "wave": "=============",
+        "data": [
+          "—",
+          "T3",
+          "T3",
+          "T3",
+          "T3",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      },
+      {
+        "name": "T2/R2 return owners",
+        "wave": "=============",
+        "data": [
+          "—",
+          "—",
+          "M0",
+          "M0→M1",
+          "M0→M1",
+          "M0→M1",
+          "M1",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—",
+          "—"
+        ]
+      }
+    ]
+  ],
+  "head": {
+    "text": "AXI4 read 2×4 crossbar · source and return ownership"
+  },
+  "foot": {
+    "text": "1 column = 1 attempted SystemSession action · POST-STATE · transaction-level witness, not ACLK or pin arbitration"
+  },
+  "config": {
+    "hscale": 4
+  }
+}

@@ -1,9 +1,9 @@
 {
-  "schema": "protocol-model.run/v3",
+  "schema": "protocol-model.run/v4",
   "subject": "axi4",
   "run_id": "axi4",
-  "generated_at": "2026-07-15T20:30:44.532139+00:00",
-  "tool_version": "0.3.0",
+  "generated_at": "2026-07-26T19:09:50.798252+00:00",
+  "tool_version": "0.4.0",
   "verdict": "PASS",
   "protocols": [
     {
@@ -17,14 +17,14 @@
           "memory_endpoint",
           "requester"
         ],
-        "links": [
+        "connections": [
           "axi4-link"
         ],
         "boundary": []
       }
     },
     {
-      "scope": "link",
+      "scope": "interface",
       "identity": "axi4",
       "definition": "axi4",
       "parameters": {
@@ -34,11 +34,12 @@
       },
       "lineage": [],
       "metadata": {
+        "interface_family": "amba.axi4",
         "roles": [
           "manager",
           "subordinate"
         ],
-        "channels": [
+        "event_kinds": [
           "AR",
           "AW",
           "B",
@@ -53,7 +54,7 @@
         "resources": [
           {
             "name": "axi4.read.pending_transactions",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "AR"
@@ -66,7 +67,7 @@
           },
           {
             "name": "axi4.exclusive.reservations",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "R[last=True, resp=EXOKAY]"
@@ -80,7 +81,7 @@
           },
           {
             "name": "axi4.write.assembling_data",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "first W[last=False] of burst"
@@ -93,7 +94,7 @@
           },
           {
             "name": "axi4.write.pending_descriptors",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "AW without available complete W burst"
@@ -106,7 +107,7 @@
           },
           {
             "name": "axi4.write.pending_data_bursts",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "W[last=True] without available AW"
@@ -119,7 +120,7 @@
           },
           {
             "name": "axi4.write.pending_completions",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "AW/W FIFO join"
@@ -134,7 +135,7 @@
       }
     },
     {
-      "scope": "link",
+      "scope": "interface",
       "identity": "axi4_one_read",
       "definition": "axi4_one_read",
       "parameters": {
@@ -146,11 +147,12 @@
         "axi4"
       ],
       "metadata": {
+        "interface_family": "amba.axi4",
         "roles": [
           "manager",
           "subordinate"
         ],
-        "channels": [
+        "event_kinds": [
           "AR",
           "AW",
           "B",
@@ -165,7 +167,7 @@
         "resources": [
           {
             "name": "axi4.read.pending_transactions",
-            "scope": "link",
+            "scope": "interface",
             "capacity": 1,
             "acquired_by": [
               "AR"
@@ -178,7 +180,7 @@
           },
           {
             "name": "axi4.exclusive.reservations",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "R[last=True, resp=EXOKAY]"
@@ -192,7 +194,7 @@
           },
           {
             "name": "axi4.write.assembling_data",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "first W[last=False] of burst"
@@ -205,7 +207,7 @@
           },
           {
             "name": "axi4.write.pending_descriptors",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "AW without available complete W burst"
@@ -218,7 +220,7 @@
           },
           {
             "name": "axi4.write.pending_data_bursts",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "W[last=True] without available AW"
@@ -231,7 +233,7 @@
           },
           {
             "name": "axi4.write.pending_completions",
-            "scope": "link",
+            "scope": "interface",
             "capacity": null,
             "acquired_by": [
               "AW/W FIFO join"
@@ -251,7 +253,7 @@
       "name": "read-single-lifecycle",
       "theme": "lifecycle",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "PASS",
       "observed": "PASS",
       "expected_rule": null,
@@ -269,7 +271,7 @@
       "name": "read-orphan-response",
       "theme": "lifecycle",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
       "expected_rule": "axi4.read.orphan_beat",
@@ -287,7 +289,7 @@
       "name": "write-single-lifecycle",
       "theme": "lifecycle",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "PASS",
       "observed": "PASS",
       "expected_rule": null,
@@ -305,7 +307,7 @@
       "name": "write-data-before-address",
       "theme": "lifecycle",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "PASS",
       "observed": "PASS",
       "expected_rule": null,
@@ -341,7 +343,7 @@
       "name": "write-missing-wlast",
       "theme": "lifecycle",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
       "expected_rule": "axi4.write.final_marker",
@@ -359,7 +361,7 @@
       "name": "write-wrong-bid",
       "theme": "lifecycle",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
       "expected_rule": "axi4.exclusive.orphan_write_response",
@@ -377,11 +379,11 @@
       "name": "read-crosses-4kb-boundary",
       "theme": "geometry",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
-      "expected_rule": "axi4.link_session.AR.event_schema",
-      "observed_rule": "axi4.link_session.AR.event_schema",
+      "expected_rule": "axi4.interface_session.AR.event_schema",
+      "observed_rule": "axi4.interface_session.AR.event_schema",
       "expectation": "MET",
       "artifacts": [
         "cases/read-crosses-4kb-boundary/causality.svg",
@@ -413,7 +415,7 @@
       "name": "write-strobe-outside-lanes",
       "theme": "geometry",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
       "expected_rule": "axi4.write.byte_lanes",
@@ -431,7 +433,7 @@
       "name": "read-wrap-four-legal",
       "theme": "geometry",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "PASS",
       "observed": "PASS",
       "expected_rule": null,
@@ -449,11 +451,11 @@
       "name": "read-wrap-three-illegal",
       "theme": "geometry",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
-      "expected_rule": "axi4.link_session.AR.event_schema",
-      "observed_rule": "axi4.link_session.AR.event_schema",
+      "expected_rule": "axi4.interface_session.AR.event_schema",
+      "observed_rule": "axi4.interface_session.AR.event_schema",
       "expectation": "MET",
       "artifacts": [
         "cases/read-wrap-three-illegal/causality.svg",
@@ -467,7 +469,7 @@
       "name": "read-fixed-sixteen-legal",
       "theme": "geometry",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "PASS",
       "observed": "PASS",
       "expected_rule": null,
@@ -485,11 +487,11 @@
       "name": "read-fixed-seventeen-illegal",
       "theme": "geometry",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
-      "expected_rule": "axi4.link_session.AR.event_schema",
-      "observed_rule": "axi4.link_session.AR.event_schema",
+      "expected_rule": "axi4.interface_session.AR.event_schema",
+      "observed_rule": "axi4.interface_session.AR.event_schema",
       "expectation": "MET",
       "artifacts": [
         "cases/read-fixed-seventeen-illegal/causality.svg",
@@ -503,7 +505,7 @@
       "name": "read-cross-id-interleave",
       "theme": "ordering/interleave",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "PASS",
       "observed": "PASS",
       "expected_rule": null,
@@ -521,7 +523,7 @@
       "name": "read-same-id-later-cannot-overtake",
       "theme": "ordering/interleave",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
       "expected_rule": "axi4.read.final_marker",
@@ -539,7 +541,7 @@
       "name": "write-multiple-outstanding-reverse-b",
       "theme": "ordering/interleave",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "PASS",
       "observed": "PASS",
       "expected_rule": null,
@@ -629,7 +631,7 @@
       "name": "exclusive-matching-exokay",
       "theme": "exclusive/profile",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "PASS",
       "observed": "PASS",
       "expected_rule": null,
@@ -647,7 +649,7 @@
       "name": "profile-bounded-read-capacity",
       "theme": "exclusive/profile",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
       "expected_rule": "axi4_one_read.axi4.read.pending_transactions.capacity",
@@ -665,7 +667,7 @@
       "name": "exclusive-unmatched-success",
       "theme": "exclusive/profile",
       "deep_dive": false,
-      "input_mode": "link-events",
+      "input_mode": "interface-events",
       "expected": "FAIL",
       "observed": "FAIL",
       "expected_rule": "axi4.exclusive.unmatched_success",

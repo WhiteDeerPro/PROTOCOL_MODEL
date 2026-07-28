@@ -3,8 +3,9 @@ from __future__ import annotations
 from random import Random
 import unittest
 
-from protocol_model import AtomicFrame, EventOffer, ReadyValidSignals
-from protocol_model.link.amba.axi.axi4 import Axi4ObservationSession, build_axi4_link
+from protocol_model.observation import AtomicFrame, ReadyValidSignals
+from protocol_model.protocols.amba.axi.axi4 import Axi4ObservationSession, build_axi4_interface
+from protocol_model.semantics import EventOffer
 
 
 CHANNELS = ("AW", "W", "B", "AR", "R")
@@ -12,7 +13,7 @@ CHANNELS = ("AW", "W", "B", "AR", "R")
 
 class Axi4ObservationTest(unittest.TestCase):
     def setUp(self) -> None:
-        self.protocol = build_axi4_link()
+        self.protocol = build_axi4_interface()
         self.observer = Axi4ObservationSession(self.protocol)
         self.rng = Random(41)
 
@@ -174,6 +175,52 @@ class Axi4ObservationTest(unittest.TestCase):
 
         self.assertTrue(rejected.fault.rule.endswith("payload_stability"))
         self.assertEqual(stalled.state, rejected.state)
+
+    def test_stalled_r_beat_is_consumed_only_after_ready(self) -> None:
+        state = self.reset_state()
+        request = self.event(
+            "AR",
+            key=6,
+            payload={
+                "addr": 0x440,
+                "len": 0,
+                "size": 2,
+                "burst": "INCR",
+            },
+        )
+        requested = self.observer.step(
+            state, self.frame(1, {"AR": request})
+        )
+        response = self.event(
+            "R",
+            key=6,
+            payload={"data": 0x1234, "resp": "OKAY", "last": True},
+        )
+
+        first_stall = self.observer.step(
+            requested.state,
+            self.frame(2, {"R": response}, ready=False),
+        )
+        second_stall = self.observer.step(
+            first_stall.state,
+            self.frame(3, {"R": response}, ready=False),
+        )
+        accepted = self.observer.step(
+            second_stall.state,
+            self.frame(4, {"R": response}, ready=True),
+        )
+
+        self.assertIsNone(first_stall.fault)
+        self.assertIsNone(second_stall.fault)
+        self.assertEqual((), first_stall.emissions)
+        self.assertEqual((), second_stall.emissions)
+        self.assertEqual(("R",), tuple(item.kind for item in accepted.emissions))
+        self.assertEqual((6,), tuple(item.key for item in accepted.emissions))
+        self.assertEqual(
+            (0x1234,),
+            tuple(item.payload["data"] for item in accepted.emissions),
+        )
+        self.assertTrue(self.observer.is_quiescent(accepted.state))
 
     def test_reset_discards_pending_link_obligations(self) -> None:
         state = self.reset_state()

@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC
 from dataclasses import dataclass
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import CanonicalEvent, SemanticFault
 
 
@@ -18,7 +18,7 @@ class AttachmentEmission:
     fault: SemanticFault | None = None
 
 
-class ProtocolAttachment(ABC):
+class InterfaceAttachment(ABC):
     """One reusable protocol-to-operation adapter for one port role.
 
     Concrete operation families add their own encode/decode methods.  The
@@ -26,7 +26,7 @@ class ProtocolAttachment(ABC):
     and raw canonical-event attachments share one payload type.
     """
 
-    protocol: LinkProtocol
+    protocol: InterfaceProtocol
     role: str
 
     def initial_state(self) -> object:
@@ -38,15 +38,15 @@ class ProtocolAttachment(ABC):
     @property
     def incoming_event_kinds(self) -> frozenset[str]:
         return frozenset(
-            channel.event.name
-            for channel in self.protocol.channels.values()
-            if channel.destination_role == self.role
+            event_kind.schema.name
+            for event_kind in self.protocol.event_kinds.values()
+            if event_kind.destination_role == self.role
         )
 
     @property
     def outgoing_event_kinds(self) -> frozenset[str]:
         return frozenset(
-            channel.event.name
-            for channel in self.protocol.channels.values()
-            if channel.source_role == self.role
+            event_kind.schema.name
+            for event_kind in self.protocol.event_kinds.values()
+            if event_kind.source_role == self.role
         )

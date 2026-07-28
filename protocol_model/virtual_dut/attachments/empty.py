@@ -5,9 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 
-from .base import ProtocolAttachment
+from .base import InterfaceAttachment
 
 
 class EmptyEndpointMode(str, Enum):
@@ -18,17 +18,17 @@ class EmptyEndpointMode(str, Enum):
 
 
 @dataclass(frozen=True)
-class EmptyEndpointAttachment(ProtocolAttachment):
+class EmptyEndpointAttachment(InterfaceAttachment):
     """Declare a port whose local backend produces no follow-up events.
 
     An idle source has no autonomous emission in the current synchronous
-    backend model.  A blackhole sink consumes incoming canonical events and
+    backend.  A blackhole sink consumes incoming canonical events and
     deliberately leaves request/completion obligations unresolved.  This is
     canonical-event behavior; a pin-level VALID-tied-low policy belongs to an
     observation/driver adapter.
     """
 
-    protocol: LinkProtocol
+    protocol: InterfaceProtocol
     role: str
     mode: EmptyEndpointMode
 

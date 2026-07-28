@@ -2,28 +2,33 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
-    AddressRoute,
-    AddressSpace,
-    CanonicalEvent,
-    CaptureModel,
-    ProtocolLink,
-    ProtocolPort,
-    RegisterRegion,
-    RegisterSpec,
-    SystemAction,
-    SystemProtocol,
-    VirtualDut,
-    VirtualDutPortRef,
-    build_apb_address_fabric_vdut,
+from protocol_model.integrations.recipes.amba.endpoints import (
     build_apb_address_space_vdut,
 )
-from protocol_model.link.amba.apb.apb4 import build_apb4_link
+from protocol_model.integrations.recipes.amba.fabrics import (
+    build_apb_address_fabric_vdut,
+)
+from protocol_model.semantics import CanonicalEvent
+from protocol_model.system import (
+    InterfaceConnection,
+    SystemAction,
+    SystemProtocol,
+    VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.address import (
+    AddressSpace,
+    RegisterRegion,
+    RegisterSpec,
+)
+from protocol_model.virtual_dut.backend import CaptureBackend
+from protocol_model.virtual_dut.boundary import InterfacePort, VirtualDut
+from protocol_model.virtual_dut.fabric import AddressRoute
+from protocol_model.protocols.amba.apb.apb4 import build_apb4_interface
 from protocol_model.integrations.attachments.amba.apb import (
     ApbCompleterAttachment,
     ApbRequesterAttachment,
 )
-from protocol_model.virtual_dut.binding import PortAttachmentBinding
+from protocol_model.virtual_dut.binding import InterfaceAttachmentBinding
 from protocol_model.virtual_dut.fabric import (
     SingleIngressAddressFabricBackend,
 )
@@ -31,11 +36,11 @@ from protocol_model.virtual_dut.fabric import (
 
 class ApbAddressFabricTest(unittest.TestCase):
     def _system(self) -> SystemProtocol:
-        protocol = build_apb4_link()
+        protocol = build_apb4_interface()
         manager = VirtualDut(
             "manager",
-            {"apb": ProtocolPort("apb", protocol, "requester")},
-            model=CaptureModel(),
+            {"apb": InterfacePort("apb", protocol, "requester")},
+            backend=CaptureBackend(),
         )
         fabric = build_apb_address_fabric_vdut(
             "peripheral_fabric",
@@ -72,7 +77,7 @@ class ApbAddressFabricTest(unittest.TestCase):
             ),
         )
         links = (
-            ProtocolLink(
+            InterfaceConnection(
                 "upstream_bus",
                 protocol,
                 {
@@ -82,7 +87,7 @@ class ApbAddressFabricTest(unittest.TestCase):
                     ),
                 },
             ),
-            ProtocolLink(
+            InterfaceConnection(
                 "control_bus",
                 protocol,
                 {
@@ -92,7 +97,7 @@ class ApbAddressFabricTest(unittest.TestCase):
                     "completer": VirtualDutPortRef("control", "apb"),
                 },
             ),
-            ProtocolLink(
+            InterfaceConnection(
                 "status_bus",
                 protocol,
                 {
@@ -155,11 +160,11 @@ class ApbAddressFabricTest(unittest.TestCase):
             self.assertIsNone(transition.fault)
         self.assertEqual(
             ("upstream_bus", "control_bus", "control_bus", "upstream_bus"),
-            tuple(item.link for item in control_write.emissions),
+            tuple(item.connection for item in control_write.emissions),
         )
         self.assertEqual(
             ("upstream_bus", "status_bus", "status_bus", "upstream_bus"),
-            tuple(item.link for item in status_write.emissions),
+            tuple(item.connection for item in status_write.emissions),
         )
         self.assertEqual(0x11223344, control_read.emissions[-1].event.payload["data"])
         self.assertEqual(0xAABBCCDD, status_read.emissions[-1].event.payload["data"])
@@ -178,7 +183,7 @@ class ApbAddressFabricTest(unittest.TestCase):
         self.assertIsNone(missing.fault)
         self.assertEqual(
             ("upstream_bus", "upstream_bus"),
-            tuple(item.link for item in missing.emissions),
+            tuple(item.connection for item in missing.emissions),
         )
         self.assertEqual(
             ("READ", "READ_RESPONSE"),
@@ -195,7 +200,7 @@ class ApbAddressFabricTest(unittest.TestCase):
         )
 
     def test_route_configuration_rejects_ambiguous_or_unbound_ports(self) -> None:
-        protocol = build_apb4_link()
+        protocol = build_apb4_interface()
         with self.assertRaisesRegex(ValueError, "overlap"):
             build_apb_address_fabric_vdut(
                 "ambiguous",
@@ -222,11 +227,11 @@ class ApbAddressFabricTest(unittest.TestCase):
 
         completer = ApbCompleterAttachment(protocol)
         requester = ApbRequesterAttachment(protocol)
-        ingress = PortAttachmentBinding(
-            ProtocolPort("upstream", protocol, completer.role), completer
+        ingress = InterfaceAttachmentBinding(
+            InterfacePort("upstream", protocol, completer.role), completer
         )
-        known = PortAttachmentBinding(
-            ProtocolPort("known", protocol, requester.role), requester
+        known = InterfaceAttachmentBinding(
+            InterfacePort("known", protocol, requester.role), requester
         )
         with self.assertRaisesRegex(ValueError, "unknown egress"):
             SingleIngressAddressFabricBackend(
@@ -234,8 +239,8 @@ class ApbAddressFabricTest(unittest.TestCase):
                 {"known": known},
                 (AddressRoute("missing", 0, 0x100, "missing"),),
             )
-        invalid = PortAttachmentBinding(
-            ProtocolPort("target", protocol, completer.role), completer
+        invalid = InterfaceAttachmentBinding(
+            InterfacePort("target", protocol, completer.role), completer
         )
         with self.assertRaisesRegex(TypeError, "requester bindings"):
             SingleIngressAddressFabricBackend(

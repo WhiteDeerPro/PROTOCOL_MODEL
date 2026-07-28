@@ -1,0 +1,3180 @@
+from __future__ import annotations
+
+import unittest
+
+from protocol_model.protocols.amba.chi.issue_h.participants import (
+    CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+    CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_SHARED_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_NDERR_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_NDERR_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_RETRY_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_RETRY_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+    CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
+    CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+    CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
+    CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+    CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+    CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+    CHI_HOME_CLEAN_SNOOP_COORDINATE,
+    CHI_HOME_COMP_ACK_ACCEPT,
+    CHI_HOME_COMP_UC_PRODUCE,
+    CHI_HOME_COPYBACK_CANCEL_ACCEPT,
+    CHI_HOME_EVICT_ACCEPT,
+    CHI_HOME_EVICT_COMP_PRODUCE,
+    CHI_HOME_MAKE_UNIQUE_ACCEPT,
+    CHI_HOME_PCREDIT_GRANT,
+    CHI_HOME_RETRY_ACK_PRODUCE,
+    CHI_HOME_WRITE_EVICT_OR_EVICT_ACCEPT,
+    CHI_HOME_WRITE_EVICT_OR_EVICT_COMP_PRODUCE,
+    CHI_MAKE_UNIQUE_HOME_CAPABILITIES,
+    CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES,
+    CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES,
+    CHI_READ_NO_SNP_HOME_CAPABILITIES,
+    CHI_READ_NO_SNP_NDERR_HOME_CAPABILITIES,
+    CHI_READ_NO_SNP_NDERR_REQUESTER_CAPABILITIES,
+    CHI_READ_NO_SNP_REQUESTER_CAPABILITIES,
+    CHI_REQUEST_RETRY_HOME_CAPABILITIES,
+    CHI_REQUEST_RETRY_REQUESTER_CAPABILITIES,
+    CHI_REQUESTER_COMP_ACK_PRODUCE,
+    CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,
+    CHI_REQUESTER_COMP_UC_ACCEPT,
+    CHI_REQUESTER_COPYBACK_CANCEL_PRODUCE,
+    CHI_REQUESTER_EVICT_COMP_ACCEPT,
+    CHI_REQUESTER_EVICT_ISSUE,
+    CHI_REQUESTER_MAKE_UNIQUE_ISSUE,
+    CHI_REQUESTER_PCREDIT_CONSUME,
+    CHI_REQUESTER_RETRY_ACK_ACCEPT,
+    CHI_REQUESTER_WRITE_EVICT_OR_EVICT_COMP_ACCEPT,
+    CHI_REQUESTER_WRITE_EVICT_OR_EVICT_ISSUE,
+    CHI_REQUEST_NODE_UNIQUE_LOCAL_WRITE,
+    CHI_SNOOPEE_CLEAN_SNP_RESP_PRODUCE,
+    CHI_SNOOPEE_SNP_MAKE_INVALID_ACCEPT,
+    CHI_SNOOPEE_SNP_MAKE_INVALID_DISCARD_DIRTY,
+    CHI_SNOOPEE_WRITE_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
+    CHI_SNOOPEE_WRITE_EVICT_OR_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
+    ChiCapabilityKey,
+    ChiDirectHomeNode,
+    ChiParticipantBinding,
+    ChiParticipantCapability,
+    ChiParticipantPortBinding,
+)
+from protocol_model.protocols.amba.chi.issue_h.participants.capability import (
+    CHI_CLEAN_UNIQUE_CLEAN_PEERS_HOME_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_CLEAN_PEERS_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_CLEAN_PEERS_SNOOPEE_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_HOME_CAPABILITIES,
+    CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_SNOOPEE_CAPABILITIES,
+    CHI_HOME_PASS_DIRTY_MEMORY_UPDATE,
+)
+from protocol_model.protocols.amba.chi.issue_h.interface import (
+    ChiReadNoSnpDirectLedger,
+    ChiReadNoSnpDirectProfile,
+)
+from protocol_model.protocols.amba.chi.issue_h.representation import (
+    ChiChannelKind,
+    ChiIssueHDatProfile,
+    ChiIssueHReqProfile,
+    ChiIssueHRspProfile,
+)
+from protocol_model.protocols.amba.chi.issue_h.system import (
+    CHI_BUILTIN_FEATURE_CATALOG,
+    CHI_CLEAN_EVICT_DEFINITION,
+    CHI_CLEAN_EVICT_RETRY_DEFINITION,
+    CHI_CLEAN_READ_UNIQUE_DEFINITION,
+    CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION,
+    CHI_CLEAN_READ_UNIQUE_RETRY_DEFINITION,
+    CHI_FEATURE_CLEAN_READ_SHARED,
+    CHI_FEATURE_CLEAN_EVICT,
+    CHI_FEATURE_CLEAN_EVICT_RETRY,
+    CHI_FEATURE_CLEAN_READ_UNIQUE,
+    CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
+    CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
+    CHI_FEATURE_DIRTY_WRITEBACK,
+    CHI_FEATURE_WRITE_EVICT_FULL,
+    CHI_FEATURE_WRITE_EVICT_OR_EVICT,
+    CHI_FEATURE_MAKE_UNIQUE,
+    CHI_FEATURE_READ_NO_SNP,
+    CHI_FEATURE_READ_NO_SNP_NDERR,
+    CHI_FEATURE_REQUEST_RETRY,
+    CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_EVICT_RETRY_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,
+    CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE,
+    CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,
+    CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE,
+    CHI_WRITE_EVICT_FULL_DEFINITION,
+    CHI_WRITE_EVICT_OR_EVICT_DEFINITION,
+    CHI_MAKE_UNIQUE_DEFINITION,
+    CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE,
+    ChiCapabilityClosureError,
+    ChiCapabilityGapKind,
+    ChiFeatureCatalog,
+    ChiFeatureContract,
+    ChiFeatureDefinition,
+    ChiFeatureKey,
+    ChiFlowCapability,
+    ChiFlowRequirement,
+    ChiFlowProjectionGapKind,
+    ChiRoleRequirement,
+    ChiTransportNetworkSession,
+    bind_chi_flow_requirement,
+    project_chi_flow_capabilities,
+    resolve_chi_capabilities,
+    resolve_projected_chi_capabilities,
+)
+from protocol_model.protocols.amba.chi.issue_h.system.capability import (
+    CHI_CLEAN_UNIQUE_CLEAN_PEERS_DEFINITION,
+    CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION,
+    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+    CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
+    CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE,
+    CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE,
+)
+from protocol_model.protocols.amba.chi.issue_h.transport import (
+    CHI_ISSUE_H_TRANSPORT_FAMILY,
+    ChiDatChannelProfile,
+    ChiReqChannelProfile,
+    ChiRspChannelProfile,
+    ChiTransportLinkProfile,
+)
+from protocol_model.system import (
+    SystemProtocolBuilder,
+    VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.boundary import (
+    TransportDirection,
+    TransportPort,
+    VirtualDut,
+)
+
+
+class ChiIssueHCapabilityClosureTest(unittest.TestCase):
+    @staticmethod
+    def contract(*required):
+        return ChiFeatureContract(
+            {"requester": "rn0", "home": "hn0"},
+            frozenset(required),
+        )
+
+    @staticmethod
+    def participants(*, retry: bool):
+        requester = (
+            CHI_REQUEST_RETRY_REQUESTER_CAPABILITIES
+            if retry
+            else CHI_READ_NO_SNP_REQUESTER_CAPABILITIES
+        )
+        home = (
+            CHI_REQUEST_RETRY_HOME_CAPABILITIES
+            if retry
+            else CHI_READ_NO_SNP_HOME_CAPABILITIES
+        )
+        return (
+            ChiParticipantCapability("rn0", requester),
+            ChiParticipantCapability("hn0", home),
+        )
+
+    @staticmethod
+    def flows(*, response: bool = True):
+        flows = [
+            ChiFlowCapability(
+                "request_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+                connections=("rn_req", "xp_req", "hn_req"),
+            ),
+            ChiFlowCapability(
+                "data_path",
+                "hn0",
+                "rn0",
+                ChiChannelKind.DAT,
+                connections=("hn_dat", "xp_dat", "rn_dat"),
+            ),
+        ]
+        if response:
+            flows.append(
+                ChiFlowCapability(
+                    "response_path",
+                    "hn0",
+                    "rn0",
+                    ChiChannelKind.RSP,
+                    connections=("hn_rsp", "xp_rsp", "rn_rsp"),
+                )
+            )
+        return tuple(flows)
+
+    def test_builtin_read_and_retry_close_with_explicit_evidence(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(
+                CHI_FEATURE_READ_NO_SNP,
+                CHI_FEATURE_REQUEST_RETRY,
+            ),
+            participants=self.participants(retry=True),
+            flows=self.flows(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_READ_NO_SNP))
+        self.assertTrue(resolved.supports(CHI_FEATURE_REQUEST_RETRY))
+        self.assertEqual((), resolved.gaps(CHI_FEATURE_READ_NO_SNP))
+        self.assertEqual((), resolved.gaps(CHI_FEATURE_REQUEST_RETRY))
+        retry = resolved.require(CHI_FEATURE_REQUEST_RETRY)
+        self.assertEqual(
+            ("hn_rsp", "xp_rsp", "rn_rsp"),
+            retry.flows["retry_response"].connections,
+        )
+        self.assertIs(resolved, resolved.require_contract())
+
+    def test_missing_response_path_removes_retry_but_not_base_read(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(CHI_FEATURE_REQUEST_RETRY),
+            participants=self.participants(retry=True),
+            flows=self.flows(response=False),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_READ_NO_SNP))
+        self.assertFalse(resolved.supports(CHI_FEATURE_REQUEST_RETRY))
+        gaps = resolved.gaps(CHI_FEATURE_REQUEST_RETRY)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.FLOW, gaps[0].kind)
+        self.assertIn("no RSP path", gaps[0].reason)
+        with self.assertRaises(ChiCapabilityClosureError):
+            resolved.require(CHI_FEATURE_REQUEST_RETRY)
+        with self.assertRaises(ChiCapabilityClosureError):
+            resolved.require_contract()
+
+    def test_participant_gap_reports_missing_atomic_capabilities(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(CHI_FEATURE_REQUEST_RETRY),
+            participants=self.participants(retry=False),
+            flows=self.flows(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_READ_NO_SNP))
+        gaps = resolved.gaps(CHI_FEATURE_REQUEST_RETRY)
+        self.assertEqual(
+            {ChiCapabilityGapKind.PARTICIPANT},
+            {gap.kind for gap in gaps},
+        )
+        self.assertEqual({"rn0", "hn0"}, {gap.subject for gap in gaps})
+        self.assertTrue(all(gap.missing for gap in gaps))
+
+    def test_catalog_extension_is_explicit_and_does_not_mutate_builtin(self) -> None:
+        custom_key = ChiFeatureKey("chi.feature.vendor.trace")
+        trace = ChiCapabilityKey("chi.requester.vendor_trace")
+        custom = ChiFeatureDefinition(
+            custom_key,
+            roles=(
+                ChiRoleRequirement("requester", frozenset((trace,))),
+            ),
+        )
+
+        extended = CHI_BUILTIN_FEATURE_CATALOG.extend(custom)
+
+        self.assertNotIn(
+            custom_key, CHI_BUILTIN_FEATURE_CATALOG.definitions
+        )
+        self.assertIn(custom_key, extended.definitions)
+        with self.assertRaises(TypeError):
+            extended.definitions[custom_key] = custom
+
+
+class ChiIssueHReadNoSnpNderrCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract() -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {"requester": "rn0", "home": "hn0"},
+            frozenset((CHI_FEATURE_READ_NO_SNP_NDERR,)),
+        )
+
+    @staticmethod
+    def flows() -> tuple[ChiFlowCapability, ...]:
+        return (
+            ChiFlowCapability(
+                "request_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+            ),
+            ChiFlowCapability(
+                "completion_path",
+                "hn0",
+                "rn0",
+                ChiChannelKind.DAT,
+            ),
+        )
+
+    @staticmethod
+    def participants(
+        *,
+        requester_nderr: bool,
+        home_nderr: bool,
+    ) -> tuple[ChiParticipantCapability, ...]:
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                (
+                    CHI_READ_NO_SNP_NDERR_REQUESTER_CAPABILITIES
+                    if requester_nderr
+                    else CHI_READ_NO_SNP_REQUESTER_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                (
+                    CHI_READ_NO_SNP_NDERR_HOME_CAPABILITIES
+                    if home_nderr
+                    else CHI_READ_NO_SNP_HOME_CAPABILITIES
+                ),
+            ),
+        )
+
+    def test_nderr_modifier_closes_over_base_read_without_new_flow(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(
+                requester_nderr=True,
+                home_nderr=True,
+            ),
+            flows=self.flows(),
+        )
+
+        base = resolved.require(CHI_FEATURE_READ_NO_SNP)
+        self.assertEqual(
+            {"request", "completion_data"},
+            set(base.flows),
+        )
+        evidence = resolved.require(CHI_FEATURE_READ_NO_SNP_NDERR)
+        self.assertEqual(
+            (CHI_FEATURE_READ_NO_SNP,),
+            evidence.dependencies,
+        )
+        self.assertEqual({"requester", "home"}, set(evidence.participants))
+        self.assertFalse(evidence.flows)
+
+    def test_each_base_participant_reports_its_own_nderr_gap(self) -> None:
+        cases = (
+            ("rn0", False, True),
+            ("hn0", True, False),
+        )
+        for missing, requester_nderr, home_nderr in cases:
+            with self.subTest(missing=missing):
+                resolved = resolve_chi_capabilities(
+                    self.contract(),
+                    participants=self.participants(
+                        requester_nderr=requester_nderr,
+                        home_nderr=home_nderr,
+                    ),
+                    flows=self.flows(),
+                )
+
+                self.assertTrue(
+                    resolved.supports(CHI_FEATURE_READ_NO_SNP)
+                )
+                gaps = resolved.gaps(CHI_FEATURE_READ_NO_SNP_NDERR)
+                participant_gaps = tuple(
+                    gap
+                    for gap in gaps
+                    if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+                )
+                self.assertEqual(1, len(participant_gaps))
+                self.assertEqual(missing, participant_gaps[0].subject)
+                self.assertTrue(participant_gaps[0].missing)
+
+
+class ChiIssueHCleanReadSharedCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract():
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+                "snoopee": "rn1",
+            },
+            frozenset((CHI_FEATURE_CLEAN_READ_SHARED,)),
+        )
+
+    @staticmethod
+    def participants():
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_CLEAN_READ_SHARED_HOME_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "rn1",
+                CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
+            ),
+        )
+
+    @staticmethod
+    def flows(*, omit: frozenset[str] = frozenset()):
+        definitions = (
+            ("request", "rn0", "hn0", ChiChannelKind.REQ),
+            ("snoop", "hn0", "rn1", ChiChannelKind.SNP),
+            ("snoop_response", "rn1", "hn0", ChiChannelKind.RSP),
+            ("completion_data", "hn0", "rn0", ChiChannelKind.DAT),
+            ("completion_ack", "rn0", "hn0", ChiChannelKind.RSP),
+        )
+        return tuple(
+            ChiFlowCapability(name, source, target, channel)
+            for name, source, target, channel in definitions
+            if name not in omit
+        )
+
+    def test_clean_read_shared_closes_three_roles_and_five_flows(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,)
+            ),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_CLEAN_READ_SHARED)
+        self.assertEqual(
+            {"requester", "home", "snoopee"},
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {
+                "request",
+                "snoop",
+                "snoop_response",
+                "completion_data",
+                "completion_ack",
+            },
+            set(evidence.flows),
+        )
+
+    def test_missing_snoop_and_ack_paths_are_reported_separately(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(
+                omit=frozenset(("snoop", "completion_ack"))
+            ),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,)
+            ),
+        )
+
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_SHARED)
+        self.assertEqual(
+            {"snoop", "completion_ack"},
+            {
+                gap.subject
+                for gap in gaps
+                if gap.kind is ChiCapabilityGapKind.FLOW
+            },
+        )
+
+    def test_lifecycle_composition_is_an_explicit_system_fact(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+        )
+
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_SHARED)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.SYSTEM, gaps[0].kind)
+        self.assertEqual(
+            (CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,),
+            gaps[0].missing,
+        )
+
+
+class ChiIssueHCleanReadUniqueCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract():
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+                "snoopee": "rn1",
+            },
+            frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE,)),
+        )
+
+    @staticmethod
+    def flows():
+        return (
+            ChiFlowCapability(
+                "request",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+            ),
+            ChiFlowCapability(
+                "snoop",
+                "hn0",
+                "rn1",
+                ChiChannelKind.SNP,
+            ),
+            ChiFlowCapability(
+                "snoop_response",
+                "rn1",
+                "hn0",
+                ChiChannelKind.RSP,
+            ),
+            ChiFlowCapability(
+                "completion_data",
+                "hn0",
+                "rn0",
+                ChiChannelKind.DAT,
+            ),
+            ChiFlowCapability(
+                "completion_ack",
+                "rn0",
+                "hn0",
+                ChiChannelKind.RSP,
+            ),
+        )
+
+    def test_clean_read_unique_is_an_independent_closed_feature(self) -> None:
+        participants = (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "rn1",
+                CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+            ),
+        )
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=participants,
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,)
+            ),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_CLEAN_READ_UNIQUE)
+        self.assertFalse(evidence.dependencies)
+        self.assertEqual(
+            {
+                "request",
+                "snoop",
+                "snoop_response",
+                "completion_data",
+                "completion_ack",
+            },
+            set(evidence.flows),
+        )
+
+    def test_shared_role_claims_do_not_imply_unique_behavior(self) -> None:
+        participants = (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_CLEAN_READ_SHARED_HOME_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "rn1",
+                CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
+            ),
+        )
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=participants,
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,)
+            ),
+        )
+
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE)
+        self.assertEqual(
+            {"rn0", "hn0", "rn1"},
+            {
+                gap.subject
+                for gap in gaps
+                if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            },
+        )
+
+
+class ChiIssueHCleanReadUniqueNderrCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract() -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+                "snoopee": "rn1",
+            },
+            frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,)),
+        )
+
+    @staticmethod
+    def participants(
+        *,
+        requester_nderr: bool = True,
+        home_nderr: bool = True,
+    ) -> tuple[ChiParticipantCapability, ...]:
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                (
+                    CHI_CLEAN_READ_UNIQUE_NDERR_REQUESTER_CAPABILITIES
+                    if requester_nderr
+                    else CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                (
+                    CHI_CLEAN_READ_UNIQUE_NDERR_HOME_CAPABILITIES
+                    if home_nderr
+                    else CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "rn1",
+                CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+            ),
+        )
+
+    @staticmethod
+    def system_capabilities(
+        *,
+        nderr: bool = True,
+    ) -> frozenset[ChiCapabilityKey]:
+        return frozenset(
+            (
+                CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+                *(
+                    (CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,)
+                    if nderr
+                    else ()
+                ),
+            )
+        )
+
+    def test_nderr_modifier_closes_over_base_without_a_new_flow(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=ChiIssueHCleanReadUniqueCapabilityTest.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        base = resolved.require(CHI_FEATURE_CLEAN_READ_UNIQUE)
+        self.assertEqual(
+            {
+                "request",
+                "snoop",
+                "snoop_response",
+                "completion_data",
+                "completion_ack",
+            },
+            set(base.flows),
+        )
+        evidence = resolved.require(CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR)
+        self.assertEqual(
+            (CHI_FEATURE_CLEAN_READ_UNIQUE,),
+            evidence.dependencies,
+        )
+        self.assertEqual({"requester", "home"}, set(evidence.participants))
+        self.assertFalse(evidence.flows)
+        self.assertIs(
+            CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR
+            ],
+        )
+
+    def test_each_base_participant_reports_its_own_nderr_gap(self) -> None:
+        cases = (
+            ("rn0", False, True),
+            ("hn0", True, False),
+        )
+        for missing, requester_nderr, home_nderr in cases:
+            with self.subTest(missing=missing):
+                resolved = resolve_chi_capabilities(
+                    self.contract(),
+                    participants=self.participants(
+                        requester_nderr=requester_nderr,
+                        home_nderr=home_nderr,
+                    ),
+                    flows=ChiIssueHCleanReadUniqueCapabilityTest.flows(),
+                    system_capabilities=self.system_capabilities(),
+                )
+
+                self.assertTrue(
+                    resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE)
+                )
+                participant_gaps = tuple(
+                    gap
+                    for gap in resolved.gaps(
+                        CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR
+                    )
+                    if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+                )
+                self.assertEqual(1, len(participant_gaps))
+                self.assertEqual(missing, participant_gaps[0].subject)
+                self.assertTrue(participant_gaps[0].missing)
+
+    def test_nderr_composition_requires_explicit_system_fact(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=ChiIssueHCleanReadUniqueCapabilityTest.flows(),
+            system_capabilities=self.system_capabilities(nderr=False),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.SYSTEM, gaps[0].kind)
+        self.assertEqual(
+            (CHI_SYSTEM_CLEAN_READ_UNIQUE_NDERR_LIFECYCLE,),
+            gaps[0].missing,
+        )
+
+
+class ChiIssueHCleanReadUniqueRetryCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract():
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+                "snoopee": "rn1",
+            },
+            frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,)),
+        )
+
+    @staticmethod
+    def participants(*, retry: bool = True):
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                (
+                    CHI_CLEAN_READ_UNIQUE_RETRY_REQUESTER_CAPABILITIES
+                    if retry
+                    else CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                (
+                    CHI_CLEAN_READ_UNIQUE_RETRY_HOME_CAPABILITIES
+                    if retry
+                    else CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
+                ),
+            ),
+            ChiParticipantCapability(
+                "rn1",
+                CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+            ),
+        )
+
+    @staticmethod
+    def flows(*, retry_response: bool = True):
+        definitions = [
+            ("request", "rn0", "hn0", ChiChannelKind.REQ),
+            ("snoop", "hn0", "rn1", ChiChannelKind.SNP),
+            ("snoop_response", "rn1", "hn0", ChiChannelKind.RSP),
+            ("completion_data", "hn0", "rn0", ChiChannelKind.DAT),
+            ("completion_ack", "rn0", "hn0", ChiChannelKind.RSP),
+        ]
+        if retry_response:
+            definitions.append(
+                ("retry_response", "hn0", "rn0", ChiChannelKind.RSP)
+            )
+        return tuple(
+            ChiFlowCapability(name, source, target, channel)
+            for name, source, target, channel in definitions
+        )
+
+    @staticmethod
+    def system_capabilities(*, retry: bool = True):
+        return frozenset(
+            (
+                CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+                *(
+                    (CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,)
+                    if retry
+                    else ()
+                ),
+            )
+        )
+
+    def test_retry_modifier_closes_over_clean_read_unique(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        evidence = resolved.require(
+            CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+        )
+        self.assertEqual(
+            (CHI_FEATURE_CLEAN_READ_UNIQUE,),
+            evidence.dependencies,
+        )
+        self.assertEqual(
+            {"requester", "home"},
+            set(evidence.participants),
+        )
+        self.assertEqual({"retry_response"}, set(evidence.flows))
+        self.assertIs(
+            CHI_CLEAN_READ_UNIQUE_RETRY_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY
+            ],
+        )
+
+    def test_missing_reverse_rsp_only_removes_retry_modifier(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(retry_response=False),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.FLOW, gaps[0].kind)
+        self.assertEqual("retry_response", gaps[0].subject)
+
+    def test_base_participants_do_not_claim_retry_behavior(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(retry=False),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY)
+        self.assertEqual(
+            {"rn0", "hn0"},
+            {
+                gap.subject
+                for gap in gaps
+                if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            },
+        )
+        self.assertTrue(
+            all(
+                gap.missing
+                for gap in gaps
+                if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            )
+        )
+
+    def test_retry_composition_requires_explicit_system_fact(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(retry=False),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_READ_UNIQUE))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.SYSTEM, gaps[0].kind)
+        self.assertEqual(
+            (CHI_SYSTEM_CLEAN_READ_UNIQUE_RETRY_LIFECYCLE,),
+            gaps[0].missing,
+        )
+
+
+class ChiIssueHCleanUniqueCleanPeersCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract(*snoopees: str) -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,)),
+            role_sets={"snoopee": frozenset(snoopees)},
+        )
+
+    @staticmethod
+    def participants(*snoopees: str):
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_CLEAN_UNIQUE_CLEAN_PEERS_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_CLEAN_UNIQUE_CLEAN_PEERS_HOME_CAPABILITIES,
+            ),
+            *(
+                ChiParticipantCapability(
+                    snoopee,
+                    CHI_CLEAN_UNIQUE_CLEAN_PEERS_SNOOPEE_CAPABILITIES,
+                )
+                for snoopee in snoopees
+            ),
+        )
+
+    @staticmethod
+    def flows(
+        *snoopees: str,
+        snoop_response_channel: ChiChannelKind = ChiChannelKind.RSP,
+    ):
+        items = [
+            (
+                "request",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+            ),
+            (
+                "completion",
+                "hn0",
+                "rn0",
+                ChiChannelKind.RSP,
+            ),
+            (
+                "completion_ack",
+                "rn0",
+                "hn0",
+                ChiChannelKind.RSP,
+            ),
+        ]
+        for snoopee in snoopees:
+            items.extend(
+                (
+                    (
+                        f"snoop_{snoopee}",
+                        "hn0",
+                        snoopee,
+                        ChiChannelKind.SNP,
+                    ),
+                    (
+                        f"snoop_response_{snoopee}",
+                        snoopee,
+                        "hn0",
+                        snoop_response_channel,
+                    ),
+                )
+            )
+        return tuple(
+            ChiFlowCapability(name, source, target, channel)
+            for name, source, target, channel in items
+        )
+
+    @staticmethod
+    def system_capabilities():
+        return frozenset(
+            (CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE,)
+        )
+
+    def test_clean_peer_profile_closes_five_non_data_flow_kinds(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1", "rn2"),
+            participants=self.participants("rn1", "rn2"),
+            flows=self.flows("rn1", "rn2"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        evidence = resolved.require(
+            CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+        )
+        self.assertFalse(evidence.dependencies)
+        self.assertIs(
+            CHI_CLEAN_UNIQUE_CLEAN_PEERS_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+            ],
+        )
+        self.assertEqual(
+            {
+                "requester",
+                "home",
+                "snoopee[rn1]",
+                "snoopee[rn2]",
+            },
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {
+                "clean_unique_request",
+                "clean_unique_completion",
+                "clean_unique_completion_ack",
+                "clean_unique_snoop[hn0->rn1]",
+                "clean_unique_snoop[hn0->rn2]",
+                "clean_unique_snoop_response[rn1->hn0]",
+                "clean_unique_snoop_response[rn2->hn0]",
+            },
+            set(evidence.flows),
+        )
+        self.assertNotIn(
+            ChiChannelKind.DAT,
+            {flow.channel for flow in evidence.flows.values()},
+        )
+        self.assertEqual(
+            {
+                ChiChannelKind.REQ,
+                ChiChannelKind.SNP,
+                ChiChannelKind.RSP,
+            },
+            {
+                requirement.channel
+                for requirement
+                in CHI_CLEAN_UNIQUE_CLEAN_PEERS_DEFINITION.flows
+            },
+        )
+
+    def test_read_unique_capabilities_do_not_claim_clean_unique(
+        self,
+    ) -> None:
+        participants = (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "rn1",
+                CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+            ),
+        )
+
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1"),
+            participants=participants,
+            flows=self.flows("rn1"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertEqual(
+            {"rn0", "hn0", "rn1"},
+            {
+                gap.subject
+                for gap in resolved.gaps(
+                    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+                )
+                if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            },
+        )
+
+    def test_dirty_data_return_does_not_replace_clean_rsp_path(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1"),
+            participants=self.participants("rn1"),
+            flows=self.flows(
+                "rn1",
+                snoop_response_channel=ChiChannelKind.DAT,
+            ),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        flow_gaps = tuple(
+            gap
+            for gap in resolved.gaps(
+                CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+            )
+            if gap.kind is ChiCapabilityGapKind.FLOW
+        )
+        self.assertEqual(1, len(flow_gaps))
+        self.assertEqual(
+            "clean_unique_snoop_response[rn1->hn0]",
+            flow_gaps[0].subject,
+        )
+
+    def test_lifecycle_requires_explicit_system_capability(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1"),
+            participants=self.participants("rn1"),
+            flows=self.flows("rn1"),
+        )
+
+        system_gaps = tuple(
+            gap
+            for gap in resolved.gaps(
+                CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+            )
+            if gap.kind is ChiCapabilityGapKind.SYSTEM
+        )
+        self.assertEqual(1, len(system_gaps))
+        self.assertEqual(
+            (
+                CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE,
+            ),
+            system_gaps[0].missing,
+        )
+
+    def test_empty_peer_set_closes_without_snoop_or_data_flows(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        evidence = resolved.require(
+            CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS
+        )
+        self.assertEqual(
+            {
+                "clean_unique_request",
+                "clean_unique_completion",
+                "clean_unique_completion_ack",
+            },
+            set(evidence.flows),
+        )
+
+
+class ChiIssueHCleanUniqueSharedDirtyPeerCapabilityTest(
+    unittest.TestCase
+):
+    @staticmethod
+    def contract(*snoopees: str) -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset(
+                (CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,)
+            ),
+            role_sets={"snoopee": frozenset(snoopees)},
+        )
+
+    @staticmethod
+    def participants(
+        *snoopees: str,
+        home_memory_update: bool = True,
+    ):
+        home_extension = (
+            CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_HOME_CAPABILITIES
+        )
+        if not home_memory_update:
+            home_extension = home_extension - frozenset(
+                (CHI_HOME_PASS_DIRTY_MEMORY_UPDATE,)
+            )
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_CLEAN_UNIQUE_CLEAN_PEERS_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_CLEAN_UNIQUE_CLEAN_PEERS_HOME_CAPABILITIES
+                | home_extension,
+            ),
+            *(
+                ChiParticipantCapability(
+                    snoopee,
+                    CHI_CLEAN_UNIQUE_CLEAN_PEERS_SNOOPEE_CAPABILITIES
+                    | (
+                        CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_SNOOPEE_CAPABILITIES
+                    ),
+                )
+                for snoopee in snoopees
+            ),
+        )
+
+    @staticmethod
+    def flows(*snoopees: str, include_data: bool = True):
+        flows = list(
+            ChiIssueHCleanUniqueCleanPeersCapabilityTest.flows(
+                *snoopees
+            )
+        )
+        if include_data:
+            flows.extend(
+                ChiFlowCapability(
+                    f"snoop_data_{snoopee}",
+                    snoopee,
+                    "hn0",
+                    ChiChannelKind.DAT,
+                )
+                for snoopee in snoopees
+            )
+        return tuple(flows)
+
+    @staticmethod
+    def system_capabilities():
+        return frozenset(
+            (
+                CHI_SYSTEM_CLEAN_UNIQUE_CLEAN_PEERS_LIFECYCLE,
+                CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE,
+            )
+        )
+
+    def test_extension_adds_dat_flow_to_clean_unique_base(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1", "rn2"),
+            participants=self.participants("rn1", "rn2"),
+            flows=self.flows("rn1", "rn2"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        evidence = resolved.require(
+            CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+        )
+        self.assertEqual(
+            (CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,),
+            evidence.dependencies,
+        )
+        self.assertIs(
+            CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            ],
+        )
+        self.assertEqual(
+            {
+                "home",
+                "snoopee[rn1]",
+                "snoopee[rn2]",
+            },
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {
+                "clean_unique_snoop_data[rn1->hn0]",
+                "clean_unique_snoop_data[rn2->hn0]",
+            },
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            (ChiChannelKind.DAT,),
+            tuple(
+                requirement.channel
+                for requirement in
+                CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION.flows
+            ),
+        )
+        self.assertTrue(
+            resolved.supports(CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS)
+        )
+
+    def test_missing_snoopee_dat_path_is_a_flow_gap(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1"),
+            participants=self.participants("rn1"),
+            flows=self.flows("rn1", include_data=False),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            )
+            if gap.kind is ChiCapabilityGapKind.FLOW
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual(
+            "clean_unique_snoop_data[rn1->hn0]",
+            gaps[0].subject,
+        )
+        self.assertTrue(
+            resolved.supports(CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS)
+        )
+
+    def test_home_must_claim_pass_dirty_memory_update(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1"),
+            participants=self.participants(
+                "rn1",
+                home_memory_update=False,
+            ),
+            flows=self.flows("rn1"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        gap = next(
+            gap
+            for gap in resolved.gaps(
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            )
+            if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            and gap.subject == "hn0"
+        )
+        self.assertEqual(
+            (CHI_HOME_PASS_DIRTY_MEMORY_UPDATE,),
+            gap.missing,
+        )
+
+    def test_shared_dirty_profile_requires_a_peer(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        gap = next(
+            gap
+            for gap in resolved.gaps(
+                CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER
+            )
+            if gap.kind is ChiCapabilityGapKind.ROLE
+        )
+        self.assertEqual("snoopee", gap.subject)
+
+
+class ChiIssueHMakeUniqueCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract(*snoopees: str) -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_MAKE_UNIQUE,)),
+            role_sets={"snoopee": frozenset(snoopees)},
+        )
+
+    @staticmethod
+    def participants(
+        *snoopees: str,
+        requester=CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES,
+        home=CHI_MAKE_UNIQUE_HOME_CAPABILITIES,
+        snoopee=CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES,
+    ):
+        return (
+            ChiParticipantCapability("rn0", requester),
+            ChiParticipantCapability("hn0", home),
+            *(
+                ChiParticipantCapability(name, snoopee)
+                for name in snoopees
+            ),
+        )
+
+    @staticmethod
+    def flows(
+        *snoopees: str,
+        request: bool = True,
+        snoop: bool = True,
+        snoop_response: bool = True,
+        completion: bool = True,
+        completion_ack: bool = True,
+        snoop_response_channel: ChiChannelKind = ChiChannelKind.RSP,
+    ):
+        items = []
+        if request:
+            items.append(
+                ChiFlowCapability(
+                    "make_unique_request_path",
+                    "rn0",
+                    "hn0",
+                    ChiChannelKind.REQ,
+                )
+            )
+        if completion:
+            items.append(
+                ChiFlowCapability(
+                    "make_unique_completion_path",
+                    "hn0",
+                    "rn0",
+                    ChiChannelKind.RSP,
+                )
+            )
+        if completion_ack:
+            items.append(
+                ChiFlowCapability(
+                    "make_unique_completion_ack_path",
+                    "rn0",
+                    "hn0",
+                    ChiChannelKind.RSP,
+                )
+            )
+        for name in snoopees:
+            if snoop:
+                items.append(
+                    ChiFlowCapability(
+                        f"make_unique_snoop_path_{name}",
+                        "hn0",
+                        name,
+                        ChiChannelKind.SNP,
+                    )
+                )
+            if snoop_response:
+                items.append(
+                    ChiFlowCapability(
+                        f"make_unique_snoop_response_path_{name}",
+                        name,
+                        "hn0",
+                        snoop_response_channel,
+                    )
+                )
+        return tuple(items)
+
+    @staticmethod
+    def system_capabilities():
+        return frozenset((CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE,))
+
+    def test_independent_feature_closes_five_operation_specific_flows(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1", "rn2"),
+            participants=self.participants("rn1", "rn2"),
+            flows=self.flows("rn1", "rn2"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_MAKE_UNIQUE)
+        self.assertEqual((), evidence.dependencies)
+        self.assertEqual(
+            frozenset(),
+            CHI_MAKE_UNIQUE_DEFINITION.dependencies,
+        )
+        self.assertNotIn(
+            CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+            CHI_MAKE_UNIQUE_DEFINITION.dependencies,
+        )
+        self.assertIs(
+            CHI_MAKE_UNIQUE_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_MAKE_UNIQUE
+            ],
+        )
+        self.assertEqual(
+            {
+                "requester",
+                "home",
+                "snoopee[rn1]",
+                "snoopee[rn2]",
+            },
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {
+                "make_unique_request",
+                "make_unique_snoop[hn0->rn1]",
+                "make_unique_snoop[hn0->rn2]",
+                "make_unique_snoop_response[rn1->hn0]",
+                "make_unique_snoop_response[rn2->hn0]",
+                "make_unique_completion",
+                "make_unique_completion_ack",
+            },
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            (
+                (
+                    "make_unique_request",
+                    "requester",
+                    "home",
+                    ChiChannelKind.REQ,
+                ),
+                (
+                    "make_unique_snoop",
+                    "home",
+                    "snoopee",
+                    ChiChannelKind.SNP,
+                ),
+                (
+                    "make_unique_snoop_response",
+                    "snoopee",
+                    "home",
+                    ChiChannelKind.RSP,
+                ),
+                (
+                    "make_unique_completion",
+                    "home",
+                    "requester",
+                    ChiChannelKind.RSP,
+                ),
+                (
+                    "make_unique_completion_ack",
+                    "requester",
+                    "home",
+                    ChiChannelKind.RSP,
+                ),
+            ),
+            tuple(
+                (
+                    flow.name,
+                    flow.source_role,
+                    flow.target_role,
+                    flow.channel,
+                )
+                for flow in CHI_MAKE_UNIQUE_DEFINITION.flows
+            ),
+        )
+        self.assertNotIn(
+            ChiChannelKind.DAT,
+            {flow.channel for flow in CHI_MAKE_UNIQUE_DEFINITION.flows},
+        )
+
+    def test_participant_capability_sets_are_explicit_and_minimal(
+        self,
+    ) -> None:
+        self.assertEqual(
+            frozenset(
+                (
+                    CHI_REQUEST_NODE_UNIQUE_LOCAL_WRITE,
+                    CHI_REQUESTER_MAKE_UNIQUE_ISSUE,
+                    CHI_REQUESTER_COMP_UC_ACCEPT,
+                    CHI_REQUESTER_COMP_ACK_PRODUCE,
+                )
+            ),
+            CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES,
+        )
+        self.assertEqual(
+            frozenset(
+                (
+                    CHI_HOME_MAKE_UNIQUE_ACCEPT,
+                    CHI_HOME_CLEAN_SNOOP_COORDINATE,
+                    CHI_HOME_COMP_UC_PRODUCE,
+                    CHI_HOME_COMP_ACK_ACCEPT,
+                )
+            ),
+            CHI_MAKE_UNIQUE_HOME_CAPABILITIES,
+        )
+        self.assertEqual(
+            frozenset(
+                (
+                    CHI_SNOOPEE_SNP_MAKE_INVALID_ACCEPT,
+                    CHI_SNOOPEE_SNP_MAKE_INVALID_DISCARD_DIRTY,
+                    CHI_SNOOPEE_CLEAN_SNP_RESP_PRODUCE,
+                )
+            ),
+            CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES,
+        )
+        claimed = (
+            CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES
+            | CHI_MAKE_UNIQUE_HOME_CAPABILITIES
+            | CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES
+        )
+        for excluded in ("retry", "nderr", "tag"):
+            with self.subTest(excluded=excluded):
+                self.assertFalse(
+                    any(excluded in capability.name for capability in claimed)
+                )
+
+    def test_each_participant_atomic_capability_is_required(self) -> None:
+        role_cases = (
+            (
+                "rn0",
+                "requester",
+                CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES,
+            ),
+            (
+                "hn0",
+                "home",
+                CHI_MAKE_UNIQUE_HOME_CAPABILITIES,
+            ),
+            (
+                "rn1",
+                "snoopee",
+                CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES,
+            ),
+        )
+        for participant_name, role, capabilities in role_cases:
+            for missing in capabilities:
+                with self.subTest(role=role, missing=missing):
+                    arguments = {
+                        "requester": (
+                            CHI_MAKE_UNIQUE_REQUESTER_CAPABILITIES
+                        ),
+                        "home": CHI_MAKE_UNIQUE_HOME_CAPABILITIES,
+                        "snoopee": (
+                            CHI_MAKE_UNIQUE_SNOOPEE_CAPABILITIES
+                        ),
+                    }
+                    arguments[role] = capabilities - frozenset((missing,))
+                    resolved = resolve_chi_capabilities(
+                        self.contract("rn1"),
+                        participants=self.participants(
+                            "rn1",
+                            **arguments,
+                        ),
+                        flows=self.flows("rn1"),
+                        system_capabilities=self.system_capabilities(),
+                    )
+
+                    gaps = tuple(
+                        gap
+                        for gap in resolved.gaps(
+                            CHI_FEATURE_MAKE_UNIQUE
+                        )
+                        if (
+                            gap.kind
+                            is ChiCapabilityGapKind.PARTICIPANT
+                            and gap.subject == participant_name
+                        )
+                    )
+                    self.assertEqual(1, len(gaps))
+                    self.assertEqual((missing,), gaps[0].missing)
+
+    def test_each_protocol_path_and_rsp_channel_are_required(self) -> None:
+        cases = (
+            (
+                "make_unique_request",
+                "make_unique_request",
+                {"request": False},
+            ),
+            (
+                "make_unique_snoop",
+                "make_unique_snoop[hn0->rn1]",
+                {"snoop": False},
+            ),
+            (
+                "make_unique_snoop_response",
+                "make_unique_snoop_response[rn1->hn0]",
+                {"snoop_response": False},
+            ),
+            (
+                "make_unique_completion",
+                "make_unique_completion",
+                {"completion": False},
+            ),
+            (
+                "make_unique_completion_ack",
+                "make_unique_completion_ack",
+                {"completion_ack": False},
+            ),
+        )
+        for requirement, subject, arguments in cases:
+            with self.subTest(requirement=requirement):
+                resolved = resolve_chi_capabilities(
+                    self.contract("rn1"),
+                    participants=self.participants("rn1"),
+                    flows=self.flows("rn1", **arguments),
+                    system_capabilities=self.system_capabilities(),
+                )
+
+                gaps = tuple(
+                    gap
+                    for gap in resolved.gaps(CHI_FEATURE_MAKE_UNIQUE)
+                    if gap.kind is ChiCapabilityGapKind.FLOW
+                )
+                self.assertEqual(1, len(gaps))
+                self.assertEqual(subject, gaps[0].subject)
+
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1"),
+            participants=self.participants("rn1"),
+            flows=self.flows(
+                "rn1",
+                snoop_response_channel=ChiChannelKind.DAT,
+            ),
+            system_capabilities=self.system_capabilities(),
+        )
+        flow_gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_MAKE_UNIQUE)
+            if gap.kind is ChiCapabilityGapKind.FLOW
+        )
+        self.assertEqual(1, len(flow_gaps))
+        self.assertEqual(
+            "make_unique_snoop_response[rn1->hn0]",
+            flow_gaps[0].subject,
+        )
+
+    def test_zero_peer_fast_path_still_requires_explicit_lifecycle(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+        )
+        system_gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_MAKE_UNIQUE)
+            if gap.kind is ChiCapabilityGapKind.SYSTEM
+        )
+        self.assertEqual(1, len(system_gaps))
+        self.assertEqual(
+            (CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE,),
+            system_gaps[0].missing,
+        )
+
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+        evidence = resolved.require(CHI_FEATURE_MAKE_UNIQUE)
+        self.assertEqual(
+            {
+                "make_unique_request",
+                "make_unique_completion",
+                "make_unique_completion_ack",
+            },
+            set(evidence.flows),
+        )
+
+
+class ChiIssueHDirtyWriteBackCapabilityTest(unittest.TestCase):
+    def test_writeback_closes_two_roles_and_three_protocol_flows(self) -> None:
+        contract = ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_DIRTY_WRITEBACK,)),
+        )
+        participants = (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
+            ),
+        )
+        flows = (
+            ChiFlowCapability(
+                "writeback_request_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+            ),
+            ChiFlowCapability(
+                "dbid_response_path",
+                "hn0",
+                "rn0",
+                ChiChannelKind.RSP,
+            ),
+            ChiFlowCapability(
+                "copyback_data_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.DAT,
+            ),
+        )
+
+        resolved = resolve_chi_capabilities(
+            contract,
+            participants=participants,
+            flows=flows,
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE,)
+            ),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_DIRTY_WRITEBACK)
+        self.assertEqual(
+            (),
+            evidence.dependencies,
+        )
+        self.assertEqual(
+            {"requester", "home"},
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {
+                "writeback_request",
+                "writeback_dbid_response",
+                "writeback_copyback_data",
+            },
+            set(evidence.flows),
+        )
+
+
+class ChiIssueHWriteEvictFullCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract() -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_WRITE_EVICT_FULL,)),
+        )
+
+    @staticmethod
+    def participants(
+        requester: frozenset[ChiCapabilityKey] = (
+            CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES
+        ),
+    ) -> tuple[ChiParticipantCapability, ...]:
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                requester,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
+            ),
+        )
+
+    @staticmethod
+    def flows() -> tuple[ChiFlowCapability, ...]:
+        return (
+            ChiFlowCapability(
+                "write_evict_request_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+            ),
+            ChiFlowCapability(
+                "write_evict_dbid_response_path",
+                "hn0",
+                "rn0",
+                ChiChannelKind.RSP,
+            ),
+            ChiFlowCapability(
+                "write_evict_copyback_data_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.DAT,
+            ),
+        )
+
+    def test_write_evict_closes_req_rsp_dat_without_feature_dependency(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,)
+            ),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_WRITE_EVICT_FULL)
+        self.assertEqual((), evidence.dependencies)
+        self.assertEqual({"requester", "home"}, set(evidence.participants))
+        self.assertEqual(
+            {
+                "write_evict_request",
+                "write_evict_dbid_response",
+                "write_evict_copyback_data",
+            },
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            (
+                ChiChannelKind.REQ,
+                ChiChannelKind.RSP,
+                ChiChannelKind.DAT,
+            ),
+            tuple(
+                flow.channel
+                for flow in CHI_WRITE_EVICT_FULL_DEFINITION.flows
+            ),
+        )
+        self.assertIs(
+            CHI_WRITE_EVICT_FULL_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_WRITE_EVICT_FULL
+            ],
+        )
+        self.assertTrue(
+            CHI_WRITE_EVICT_FULL_DEFINITION.requires_coherence_domain
+        )
+
+    def test_write_evict_requires_explicit_lifecycle_composition(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_WRITE_EVICT_FULL)
+            if gap.kind is ChiCapabilityGapKind.SYSTEM
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual(
+            (CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,),
+            gaps[0].missing,
+        )
+
+    def test_copyback_requester_explicitly_accepts_dbid_response(
+        self,
+    ) -> None:
+        self.assertIn(
+            CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,
+            CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,
+            CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+        )
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(
+                CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES
+                - {CHI_REQUESTER_COMP_DBID_RESP_ACCEPT}
+            ),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,)
+            ),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_WRITE_EVICT_FULL)
+            if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual("rn0", gaps[0].subject)
+        self.assertEqual(
+            (CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,),
+            gaps[0].missing,
+        )
+
+    def test_pre_dbid_cancel_capabilities_are_explicit(self) -> None:
+        self.assertIn(
+            CHI_SNOOPEE_WRITE_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
+            CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_COPYBACK_CANCEL_PRODUCE,
+            CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_HOME_COPYBACK_CANCEL_ACCEPT,
+            CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
+        )
+
+
+class ChiIssueHWriteEvictOrEvictCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract() -> ChiFeatureContract:
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_WRITE_EVICT_OR_EVICT,)),
+        )
+
+    @staticmethod
+    def participants(
+        requester: frozenset[ChiCapabilityKey] = (
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES
+        ),
+    ) -> tuple[ChiParticipantCapability, ...]:
+        return (
+            ChiParticipantCapability("rn0", requester),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+            ),
+        )
+
+    @staticmethod
+    def flows() -> tuple[ChiFlowCapability, ...]:
+        return (
+            ChiFlowCapability(
+                "write_evict_or_evict_request_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.REQ,
+            ),
+            ChiFlowCapability(
+                "write_evict_or_evict_response_path",
+                "hn0",
+                "rn0",
+                ChiChannelKind.RSP,
+            ),
+            ChiFlowCapability(
+                "write_evict_or_evict_copyback_data_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.DAT,
+            ),
+            ChiFlowCapability(
+                "write_evict_or_evict_completion_ack_path",
+                "rn0",
+                "hn0",
+                ChiChannelKind.RSP,
+            ),
+        )
+
+    def test_feature_closes_both_home_outcomes_over_four_flows(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE,)
+            ),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_WRITE_EVICT_OR_EVICT)
+        self.assertEqual((), evidence.dependencies)
+        self.assertEqual({"requester", "home"}, set(evidence.participants))
+        self.assertEqual(
+            {
+                "write_evict_or_evict_request",
+                "write_evict_or_evict_response",
+                "write_evict_or_evict_copyback_data",
+                "write_evict_or_evict_completion_ack",
+            },
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            (
+                ChiChannelKind.REQ,
+                ChiChannelKind.RSP,
+                ChiChannelKind.DAT,
+                ChiChannelKind.RSP,
+            ),
+            tuple(
+                flow.channel
+                for flow in CHI_WRITE_EVICT_OR_EVICT_DEFINITION.flows
+            ),
+        )
+        self.assertIs(
+            CHI_WRITE_EVICT_OR_EVICT_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_WRITE_EVICT_OR_EVICT
+            ],
+        )
+        self.assertTrue(
+            CHI_WRITE_EVICT_OR_EVICT_DEFINITION.requires_coherence_domain
+        )
+
+    def test_feature_requires_one_explicit_two_outcome_lifecycle(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_WRITE_EVICT_OR_EVICT)
+            if gap.kind is ChiCapabilityGapKind.SYSTEM
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual(
+            (CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE,),
+            gaps[0].missing,
+        )
+
+    def test_both_response_branches_are_atomic_participant_capabilities(
+        self,
+    ) -> None:
+        self.assertIn(
+            CHI_REQUESTER_WRITE_EVICT_OR_EVICT_ISSUE,
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_WRITE_EVICT_OR_EVICT_COMP_ACCEPT,
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_COMP_DBID_RESP_ACCEPT,
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_COMP_ACK_PRODUCE,
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_HOME_WRITE_EVICT_OR_EVICT_ACCEPT,
+            CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_HOME_WRITE_EVICT_OR_EVICT_COMP_PRODUCE,
+            CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_HOME_COMP_ACK_ACCEPT,
+            CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_SNOOPEE_WRITE_EVICT_OR_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_COPYBACK_CANCEL_PRODUCE,
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_HOME_COPYBACK_CANCEL_ACCEPT,
+            CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+        )
+
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(
+                CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES
+                - {CHI_REQUESTER_WRITE_EVICT_OR_EVICT_COMP_ACCEPT}
+            ),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE,)
+            ),
+        )
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_WRITE_EVICT_OR_EVICT)
+            if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual("rn0", gaps[0].subject)
+        self.assertEqual(
+            (CHI_REQUESTER_WRITE_EVICT_OR_EVICT_COMP_ACCEPT,),
+            gaps[0].missing,
+        )
+
+
+class ChiIssueHCleanEvictCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract():
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_CLEAN_EVICT,)),
+        )
+
+    @staticmethod
+    def participants(
+        *,
+        requester=CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+        home=CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+    ):
+        return (
+            ChiParticipantCapability("rn0", requester),
+            ChiParticipantCapability("hn0", home),
+        )
+
+    @staticmethod
+    def flows(
+        *,
+        request: bool = True,
+        completion: bool = True,
+    ):
+        flows = []
+        if request:
+            flows.append(
+                ChiFlowCapability(
+                    "evict_request_path",
+                    "rn0",
+                    "hn0",
+                    ChiChannelKind.REQ,
+                )
+            )
+        if completion:
+            flows.append(
+                ChiFlowCapability(
+                    "evict_completion_path",
+                    "hn0",
+                    "rn0",
+                    ChiChannelKind.RSP,
+                )
+            )
+        return tuple(flows)
+
+    def test_clean_evict_is_independent_and_closes_exactly_two_flows(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=frozenset(
+                (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,)
+            ),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_CLEAN_EVICT)
+        self.assertFalse(
+            resolved.supports(CHI_FEATURE_CLEAN_EVICT_RETRY)
+        )
+        self.assertEqual((), evidence.dependencies)
+        self.assertEqual(
+            {"requester", "home"},
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {"evict_request", "evict_completion"},
+            set(evidence.flows),
+        )
+        self.assertEqual(
+            (ChiChannelKind.REQ, ChiChannelKind.RSP),
+            tuple(
+                flow.channel
+                for flow in CHI_CLEAN_EVICT_DEFINITION.flows
+            ),
+        )
+        self.assertEqual(
+            frozenset(),
+            CHI_CLEAN_EVICT_DEFINITION.dependencies,
+        )
+        self.assertEqual(
+            {"requester", "home"},
+            {role.role for role in CHI_CLEAN_EVICT_DEFINITION.roles},
+        )
+        self.assertEqual(
+            frozenset(
+                (
+                    CHI_REQUESTER_EVICT_ISSUE,
+                    CHI_REQUESTER_EVICT_COMP_ACCEPT,
+                )
+            ),
+            CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertEqual(
+            frozenset(
+                (
+                    CHI_HOME_EVICT_ACCEPT,
+                    CHI_HOME_EVICT_COMP_PRODUCE,
+                )
+            ),
+            CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+        )
+
+    def test_each_participant_atomic_capability_is_required(self) -> None:
+        role_cases = (
+            (
+                "rn0",
+                "requester",
+                CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+            ),
+            (
+                "hn0",
+                "home",
+                CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+            ),
+        )
+        for participant_name, role, capabilities in role_cases:
+            for missing in capabilities:
+                with self.subTest(role=role, missing=missing):
+                    arguments = {
+                        "requester": CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
+                        "home": CHI_CLEAN_EVICT_HOME_CAPABILITIES,
+                    }
+                    arguments[role] = capabilities - frozenset((missing,))
+                    resolved = resolve_chi_capabilities(
+                        self.contract(),
+                        participants=self.participants(**arguments),
+                        flows=self.flows(),
+                        system_capabilities=frozenset(
+                            (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,)
+                        ),
+                    )
+
+                    gaps = tuple(
+                        gap
+                        for gap in resolved.gaps(CHI_FEATURE_CLEAN_EVICT)
+                        if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+                        and gap.subject == participant_name
+                    )
+                    self.assertEqual(1, len(gaps))
+                    self.assertEqual((missing,), gaps[0].missing)
+
+    def test_each_protocol_path_is_required(self) -> None:
+        cases = (
+            ("evict_request", {"request": False}),
+            ("evict_completion", {"completion": False}),
+        )
+        for requirement, arguments in cases:
+            with self.subTest(requirement=requirement):
+                resolved = resolve_chi_capabilities(
+                    self.contract(),
+                    participants=self.participants(),
+                    flows=self.flows(**arguments),
+                    system_capabilities=frozenset(
+                        (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,)
+                    ),
+                )
+
+                gaps = tuple(
+                    gap
+                    for gap in resolved.gaps(CHI_FEATURE_CLEAN_EVICT)
+                    if gap.kind is ChiCapabilityGapKind.FLOW
+                )
+                self.assertEqual(1, len(gaps))
+                self.assertEqual(requirement, gaps[0].subject)
+
+    def test_clean_evict_requires_its_system_lifecycle(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+        )
+
+        gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_CLEAN_EVICT)
+            if gap.kind is ChiCapabilityGapKind.SYSTEM
+        )
+        self.assertEqual(1, len(gaps))
+        self.assertEqual(
+            (CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,),
+            gaps[0].missing,
+        )
+
+
+class ChiIssueHCleanEvictRetryCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract():
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_CLEAN_EVICT_RETRY,)),
+        )
+
+    @staticmethod
+    def participants(*, retry: bool = True):
+        requester = CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES
+        home = CHI_CLEAN_EVICT_HOME_CAPABILITIES
+        if retry:
+            requester = requester | frozenset(
+                (
+                    CHI_REQUESTER_RETRY_ACK_ACCEPT,
+                    CHI_REQUESTER_PCREDIT_CONSUME,
+                )
+            )
+            home = home | frozenset(
+                (
+                    CHI_HOME_RETRY_ACK_PRODUCE,
+                    CHI_HOME_PCREDIT_GRANT,
+                )
+            )
+        return (
+            ChiParticipantCapability("rn0", requester),
+            ChiParticipantCapability("hn0", home),
+        )
+
+    @staticmethod
+    def system_capabilities(*, retry: bool = True):
+        return frozenset(
+            (
+                CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE,
+                *(
+                    (CHI_SYSTEM_CLEAN_EVICT_RETRY_LIFECYCLE,)
+                    if retry
+                    else ()
+                ),
+            )
+        )
+
+    def test_retry_modifier_closes_over_clean_evict(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=ChiIssueHCleanEvictCapabilityTest.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_EVICT))
+        evidence = resolved.require(CHI_FEATURE_CLEAN_EVICT_RETRY)
+        self.assertEqual(
+            (CHI_FEATURE_CLEAN_EVICT,),
+            evidence.dependencies,
+        )
+        self.assertEqual(
+            {"requester", "home"},
+            set(evidence.participants),
+        )
+        self.assertEqual({"retry_response"}, set(evidence.flows))
+        self.assertEqual(
+            "evict_completion_path",
+            evidence.flows["retry_response"].name,
+        )
+        self.assertEqual(
+            (
+                ChiFlowRequirement(
+                    "retry_response",
+                    "home",
+                    "requester",
+                    ChiChannelKind.RSP,
+                ),
+            ),
+            CHI_CLEAN_EVICT_RETRY_DEFINITION.flows,
+        )
+        self.assertIs(
+            CHI_CLEAN_EVICT_RETRY_DEFINITION,
+            CHI_BUILTIN_FEATURE_CATALOG.definitions[
+                CHI_FEATURE_CLEAN_EVICT_RETRY
+            ],
+        )
+
+    def test_base_participants_do_not_claim_retry_behavior(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(retry=False),
+            flows=ChiIssueHCleanEvictCapabilityTest.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_EVICT))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_EVICT_RETRY)
+        self.assertEqual(
+            {"rn0", "hn0"},
+            {
+                gap.subject
+                for gap in gaps
+                if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+            },
+        )
+        self.assertEqual(
+            {
+                CHI_REQUESTER_RETRY_ACK_ACCEPT,
+                CHI_REQUESTER_PCREDIT_CONSUME,
+                CHI_HOME_RETRY_ACK_PRODUCE,
+                CHI_HOME_PCREDIT_GRANT,
+            },
+            {
+                capability
+                for gap in gaps
+                if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+                for capability in gap.missing
+            },
+        )
+
+    def test_retry_composition_requires_explicit_system_fact(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=ChiIssueHCleanEvictCapabilityTest.flows(),
+            system_capabilities=self.system_capabilities(retry=False),
+        )
+
+        self.assertTrue(resolved.supports(CHI_FEATURE_CLEAN_EVICT))
+        gaps = resolved.gaps(CHI_FEATURE_CLEAN_EVICT_RETRY)
+        self.assertEqual(1, len(gaps))
+        self.assertIs(ChiCapabilityGapKind.SYSTEM, gaps[0].kind)
+        self.assertEqual(
+            (CHI_SYSTEM_CLEAN_EVICT_RETRY_LIFECYCLE,),
+            gaps[0].missing,
+        )
+
+
+class ChiIssueHFiniteSnoopeeSetCapabilityTest(unittest.TestCase):
+    @staticmethod
+    def contract(*snoopees: str):
+        return ChiFeatureContract(
+            {
+                "requester": "rn0",
+                "home": "hn0",
+            },
+            frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE,)),
+            role_sets={"snoopee": frozenset(snoopees)},
+        )
+
+    @staticmethod
+    def participants(*snoopees: str):
+        return (
+            ChiParticipantCapability(
+                "rn0",
+                CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "hn0",
+                CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
+            ),
+            *(
+                ChiParticipantCapability(
+                    snoopee,
+                    CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
+                )
+                for snoopee in snoopees
+            ),
+        )
+
+    @staticmethod
+    def flows(*snoopees: str, omit: frozenset[tuple[str, str]] = frozenset()):
+        definitions = [
+            ("request", "rn0", "hn0", ChiChannelKind.REQ),
+            ("completion_data", "hn0", "rn0", ChiChannelKind.DAT),
+            ("completion_ack", "rn0", "hn0", ChiChannelKind.RSP),
+        ]
+        for snoopee in snoopees:
+            definitions.extend(
+                (
+                    (
+                        f"snoop_{snoopee}",
+                        "hn0",
+                        snoopee,
+                        ChiChannelKind.SNP,
+                    ),
+                    (
+                        f"snoop_response_{snoopee}",
+                        snoopee,
+                        "hn0",
+                        ChiChannelKind.RSP,
+                    ),
+                )
+            )
+        return tuple(
+            ChiFlowCapability(name, source, target, channel)
+            for name, source, target, channel in definitions
+            if (source, target) not in omit
+        )
+
+    @staticmethod
+    def system_capabilities():
+        return frozenset((CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,))
+
+    def test_every_declared_snoopee_closes_capability_and_both_paths(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1", "rn2"),
+            participants=self.participants("rn1", "rn2"),
+            flows=self.flows("rn1", "rn2"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_CLEAN_READ_UNIQUE)
+        self.assertEqual(
+            {
+                "requester",
+                "home",
+                "snoopee[rn1]",
+                "snoopee[rn2]",
+            },
+            set(evidence.participants),
+        )
+        self.assertEqual(
+            {
+                "request",
+                "completion_data",
+                "completion_ack",
+                "snoop[hn0->rn1]",
+                "snoop[hn0->rn2]",
+                "snoop_response[rn1->hn0]",
+                "snoop_response[rn2->hn0]",
+            },
+            set(evidence.flows),
+        )
+
+    def test_one_missing_return_path_names_the_exact_snoopee(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1", "rn2"),
+            participants=self.participants("rn1", "rn2"),
+            flows=self.flows(
+                "rn1",
+                "rn2",
+                omit=frozenset((("rn2", "hn0"),)),
+            ),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        flow_gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE)
+            if gap.kind is ChiCapabilityGapKind.FLOW
+        )
+        self.assertEqual(1, len(flow_gaps))
+        self.assertEqual(
+            "snoop_response[rn2->hn0]",
+            flow_gaps[0].subject,
+        )
+
+    def test_one_missing_participant_claim_names_the_exact_snoopee(
+        self,
+    ) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract("rn1", "rn2"),
+            participants=self.participants("rn1"),
+            flows=self.flows("rn1", "rn2"),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        participant_gaps = tuple(
+            gap
+            for gap in resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE)
+            if gap.kind is ChiCapabilityGapKind.PARTICIPANT
+        )
+        self.assertEqual(1, len(participant_gaps))
+        self.assertEqual("rn2", participant_gaps[0].subject)
+
+    def test_role_flow_expansion_is_shared_and_deterministic(self) -> None:
+        snoop = next(
+            flow
+            for flow in CHI_CLEAN_READ_UNIQUE_DEFINITION.flows
+            if flow.name == "snoop"
+        )
+        obligations = bind_chi_flow_requirement(
+            self.contract("rn2", "rn1"),
+            snoop,
+        )
+
+        self.assertIsNotNone(obligations)
+        self.assertEqual(
+            (
+                ("snoop[hn0->rn1]", "hn0", "rn1"),
+                ("snoop[hn0->rn2]", "hn0", "rn2"),
+            ),
+            tuple(
+                (item.key, item.source, item.target)
+                for item in obligations or ()
+            ),
+        )
+
+    def test_two_set_endpoints_have_unambiguous_evidence_keys(self) -> None:
+        contract = ChiFeatureContract(
+            {},
+            role_sets={
+                "sources": frozenset(("a", "a->b")),
+                "targets": frozenset(("b->c", "c")),
+            },
+        )
+        requirement = ChiFlowRequirement(
+            "fan[out]",
+            "sources",
+            "targets",
+            ChiChannelKind.REQ,
+        )
+
+        obligations = bind_chi_flow_requirement(contract, requirement)
+
+        self.assertIsNotNone(obligations)
+        keys = tuple(item.key for item in obligations or ())
+        self.assertEqual(4, len(keys))
+        self.assertEqual(4, len(set(keys)))
+        self.assertTrue(all("%" in key for key in keys))
+
+    def test_explicit_empty_peer_domain_closes_vacuously(self) -> None:
+        resolved = resolve_chi_capabilities(
+            self.contract(),
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        evidence = resolved.require(CHI_FEATURE_CLEAN_READ_UNIQUE)
+        self.assertEqual({"requester", "home"}, set(evidence.participants))
+        self.assertEqual(
+            {"request", "completion_data", "completion_ack"},
+            set(evidence.flows),
+        )
+
+    def test_omitting_the_domain_is_not_the_same_as_an_empty_domain(
+        self,
+    ) -> None:
+        contract = ChiFeatureContract(
+            {"requester": "rn0", "home": "hn0"},
+            frozenset((CHI_FEATURE_CLEAN_READ_UNIQUE,)),
+        )
+        resolved = resolve_chi_capabilities(
+            contract,
+            participants=self.participants(),
+            flows=self.flows(),
+            system_capabilities=self.system_capabilities(),
+        )
+
+        self.assertIn(
+            "snoopee",
+            {
+                gap.subject
+                for gap in resolved.gaps(CHI_FEATURE_CLEAN_READ_UNIQUE)
+                if gap.kind is ChiCapabilityGapKind.ROLE
+            },
+        )
+
+
+class ChiIssueHCapabilityProjectionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.profile = ChiReadNoSnpDirectProfile(
+            requester_node_id=0x07,
+            home_node_id=0x21,
+            data_width=128,
+            outstanding_capacity=2,
+        )
+        self.requester = ChiReadNoSnpDirectLedger(
+            "rn.reads", self.profile
+        )
+        self.home = ChiDirectHomeNode(
+            "home",
+            self.profile,
+            lambda request: request.address,
+            request_capacity=1,
+        )
+
+    @staticmethod
+    def port(name: str, direction: TransportDirection) -> TransportPort:
+        return TransportPort(
+            name,
+            CHI_ISSUE_H_TRANSPORT_FAMILY,
+            direction,
+            clock_domain="chi_clk",
+        )
+
+    @staticmethod
+    def link_profile(
+        name: str, channel: ChiChannelKind
+    ) -> ChiTransportLinkProfile:
+        common = {
+            "clock": "chi_clk",
+            "activation_observation": f"{name}.active",
+        }
+        if channel is ChiChannelKind.REQ:
+            return ChiTransportLinkProfile(
+                request=ChiReqChannelProfile(
+                    representation=ChiIssueHReqProfile(),
+                    observation=f"{name}.req",
+                ),
+                data=None,
+                **common,
+            )
+        if channel is ChiChannelKind.RSP:
+            return ChiTransportLinkProfile(
+                request=None,
+                response=ChiRspChannelProfile(
+                    representation=ChiIssueHRspProfile(),
+                    observation=f"{name}.rsp",
+                ),
+                **common,
+            )
+        return ChiTransportLinkProfile(
+            request=None,
+            data=ChiDatChannelProfile(
+                representation=ChiIssueHDatProfile(data_width=128),
+                observation=f"{name}.dat",
+            ),
+            **common,
+        )
+
+    def build_direct(
+        self,
+        *,
+        include_response: bool = True,
+        response_runtime_channel: ChiChannelKind = ChiChannelKind.RSP,
+    ):
+        builder = SystemProtocolBuilder("chi_capability_projection")
+        rn_ports = {
+            "tx_req": self.port("tx_req", TransportDirection.TRANSMIT),
+            "rx_dat": self.port("rx_dat", TransportDirection.RECEIVE),
+        }
+        home_ports = {
+            "rx_req": self.port("rx_req", TransportDirection.RECEIVE),
+            "tx_dat": self.port("tx_dat", TransportDirection.TRANSMIT),
+        }
+        if include_response:
+            rn_ports["rx_rsp"] = self.port(
+                "rx_rsp", TransportDirection.RECEIVE
+            )
+            home_ports["tx_rsp"] = self.port(
+                "tx_rsp", TransportDirection.TRANSMIT
+            )
+        builder.add_dut(VirtualDut("rn", rn_ports))
+        builder.add_dut(VirtualDut("home", home_ports))
+        connections = [
+            (
+                "request",
+                "rn",
+                "tx_req",
+                "home",
+                "rx_req",
+                ChiChannelKind.REQ,
+            ),
+            (
+                "data",
+                "home",
+                "tx_dat",
+                "rn",
+                "rx_dat",
+                ChiChannelKind.DAT,
+            ),
+        ]
+        if include_response:
+            connections.append(
+                (
+                    "response",
+                    "home",
+                    "tx_rsp",
+                    "rn",
+                    "rx_rsp",
+                    response_runtime_channel,
+                )
+            )
+        for name, tx_dut, tx_port, rx_dut, rx_port, channel in connections:
+            builder.connect_transport(
+                name,
+                CHI_ISSUE_H_TRANSPORT_FAMILY,
+                VirtualDutPortRef(tx_dut, tx_port),
+                VirtualDutPortRef(rx_dut, rx_port),
+                profile=self.link_profile(name, channel),
+            )
+        system = builder.build().elaborate()
+        network = ChiTransportNetworkSession(system)
+        duts = system.spec.virtual_duts
+        port_binding = ChiParticipantPortBinding
+        requester_ports = [
+            port_binding(
+                duts["rn"].port("tx_req"),
+                frozenset((ChiChannelKind.REQ,)),
+            ),
+            port_binding(
+                duts["rn"].port("rx_dat"),
+                frozenset((ChiChannelKind.DAT,)),
+            ),
+        ]
+        home_binding_ports = [
+            port_binding(
+                duts["home"].port("rx_req"),
+                frozenset((ChiChannelKind.REQ,)),
+            ),
+            port_binding(
+                duts["home"].port("tx_dat"),
+                frozenset((ChiChannelKind.DAT,)),
+            ),
+        ]
+        if include_response:
+            requester_ports.append(
+                port_binding(
+                    duts["rn"].port("rx_rsp"),
+                    frozenset((ChiChannelKind.RSP,)),
+                )
+            )
+            home_binding_ports.append(
+                port_binding(
+                    duts["home"].port("tx_rsp"),
+                    frozenset((ChiChannelKind.RSP,)),
+                )
+            )
+        requester = ChiParticipantBinding(
+            "requester",
+            duts["rn"],
+            self.requester,
+            tuple(requester_ports),
+            frozenset((self.profile.requester_node_id,)),
+        )
+        home = ChiParticipantBinding(
+            "home",
+            duts["home"],
+            self.home,
+            tuple(home_binding_ports),
+            frozenset((self.profile.home_node_id,)),
+        )
+        return network, (requester, home)
+
+    @staticmethod
+    def feature_contract():
+        return ChiFeatureContract(
+            {"requester": "requester", "home": "home"},
+            frozenset((CHI_FEATURE_REQUEST_RETRY,)),
+        )
+
+    @staticmethod
+    def participant_capabilities():
+        return (
+            ChiParticipantCapability(
+                "requester",
+                CHI_REQUEST_RETRY_REQUESTER_CAPABILITIES,
+            ),
+            ChiParticipantCapability(
+                "home",
+                CHI_REQUEST_RETRY_HOME_CAPABILITIES,
+            ),
+        )
+
+    def test_projector_closes_builtin_flows_from_executable_network(self) -> None:
+        network, bindings = self.build_direct()
+        projection = project_chi_flow_capabilities(
+            network,
+            self.feature_contract(),
+            bindings=bindings,
+        )
+
+        self.assertEqual((), projection.gaps)
+        self.assertEqual(
+            {
+                ("requester", "home", ChiChannelKind.REQ),
+                ("home", "requester", ChiChannelKind.DAT),
+                ("home", "requester", ChiChannelKind.RSP),
+            },
+            {
+                (flow.source, flow.target, flow.channel)
+                for flow in projection.flows
+            },
+        )
+        self.assertEqual(
+            ("request",),
+            next(
+                flow.connections
+                for flow in projection.flows
+                if flow.channel is ChiChannelKind.REQ
+            ),
+        )
+
+        resolved = resolve_projected_chi_capabilities(
+            network,
+            self.feature_contract(),
+            bindings=bindings,
+            participant_capabilities=self.participant_capabilities(),
+        )
+        self.assertTrue(resolved.supports(CHI_FEATURE_READ_NO_SNP))
+        self.assertTrue(resolved.supports(CHI_FEATURE_REQUEST_RETRY))
+
+    def test_selected_target_identity_excludes_other_owned_node_ids(
+        self,
+    ) -> None:
+        network, bindings = self.build_direct()
+        requester, home = bindings
+        selected_home_id = self.profile.home_node_id
+        compound_home = ChiParticipantBinding(
+            home.name,
+            home.dut,
+            home.component,
+            home.ports,
+            frozenset((selected_home_id, 1 << 20)),
+        )
+        feature = ChiFeatureKey("chi.feature.test.request_path")
+        catalog = ChiFeatureCatalog(
+            {
+                feature: ChiFeatureDefinition(
+                    feature,
+                    flows=(
+                        ChiFlowRequirement(
+                            "request",
+                            "requester",
+                            "home",
+                            ChiChannelKind.REQ,
+                        ),
+                    ),
+                )
+            }
+        )
+        contract = ChiFeatureContract(
+            {"requester": "requester", "home": "home"},
+            frozenset((feature,)),
+        )
+
+        projection = project_chi_flow_capabilities(
+            network,
+            contract,
+            bindings=(requester, compound_home),
+            catalog=catalog,
+            target_node_id_by_participant={
+                "home": selected_home_id,
+            },
+        )
+
+        self.assertEqual((), projection.gaps)
+        self.assertEqual(1, len(projection.flows))
+
+    def test_projector_proves_every_member_of_a_finite_target_set(
+        self,
+    ) -> None:
+        builder = SystemProtocolBuilder("chi_capability_target_set")
+        requester_ports = {
+            "tx_req_1": self.port(
+                "tx_req_1", TransportDirection.TRANSMIT
+            ),
+            "tx_req_2": self.port(
+                "tx_req_2", TransportDirection.TRANSMIT
+            ),
+        }
+        builder.add_dut(VirtualDut("rn", requester_ports))
+        builder.add_dut(
+            VirtualDut(
+                "home1",
+                {
+                    "rx_req": self.port(
+                        "rx_req", TransportDirection.RECEIVE
+                    )
+                },
+            )
+        )
+        builder.add_dut(
+            VirtualDut(
+                "home2",
+                {
+                    "rx_req": self.port(
+                        "rx_req", TransportDirection.RECEIVE
+                    )
+                },
+            )
+        )
+        for index in (1, 2):
+            builder.connect_transport(
+                f"request_{index}",
+                CHI_ISSUE_H_TRANSPORT_FAMILY,
+                VirtualDutPortRef("rn", f"tx_req_{index}"),
+                VirtualDutPortRef(f"home{index}", "rx_req"),
+                profile=self.link_profile(
+                    f"request_{index}",
+                    ChiChannelKind.REQ,
+                ),
+            )
+        system = builder.build().elaborate()
+        network = ChiTransportNetworkSession(system)
+        duts = system.spec.virtual_duts
+        port_binding = ChiParticipantPortBinding
+        requester = ChiParticipantBinding(
+            "requester",
+            duts["rn"],
+            self.requester,
+            tuple(
+                port_binding(
+                    duts["rn"].port(f"tx_req_{index}"),
+                    frozenset((ChiChannelKind.REQ,)),
+                )
+                for index in (1, 2)
+            ),
+            frozenset((self.profile.requester_node_id,)),
+        )
+        homes = tuple(
+            ChiParticipantBinding(
+                f"home{index}",
+                duts[f"home{index}"],
+                self.home,
+                (
+                    port_binding(
+                        duts[f"home{index}"].port("rx_req"),
+                        frozenset((ChiChannelKind.REQ,)),
+                    ),
+                ),
+                frozenset((self.profile.home_node_id + index,)),
+            )
+            for index in (1, 2)
+        )
+        feature = ChiFeatureKey("chi.feature.test.finite_targets")
+        catalog = ChiFeatureCatalog(
+            {
+                feature: ChiFeatureDefinition(
+                    feature,
+                    flows=(
+                        ChiFlowRequirement(
+                            "request",
+                            "requester",
+                            "homes",
+                            ChiChannelKind.REQ,
+                        ),
+                    ),
+                )
+            }
+        )
+        contract = ChiFeatureContract(
+            {"requester": "requester"},
+            frozenset((feature,)),
+            role_sets={"homes": frozenset(("home1", "home2"))},
+        )
+
+        projection = project_chi_flow_capabilities(
+            network,
+            contract,
+            bindings=(requester, *homes),
+            catalog=catalog,
+        )
+
+        self.assertEqual((), projection.gaps)
+        self.assertEqual(
+            {
+                ("requester", "home1"),
+                ("requester", "home2"),
+            },
+            {(flow.source, flow.target) for flow in projection.flows},
+        )
+        self.assertEqual(
+            {
+                f"{feature.name}:request[requester->home1]",
+                f"{feature.name}:request[requester->home2]",
+            },
+            set(projection.flow_by_requirement),
+        )
+
+    def test_missing_runtime_channel_is_not_promoted_from_topology(self) -> None:
+        network, bindings = self.build_direct(include_response=False)
+        projection = project_chi_flow_capabilities(
+            network,
+            self.feature_contract(),
+            bindings=bindings,
+        )
+
+        response_gaps = tuple(
+            gap
+            for gap in projection.gaps
+            if gap.channel is ChiChannelKind.RSP
+        )
+        self.assertEqual(1, len(response_gaps))
+        self.assertIs(
+            ChiFlowProjectionGapKind.PORT,
+            response_gaps[0].kind,
+        )
+        resolved = resolve_projected_chi_capabilities(
+            network,
+            self.feature_contract(),
+            bindings=bindings,
+            participant_capabilities=self.participant_capabilities(),
+        )
+        self.assertTrue(resolved.supports(CHI_FEATURE_READ_NO_SNP))
+        self.assertFalse(resolved.supports(CHI_FEATURE_REQUEST_RETRY))
+
+    def test_topology_edge_with_wrong_runtime_channel_reports_channel_gap(
+        self,
+    ) -> None:
+        network, bindings = self.build_direct(
+            response_runtime_channel=ChiChannelKind.DAT
+        )
+
+        projection = project_chi_flow_capabilities(
+            network,
+            self.feature_contract(),
+            bindings=bindings,
+        )
+
+        response_gaps = tuple(
+            gap
+            for gap in projection.gaps
+            if gap.channel is ChiChannelKind.RSP
+        )
+        self.assertEqual(1, len(response_gaps))
+        self.assertIs(
+            ChiFlowProjectionGapKind.CHANNEL,
+            response_gaps[0].kind,
+        )
+        self.assertIn("topology connection 'response' exists", response_gaps[0].reason)
+        resolved = resolve_projected_chi_capabilities(
+            network,
+            self.feature_contract(),
+            bindings=bindings,
+            participant_capabilities=self.participant_capabilities(),
+        )
+        self.assertFalse(resolved.supports(CHI_FEATURE_REQUEST_RETRY))
+
+
+if __name__ == "__main__":
+    unittest.main()

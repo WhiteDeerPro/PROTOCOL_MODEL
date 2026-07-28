@@ -1,0 +1,20 @@
+digraph system_trace {
+  rankdir=TB;
+  label="Interrupt control plane · recorded causal edges";
+  labelloc="t";
+  graph [nodesep=0.4, ranksep=0.55, splines=polyline, pack=true, packmode="array_u1"];
+  node [shape=box, fontname="monospace", margin="0.08,0.05"];
+  event0 [label="[0] source_a_irq.notify\nsource_a.irq → controller.from_a\nINTERRUPT_NOTIFY(key=9, interrupt_id=40, priority=7)"];
+  event1 [label="[1] source_a_irq.complete\ncontroller.from_a → source_a.irq\nINTERRUPT_COMPLETE(key=9, interrupt_id=40)"];
+  event2 [label="[2] source_b_irq.notify\nsource_b.irq → controller.from_b\nINTERRUPT_NOTIFY(key=2, interrupt_id=11, priority=1)"];
+  event3 [label="[3] source_b_irq.complete\ncontroller.from_b → source_b.irq\nINTERRUPT_COMPLETE(key=2, interrupt_id=11)"];
+  event4 [label="[4] cpu_irq.notify\ncontroller.to_cpu → cpu_target.irq\nINTERRUPT_NOTIFY(key=0, interrupt_id=11, priority=1)"];
+  event5 [label="[5] cpu_irq.complete\ncpu_target.irq → controller.to_cpu\nINTERRUPT_COMPLETE(key=0, interrupt_id=11)"];
+  event6 [label="[6] cpu_irq.notify\ncontroller.to_cpu → cpu_target.irq\nINTERRUPT_NOTIFY(key=1, interrupt_id=40, priority=7)"];
+  event7 [label="[7] cpu_irq.complete\ncpu_target.irq → controller.to_cpu\nINTERRUPT_COMPLETE(key=1, interrupt_id=40)"];
+  event0 -> event1;
+  event2 -> event3;
+  event4 -> event5;
+  event5 -> event6;
+  event6 -> event7;
+}

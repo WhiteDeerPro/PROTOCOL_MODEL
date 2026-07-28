@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import SemanticFragment
 
-from ..attachments.base import ProtocolAttachment
-from ..backend.base import VirtualDutModel
-from ..boundary.module import DutFacet, VirtualDut
-from ..boundary.port import ProtocolPort
-from .port import PortAttachmentBinding
+from ..attachments.base import InterfaceAttachment
+from ..backend.base import VirtualDutBackend
+from ..boundary.module import DutBehaviorTag, VirtualDut
+from ..boundary.port import InterfacePort
+from .port import InterfaceAttachmentBinding
 
 
 class VirtualDutBuilder:
@@ -19,17 +19,17 @@ class VirtualDutBuilder:
         if not name:
             raise ValueError("VirtualDutBuilder requires a name")
         self.name = name
-        self._ports: dict[str, ProtocolPort] = {}
-        self._bindings: dict[str, PortAttachmentBinding] = {}
-        self._model: VirtualDutModel | None = None
-        self._facets: frozenset[DutFacet] = frozenset()
+        self._ports: dict[str, InterfacePort] = {}
+        self._bindings: dict[str, InterfaceAttachmentBinding] = {}
+        self._backend: VirtualDutBackend | None = None
+        self._behavior_tags: frozenset[DutBehaviorTag] = frozenset()
         self._semantics: SemanticFragment | None = None
         self._subsystem: object | None = None
         self._description = ""
 
-    def add_port(self, port: ProtocolPort) -> "VirtualDutBuilder":
-        if not isinstance(port, ProtocolPort):
-            raise TypeError("VirtualDutBuilder.add_port requires a ProtocolPort")
+    def add_port(self, port: InterfacePort) -> "VirtualDutBuilder":
+        if not isinstance(port, InterfacePort):
+            raise TypeError("VirtualDutBuilder.add_port requires an InterfacePort")
         if port.name in self._ports:
             raise ValueError(f"duplicate VirtualDut port {port.name!r}")
         self._ports[port.name] = port
@@ -38,7 +38,7 @@ class VirtualDutBuilder:
     def port(
         self,
         name: str,
-        protocol: LinkProtocol,
+        protocol: InterfaceProtocol,
         role: str,
         *,
         capability: object | None = None,
@@ -46,7 +46,7 @@ class VirtualDutBuilder:
         reset_domain: str | None = None,
     ) -> "VirtualDutBuilder":
         return self.add_port(
-            ProtocolPort(
+            InterfacePort(
                 name=name,
                 protocol=protocol,
                 role=role,
@@ -56,9 +56,11 @@ class VirtualDutBuilder:
             )
         )
 
-    def bind(self, binding: PortAttachmentBinding) -> "VirtualDutBuilder":
-        if not isinstance(binding, PortAttachmentBinding):
-            raise TypeError("VirtualDutBuilder.bind requires a PortAttachmentBinding")
+    def bind(self, binding: InterfaceAttachmentBinding) -> "VirtualDutBuilder":
+        if not isinstance(binding, InterfaceAttachmentBinding):
+            raise TypeError(
+                "VirtualDutBuilder.bind requires an InterfaceAttachmentBinding"
+            )
         if binding.name in self._bindings:
             raise ValueError(f"duplicate attachment binding {binding.name!r}")
         existing = self._ports.get(binding.name)
@@ -72,7 +74,7 @@ class VirtualDutBuilder:
         return self
 
     def bind_port(
-        self, name: str, attachment: ProtocolAttachment
+        self, name: str, attachment: InterfaceAttachment
     ) -> "VirtualDutBuilder":
         try:
             port = self._ports[name]
@@ -80,20 +82,22 @@ class VirtualDutBuilder:
             raise ValueError(
                 f"cannot bind attachment to unknown port {name!r}"
             ) from exc
-        return self.bind(PortAttachmentBinding(port, attachment))
+        return self.bind(InterfaceAttachmentBinding(port, attachment))
 
-    def with_model(self, model: VirtualDutModel) -> "VirtualDutBuilder":
-        if self._model is not None:
-            raise ValueError("VirtualDut backend model is already configured")
-        if not isinstance(model, VirtualDutModel):
-            raise TypeError("VirtualDut backend must implement VirtualDutModel")
-        self._model = model
+    def with_backend(self, backend: VirtualDutBackend) -> "VirtualDutBuilder":
+        if self._backend is not None:
+            raise ValueError("VirtualDut backend is already configured")
+        if not isinstance(backend, VirtualDutBackend):
+            raise TypeError("VirtualDut backend must implement VirtualDutBackend")
+        self._backend = backend
         return self
 
-    def with_facets(self, *facets: DutFacet) -> "VirtualDutBuilder":
-        self._facets = frozenset(
-            item if isinstance(item, DutFacet) else DutFacet(item)
-            for item in facets
+    def with_behavior_tags(
+        self, *behavior_tags: DutBehaviorTag
+    ) -> "VirtualDutBuilder":
+        self._behavior_tags = frozenset(
+            item if isinstance(item, DutBehaviorTag) else DutBehaviorTag(item)
+            for item in behavior_tags
         )
         return self
 
@@ -115,8 +119,8 @@ class VirtualDutBuilder:
         return VirtualDut(
             self.name,
             self._ports,
-            facets=self._facets,
-            model=self._model,
+            behavior_tags=self._behavior_tags,
+            backend=self._backend,
             semantics=self._semantics,
             subsystem=self._subsystem,
             description=self._description,

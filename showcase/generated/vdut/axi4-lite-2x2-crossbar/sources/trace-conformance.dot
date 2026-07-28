@@ -1,0 +1,65 @@
+digraph trace_conformance {
+  rankdir=TB;
+  label="Bridge trace comparison · contract, witness, and legal stutter";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.28, ranksep=0.55,
+         splines=polyline, newrank=true];
+  node [fontname="sans-serif", fontsize=10, shape=box,
+        style="rounded,filled", fillcolor="#ffffff"];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d"];
+
+  contract [shape=note, fillcolor="#eff6ff", color="#2563eb",
+    label="Bridge contract\noperation/result relation · correlation · required partial order\noptional latency or exact-cycle constraints"];
+
+  subgraph cluster_witness {
+    label="One deterministic execution witness · model service steps";
+    color="#94a3b8"; style="rounded";
+    { rank=same;
+      wa [label="accept A"];
+      wi [label="issue child A"];
+      wc [label="complete child A"];
+      wr [label="return A"];
+    }
+    wa -> wi -> wc -> wr;
+  }
+
+  subgraph cluster_rtl {
+    label="Illustrative RTL schedule after pin-local protocol checks";
+    color="#94a3b8"; style="rounded";
+    { rank=same;
+      ra [label="accept A"];
+      rs0 [shape=ellipse, style="dashed,filled", fillcolor="#f8fafc",
+           label="stall / no transfer"];
+      rs1 [shape=ellipse, style="dashed,filled", fillcolor="#f8fafc",
+           label="idle"];
+      ri [label="issue child A"];
+      rs2 [shape=ellipse, style="dashed,filled", fillcolor="#f8fafc",
+           label="wait"];
+      rc [label="complete child A"];
+      rr [label="return A"];
+    }
+    ra -> rs0 -> rs1 -> ri -> rs2 -> rc -> rr;
+  }
+
+  subgraph cluster_projection {
+    label="Normalized observable behavior";
+    color="#16a34a"; style="rounded";
+    { rank=same;
+      na [label="accept A", fillcolor="#f0fdf4"];
+      ni [label="issue A", fillcolor="#f0fdf4"];
+      nc [label="complete A", fillcolor="#f0fdf4"];
+      nr [label="return A", fillcolor="#f0fdf4"];
+    }
+    na -> ni -> nc -> nr [label="required happens-before"];
+  }
+
+  contract -> wa [label="execution profile chooses one schedule"];
+  contract -> ra [label="RTL may choose another allowed schedule"];
+  wr -> na [style=dashed, color="#16a34a", label="project witness"];
+  rr -> na [style=dashed, color="#16a34a",
+    label="observe transfers; erase irrelevant stutter"];
+
+  verdict [shape=note, fillcolor="#fff7ed", color="#ea580c",
+    label="Default conformance: projected RTL ∈ allowed behaviors\nnot: raw RTL cycles == witness cycles\nExact cycle equality requires an explicit PIN_CYCLE contract"];
+  nr -> verdict;
+}

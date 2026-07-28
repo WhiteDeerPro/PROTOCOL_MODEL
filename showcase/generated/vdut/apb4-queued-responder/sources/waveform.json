@@ -1,0 +1,110 @@
+{
+  "signal": [
+    {
+      "name": "MODEL STEP",
+      "wave": "======",
+      "data": [
+        "S0 initial",
+        "S1 random WRITE",
+        "S2 write waits",
+        "S3 write completes",
+        "S4 random READ",
+        "S5 read completes"
+      ]
+    },
+    [
+      "Scenario",
+      {
+        "name": "action",
+        "wave": "======",
+        "data": [
+          "none",
+          "generate WRITE",
+          "advance #1",
+          "advance #2",
+          "generate READ",
+          "advance #3"
+        ]
+      },
+      {
+        "name": "DutAdvanceAction",
+        "wave": "0.1.01"
+      }
+    ],
+    [
+      "APB4 event link",
+      {
+        "name": "requester → completer",
+        "wave": "x=x.=x",
+        "data": [
+          "W A=1004 D=ecacceb9 S=f",
+          "R A=1004"
+        ]
+      },
+      {
+        "name": "completer → requester",
+        "wave": "x..=x=",
+        "data": [
+          "W_RESP OK",
+          "R_RESP D=ecacceb9 OK"
+        ]
+      }
+    ],
+    [
+      "Target VirtualDut",
+      {
+        "name": "FIFO occupancy",
+        "wave": "======",
+        "data": [
+          "0/2",
+          "1/2",
+          "1/2",
+          "0/2",
+          "1/2",
+          "0/2"
+        ]
+      },
+      {
+        "name": "phase transition",
+        "wave": "======",
+        "data": [
+          "idle",
+          "enqueue DELAYING(2)",
+          "age → DELAYING(1)",
+          "READY → service",
+          "enqueue DELAYING(1)",
+          "READY → service"
+        ]
+      },
+      {
+        "name": "head post-state",
+        "wave": "======",
+        "data": [
+          "empty",
+          "delaying (2 left)",
+          "delaying (1 left)",
+          "empty",
+          "delaying (1 left)",
+          "empty"
+        ]
+      },
+      {
+        "name": "handler service",
+        "wave": "0..101"
+      },
+      {
+        "name": "system quiescent",
+        "wave": "10.101"
+      }
+    ]
+  ],
+  "head": {
+    "text": "APB4 random source → queued VirtualDut / 随机源到排队式虚拟模块"
+  },
+  "foot": {
+    "text": "Event/service-step projection · not PSEL/PENABLE, cycles, RTL or VCD / 事件与服务步投影，并非引脚时序"
+  },
+  "config": {
+    "hscale": 5
+  }
+}

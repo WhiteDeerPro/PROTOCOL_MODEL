@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Mapping
 
 
-RUN_SCHEMA = "protocol-model.run/v3"
-CONSTRAINT_SCHEMA = "protocol-model.constraints/v2"
+RUN_SCHEMA = "protocol-model.run/v4"
+CONSTRAINT_SCHEMA = "protocol-model.constraints/v4"
 
 
 @dataclass(frozen=True)
@@ -32,7 +32,14 @@ class ProtocolRecord:
 
 
 @dataclass(frozen=True)
-class ConstraintEvidence:
+class ConstraintRecord:
+    """Persisted requirement/constraint metadata with an optional witness.
+
+    A record proves that a constraint was catalogued.  ``status`` and
+    ``witness`` must separately state whether an executable or formal check
+    produced evidence for a particular run.
+    """
+
     id: str
     source: str
     target: str

@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import Mapping
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.virtual_dut.address.access import ByteOrder
-from protocol_model.virtual_dut.attachments.base import ProtocolAttachment
-from protocol_model.virtual_dut.binding import PortAttachmentBinding, VirtualDutBuilder
-from protocol_model.virtual_dut.boundary.module import DutFacet, VirtualDut
-from protocol_model.virtual_dut.boundary.port import ProtocolPort
+from protocol_model.virtual_dut.attachments.base import InterfaceAttachment
+from protocol_model.virtual_dut.binding import InterfaceAttachmentBinding, VirtualDutBuilder
+from protocol_model.virtual_dut.boundary.module import DutBehaviorTag, VirtualDut
+from protocol_model.virtual_dut.boundary.port import InterfacePort
 from protocol_model.virtual_dut.fabric.route import AddressRoute
 from protocol_model.virtual_dut.fabric.single_ingress import (
     SingleIngressAddressFabricBackend,
@@ -23,19 +23,19 @@ from protocol_model.integrations.attachments.amba.ahb import (
 
 def _binding(
     name: str,
-    protocol: LinkProtocol,
-    attachment: ProtocolAttachment,
+    protocol: InterfaceProtocol,
+    attachment: InterfaceAttachment,
     capability: object | None,
-) -> PortAttachmentBinding:
-    return PortAttachmentBinding(
-        ProtocolPort(name, protocol, attachment.role, capability=capability),
+) -> InterfaceAttachmentBinding:
+    return InterfaceAttachmentBinding(
+        InterfacePort(name, protocol, attachment.role, capability=capability),
         attachment,
     )
 
 
 def build_ahb_address_fabric_vdut(
     name: str,
-    protocol: LinkProtocol,
+    protocol: InterfaceProtocol,
     routes: tuple[AddressRoute, ...],
     *,
     ingress_port: str = "upstream",
@@ -60,7 +60,7 @@ def build_ahb_address_fabric_vdut(
                 f"route {route.name!r} output window exceeds AHB address width"
             )
 
-    egress_names = tuple(sorted({item.egress_port for item in routes}))
+    egress_names = tuple(dict.fromkeys(item.egress_port for item in routes))
     capability_by_port = dict(capabilities or {})
     port_names = {ingress_port, *egress_names}
     unknown_capabilities = set(capability_by_port) - port_names
@@ -89,8 +89,8 @@ def build_ahb_address_fabric_vdut(
     builder = (
         VirtualDutBuilder(name)
         .bind(ingress)
-        .with_model(backend)
-        .with_facets(DutFacet.ROUTING)
+        .with_backend(backend)
+        .with_behavior_tags(DutBehaviorTag.ROUTING)
         .describe("single-ingress AHB address fabric (decoder + response mux)")
     )
     for binding in egress.values():

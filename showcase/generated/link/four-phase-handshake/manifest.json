@@ -1,0 +1,261 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "link-four-phase-handshake",
+  "run_id": "four-phase-handshake",
+  "generated_at": "2026-07-26T19:09:52.024919+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "interface",
+      "identity": "four_phase_token",
+      "definition": "four_phase_token",
+      "parameters": {
+        "data_width": 8,
+        "wire_encoding": "four_phase_return_to_zero",
+        "maximum_wire_in_flight": 1
+      },
+      "lineage": [],
+      "metadata": {
+        "interface_family": "asynchronous.four_phase_token",
+        "roles": [
+          "receiver",
+          "sender"
+        ],
+        "event_kinds": [
+          "transfer"
+        ],
+        "monitors": [],
+        "resources": []
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "legal-delayed-ack",
+      "expected": "PASS",
+      "observed": "PASS",
+      "observed_rule": null,
+      "expectation": "MET",
+      "artifacts": [
+        "cases/legal-delayed-ack/causality.svg",
+        "cases/legal-delayed-ack/result.json",
+        "cases/legal-delayed-ack/waveform.svg",
+        "sources/cases/legal-delayed-ack/causality.dot",
+        "sources/cases/legal-delayed-ack/waveform.json"
+      ]
+    },
+    {
+      "name": "ack-before-request",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "observed_rule": "showcase.ack-before-request.phase_order",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/ack-before-request/causality.svg",
+        "cases/ack-before-request/result.json",
+        "cases/ack-before-request/waveform.svg",
+        "sources/cases/ack-before-request/causality.dot",
+        "sources/cases/ack-before-request/waveform.json"
+      ]
+    },
+    {
+      "name": "payload-overwrite-before-ack",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "observed_rule": "showcase.payload-overwrite-before-ack.event_stability",
+      "expectation": "MET",
+      "artifacts": [
+        "cases/payload-overwrite-before-ack/causality.svg",
+        "cases/payload-overwrite-before-ack/result.json",
+        "cases/payload-overwrite-before-ack/waveform.svg",
+        "sources/cases/payload-overwrite-before-ack/causality.dot",
+        "sources/cases/payload-overwrite-before-ack/waveform.json"
+      ]
+    }
+  ],
+  "state": {
+    "accepted_transfer_count": 1,
+    "high_delta_final_occupancy": 0,
+    "near_equal_beat_period_seconds": 1.0
+  },
+  "metadata": {
+    "publication": "showcase/generated/link/four-phase-handshake",
+    "case_count": 3,
+    "run_status": "success",
+    "waveform_interpretation": "asynchronous observation/edge order",
+    "shared_clock": false,
+    "rtl_capture": false,
+    "async_fifo_rtl_implemented": false
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/ack-before-request/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "ack-before-request",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/ack-before-request/result.json",
+      "media_type": "application/json",
+      "case": "ack-before-request",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/ack-before-request/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "ack-before-request",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/legal-delayed-ack/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "legal-delayed-ack",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/legal-delayed-ack/result.json",
+      "media_type": "application/json",
+      "case": "legal-delayed-ack",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/legal-delayed-ack/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "legal-delayed-ack",
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "cases/payload-overwrite-before-ack/causality.svg",
+      "media_type": "image/svg+xml",
+      "case": "payload-overwrite-before-ack",
+      "source": false
+    },
+    {
+      "kind": "case_result",
+      "path": "cases/payload-overwrite-before-ack/result.json",
+      "media_type": "application/json",
+      "case": "payload-overwrite-before-ack",
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "cases/payload-overwrite-before-ack/waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": "payload-overwrite-before-ack",
+      "source": false
+    },
+    {
+      "kind": "frequency_fifo_view",
+      "path": "high-delta-fifo.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "frequency_beat_view",
+      "path": "near-equal-beat.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "showcase_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/ack-before-request/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "ack-before-request",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/ack-before-request/waveform.json",
+      "media_type": "application/json",
+      "case": "ack-before-request",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/legal-delayed-ack/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "legal-delayed-ack",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/legal-delayed-ack/waveform.json",
+      "media_type": "application/json",
+      "case": "legal-delayed-ack",
+      "source": true
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/cases/payload-overwrite-before-ack/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": "payload-overwrite-before-ack",
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/cases/payload-overwrite-before-ack/waveform.json",
+      "media_type": "application/json",
+      "case": "payload-overwrite-before-ack",
+      "source": true
+    },
+    {
+      "kind": "frequency_fifo_view_source",
+      "path": "sources/high-delta-fifo.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "frequency_beat_view_source",
+      "path": "sources/near-equal-beat.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "decision_view_source",
+      "path": "sources/where-used.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "decision_view",
+      "path": "where-used.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

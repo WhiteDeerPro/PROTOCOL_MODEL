@@ -2,14 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
-    CanonicalEvent,
-    NoOpModel,
-    PortInput,
-    ProtocolLink,
-    SystemAction,
-    SystemProtocol,
-    VirtualDutPortRef,
+from protocol_model.integrations.recipes.amba.endpoints import (
     build_ahb_blackhole_sink_vdut,
     build_ahb_idle_source_vdut,
     build_apb_blackhole_sink_vdut,
@@ -17,10 +10,21 @@ from protocol_model import (
     build_axi4_blackhole_sink_vdut,
     build_axi4_idle_source_vdut,
 )
-from protocol_model.link.amba.ahb.ahb_lite import build_ahb_lite_link
-from protocol_model.link.amba.ahb.ahb5 import build_ahb5_link
-from protocol_model.link.amba.apb.apb4 import build_apb4_link
-from protocol_model.link.amba.axi.axi4 import build_axi4_link
+from protocol_model.semantics import CanonicalEvent
+from protocol_model.system import (
+    InterfaceConnection,
+    SystemAction,
+    SystemProtocol,
+    VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.backend import (
+    NoOpBackend,
+    PortInput,
+)
+from protocol_model.protocols.amba.ahb.ahb_lite import build_ahb_lite_interface
+from protocol_model.protocols.amba.ahb.ahb5 import build_ahb5_interface
+from protocol_model.protocols.amba.apb.apb4 import build_apb4_interface
+from protocol_model.protocols.amba.axi.axi4 import build_axi4_interface
 from protocol_model.virtual_dut.attachments import (
     EmptyEndpointAttachment,
     EmptyEndpointMode,
@@ -32,7 +36,7 @@ class EmptyEndpointTest(unittest.TestCase):
         cases = (
             (
                 "apb",
-                build_apb4_link(),
+                build_apb4_interface(),
                 build_apb_idle_source_vdut,
                 build_apb_blackhole_sink_vdut,
                 "requester",
@@ -40,7 +44,7 @@ class EmptyEndpointTest(unittest.TestCase):
             ),
             (
                 "ahb",
-                build_ahb_lite_link(),
+                build_ahb_lite_interface(),
                 build_ahb_idle_source_vdut,
                 build_ahb_blackhole_sink_vdut,
                 "manager",
@@ -48,7 +52,7 @@ class EmptyEndpointTest(unittest.TestCase):
             ),
             (
                 "ahb",
-                build_ahb5_link(),
+                build_ahb5_interface(),
                 build_ahb_idle_source_vdut,
                 build_ahb_blackhole_sink_vdut,
                 "manager",
@@ -56,7 +60,7 @@ class EmptyEndpointTest(unittest.TestCase):
             ),
             (
                 "axi",
-                build_axi4_link(),
+                build_axi4_interface(),
                 build_axi4_idle_source_vdut,
                 build_axi4_blackhole_sink_vdut,
                 "manager",
@@ -101,7 +105,7 @@ class EmptyEndpointTest(unittest.TestCase):
                 )
 
     def test_noop_backend_consumes_without_emission(self) -> None:
-        model = NoOpModel()
+        model = NoOpBackend()
         transition = model.accept(
             model.initial_state(),
             PortInput("input", CanonicalEvent("IGNORED")),
@@ -113,10 +117,10 @@ class EmptyEndpointTest(unittest.TestCase):
         self.assertTrue(model.is_quiescent(transition.state))
 
     def test_apb_blackhole_leaves_request_pending(self) -> None:
-        protocol = build_apb4_link()
+        protocol = build_apb4_interface()
         source = build_apb_idle_source_vdut("source", protocol)
         sink = build_apb_blackhole_sink_vdut("sink", protocol)
-        link = ProtocolLink(
+        link = InterfaceConnection(
             "apb_bus",
             protocol,
             {
@@ -145,8 +149,8 @@ class EmptyEndpointTest(unittest.TestCase):
         self.assertFalse(session.is_quiescent(step.state))
 
     def test_amba_recipe_rejects_wrong_protocol_family(self) -> None:
-        axi = build_axi4_link()
-        apb = build_apb4_link()
+        axi = build_axi4_interface()
+        apb = build_apb4_interface()
 
         with self.assertRaisesRegex(ValueError, "requires protocol family"):
             build_apb_idle_source_vdut("wrong_source", axi)

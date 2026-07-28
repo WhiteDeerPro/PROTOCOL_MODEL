@@ -1,0 +1,240 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "vdut-axi4-read-demux",
+  "run_id": "axi4-single-manager-read-demux",
+  "generated_at": "2026-07-26T19:09:54.177379+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "system",
+      "identity": "axi4_single_manager_read_demux",
+      "definition": "axi4_single_manager_read_demux",
+      "parameters": {},
+      "lineage": [],
+      "metadata": {
+        "virtual_duts": [
+          "manager",
+          "read_fabric",
+          "target0",
+          "target1"
+        ],
+        "connections": [
+          "manager_bus",
+          "target0_bus",
+          "target1_bus"
+        ],
+        "boundary": []
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "axi4_read_only",
+      "definition": "axi4_read_only",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 32,
+        "id_width": 3
+      },
+      "lineage": [
+        "axi4"
+      ],
+      "metadata": {
+        "interface_family": "amba.axi4",
+        "roles": [
+          "manager",
+          "subordinate"
+        ],
+        "event_kinds": [
+          "AR",
+          "AW",
+          "B",
+          "R",
+          "W"
+        ],
+        "monitors": [
+          "axi4.exclusive",
+          "axi4.read",
+          "axi4.write",
+          "axi4_read_only.forbidden_events"
+        ],
+        "resources": [
+          {
+            "name": "axi4.read.pending_transactions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AR"
+            ],
+            "released_by": [
+              "R[last=True]",
+              "reset"
+            ],
+            "description": "accepted AR transactions awaiting their final R beat"
+          },
+          {
+            "name": "axi4.exclusive.reservations",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "R[last=True, resp=EXOKAY]"
+            ],
+            "released_by": [
+              "matching AW[lock=1]",
+              "later same-ID AR[lock=1]",
+              "reset"
+            ],
+            "description": "completed exclusive reads that can make one matching write eligible for EXOKAY"
+          },
+          {
+            "name": "axi4.write.assembling_data",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "first W[last=False] of burst"
+            ],
+            "released_by": [
+              "W[last=True]",
+              "reset"
+            ],
+            "description": "a partially observed W burst awaiting WLAST"
+          },
+          {
+            "name": "axi4.write.pending_descriptors",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW without available complete W burst"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "accepted AW descriptors awaiting a FIFO-matched W burst"
+          },
+          {
+            "name": "axi4.write.pending_data_bursts",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "W[last=True] without available AW"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "complete W bursts observed before their FIFO-matched AW"
+          },
+          {
+            "name": "axi4.write.pending_completions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW/W FIFO join"
+            ],
+            "released_by": [
+              "B",
+              "reset"
+            ],
+            "description": "joined AW/W transactions awaiting B"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "different-rid-multi-device-return",
+      "expected": "two devices may return different RIDs independently",
+      "observed": "PASS",
+      "artifacts": []
+    },
+    {
+      "name": "same-rid-destination-lock",
+      "expected": "a same-RID request for another device blocks until the prior RLAST and then succeeds on retry",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "event_count": 20,
+    "causal_edge_count": 22,
+    "manager_response_count": 6,
+    "final_quiescent": true
+  },
+  "metadata": {
+    "publication": "showcase/generated/system/axi4-single-manager-read-demux",
+    "network_scope": "non-coherent Full AXI4 one-manager, two-subordinate read-path fabric",
+    "raw_pin_capture": false,
+    "time_basis": "model_step",
+    "implemented_channels": [
+      "AR",
+      "R"
+    ]
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "causality.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_step_view",
+      "path": "model-steps.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "execution_step_view_source",
+      "path": "sources/model-steps.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

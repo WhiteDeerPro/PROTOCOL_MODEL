@@ -1,0 +1,339 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "chi-issue-h-clean-2x2-mesh",
+  "run_id": "chi-issue-h-clean-2x2-mesh",
+  "generated_at": "2026-07-26T19:09:55.151650+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "interface",
+      "identity": "chi.issue_h.clean_read_unique",
+      "definition": "clean ReadUnique transaction with correlated SNP, RSP, DAT, and CompAck",
+      "parameters": {
+        "issue": "H",
+        "data_width": 512,
+        "router_queue_capacity": 1,
+        "link_credit_capacity": 1,
+        "home_egress_capacity": 1,
+        "coherence_states": [
+          "I",
+          "SC",
+          "UC"
+        ]
+      }
+    },
+    {
+      "scope": "transport",
+      "identity": "chi.issue_h.four_xp_mesh_transport",
+      "definition": "directed, credit-controlled connections forming a four-XP square ring",
+      "parameters": {
+        "router_count": 4,
+        "physical_shape": "2x2-square",
+        "channels": [
+          "REQ",
+          "RSP",
+          "SNP",
+          "DAT"
+        ]
+      }
+    },
+    {
+      "scope": "system",
+      "identity": "chi.issue_h.clean_coherence_mesh",
+      "definition": "requester, Home, and two snoopees coordinated across an elaborated transport topology",
+      "parameters": {
+        "xps": [
+          "xp00",
+          "xp10",
+          "xp11",
+          "xp01"
+        ],
+        "participants": [
+          "rn0",
+          "rn1",
+          "hn0",
+          "rn2"
+        ],
+        "physical_ring_edges": [
+          [
+            "xp00",
+            "xp10"
+          ],
+          [
+            "xp10",
+            "xp11"
+          ],
+          [
+            "xp11",
+            "xp01"
+          ],
+          [
+            "xp01",
+            "xp00"
+          ]
+        ],
+        "directed_connections": [
+          "rn0_to_xp00",
+          "xp00_to_rn0",
+          "rn1_to_xp10",
+          "xp10_to_rn1",
+          "hn0_to_xp11",
+          "xp11_to_hn0",
+          "rn2_to_xp01",
+          "xp01_to_rn2",
+          "xp00_to_xp10",
+          "xp10_to_xp00",
+          "xp10_to_xp11",
+          "xp11_to_xp10",
+          "xp11_to_xp01",
+          "xp01_to_xp11",
+          "xp01_to_xp00",
+          "xp00_to_xp01"
+        ],
+        "used_connections": [
+          "hn0_to_xp11",
+          "rn0_to_xp00",
+          "rn1_to_xp10",
+          "rn2_to_xp01",
+          "xp00_to_rn0",
+          "xp00_to_xp10",
+          "xp01_to_rn2",
+          "xp01_to_xp00",
+          "xp01_to_xp11",
+          "xp10_to_rn1",
+          "xp10_to_xp11",
+          "xp11_to_hn0",
+          "xp11_to_xp01",
+          "xp11_to_xp10"
+        ],
+        "unused_connections": [
+          "xp00_to_xp01",
+          "xp10_to_xp00"
+        ],
+        "used_physical_edges": [
+          "xp00-xp01",
+          "xp00-xp10",
+          "xp01-xp11",
+          "xp10-xp11"
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "clean-read-unique",
+      "expected": "RN0 acquires the clean unique copy, both previous clean sharers become invalid, and all four ring sides carry part of the transaction lifecycle",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "committed_microsteps": 482,
+    "packet_count": 7,
+    "packet_paths": [
+      {
+        "message": "ChiCompDataMessage",
+        "channel": "dat",
+        "source_id": 33,
+        "target_id": 7,
+        "transaction_id": 18,
+        "route": [
+          "hn0_to_xp11",
+          "xp11_to_xp01",
+          "xp01_to_xp00",
+          "xp00_to_rn0"
+        ]
+      },
+      {
+        "message": "ChiReadUniqueMessage",
+        "channel": "req",
+        "source_id": 7,
+        "target_id": 33,
+        "transaction_id": 18,
+        "route": [
+          "rn0_to_xp00",
+          "xp00_to_xp10",
+          "xp10_to_xp11",
+          "xp11_to_hn0"
+        ]
+      },
+      {
+        "message": "ChiCompAckMessage",
+        "channel": "rsp",
+        "source_id": 7,
+        "target_id": 33,
+        "transaction_id": 512,
+        "route": [
+          "rn0_to_xp00",
+          "xp00_to_xp10",
+          "xp10_to_xp11",
+          "xp11_to_hn0"
+        ]
+      },
+      {
+        "message": "ChiSnpRespMessage",
+        "channel": "rsp",
+        "source_id": 8,
+        "target_id": 33,
+        "transaction_id": 256,
+        "route": [
+          "rn1_to_xp10",
+          "xp10_to_xp11",
+          "xp11_to_hn0"
+        ]
+      },
+      {
+        "message": "ChiSnpRespMessage",
+        "channel": "rsp",
+        "source_id": 9,
+        "target_id": 33,
+        "transaction_id": 256,
+        "route": [
+          "rn2_to_xp01",
+          "xp01_to_xp11",
+          "xp11_to_hn0"
+        ]
+      },
+      {
+        "message": "ChiSnpUniqueMessage",
+        "channel": "snp",
+        "source_id": 33,
+        "target_id": 8,
+        "transaction_id": 256,
+        "route": [
+          "hn0_to_xp11",
+          "xp11_to_xp10",
+          "xp10_to_rn1"
+        ]
+      },
+      {
+        "message": "ChiSnpUniqueMessage",
+        "channel": "snp",
+        "source_id": 33,
+        "target_id": 9,
+        "transaction_id": 256,
+        "route": [
+          "hn0_to_xp11",
+          "xp11_to_xp01",
+          "xp01_to_rn2"
+        ]
+      }
+    ],
+    "ring_edges_used": [
+      "xp00-xp01",
+      "xp00-xp10",
+      "xp01-xp11",
+      "xp10-xp11"
+    ],
+    "coherence_before": {
+      "rn0": "I",
+      "rn1": "SC",
+      "rn2": "SC",
+      "home": {
+        "sharers": [
+          8,
+          9
+        ],
+        "unique_owner": null,
+        "data": 2582249878086908589655919172003011874329705792829223512830659356540647622016841194629645353280137831435903171972747542750
+      }
+    },
+    "coherence_after": {
+      "rn0": "UC",
+      "rn1": "I",
+      "rn2": "I",
+      "home": {
+        "sharers": [],
+        "unique_owner": 7,
+        "data": 2582249878086908589655919172003011874329705792829223512830659356540647622016841194629645353280137831435903171972747542750
+      }
+    },
+    "assertions": {
+      "quiescent": true,
+      "packet_count_is_7": true,
+      "fanout_retained": true,
+      "all_four_physical_edges_used": true,
+      "requester_is_unique_clean": true,
+      "former_sharers_invalid": true,
+      "home_names_requester_as_unique_owner": true
+    }
+  },
+  "metadata": {
+    "publication": "showcase/generated/system/chi-issue-h-clean-2x2-mesh",
+    "scope": "clean_read_unique_four_xp_mesh_witness",
+    "raw_waveform": false,
+    "runtime_executable": true,
+    "topology_source": "SystemProtocol",
+    "layout": {
+      "topology": "fixed semantic positions",
+      "sequence": "automatic hierarchical",
+      "coherence_state": "automatic hierarchical"
+    }
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "coherence_state",
+      "path": "coherence-state.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "scenario_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "coherence_state_source",
+      "path": "sources/coherence-state.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "system_topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "transaction_sequence_source",
+      "path": "sources/transaction-sequence.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "system_topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "transaction_sequence",
+      "path": "transaction-sequence.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

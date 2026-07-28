@@ -1,0 +1,242 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "vdut-axi4-lite-2x2-crossbar",
+  "run_id": "axi4-lite-2x2-crossbar",
+  "generated_at": "2026-07-26T19:11:55.561698+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "system",
+      "identity": "axi4_lite_two_by_two",
+      "definition": "axi4_lite_two_by_two",
+      "parameters": {},
+      "lineage": [],
+      "metadata": {
+        "virtual_duts": [
+          "crossbar",
+          "manager0",
+          "manager1",
+          "target0",
+          "target1"
+        ],
+        "connections": [
+          "manager0_bus",
+          "manager1_bus",
+          "target0_bus",
+          "target1_bus"
+        ],
+        "boundary": []
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "axi4_lite",
+      "definition": "axi4_lite",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 32
+      },
+      "lineage": [],
+      "metadata": {
+        "interface_family": "amba.axi4_lite",
+        "roles": [
+          "manager",
+          "subordinate"
+        ],
+        "event_kinds": [
+          "AR",
+          "AW",
+          "B",
+          "R",
+          "W"
+        ],
+        "monitors": [
+          "axi4_lite.read",
+          "axi4_lite.write"
+        ],
+        "resources": [
+          {
+            "name": "axi4_lite.read.pending_transactions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AR"
+            ],
+            "released_by": [
+              "R",
+              "reset"
+            ],
+            "description": "accepted AR transfers awaiting R"
+          },
+          {
+            "name": "axi4_lite.write.pending_descriptors",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW without available W"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "accepted AW transfers awaiting FIFO-matched W"
+          },
+          {
+            "name": "axi4_lite.write.pending_data_bursts",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "W without available AW"
+            ],
+            "released_by": [
+              "AW/W FIFO join",
+              "reset"
+            ],
+            "description": "single W transfers observed before FIFO-matched AW"
+          },
+          {
+            "name": "axi4_lite.write.pending_completions",
+            "scope": "interface",
+            "capacity": null,
+            "acquired_by": [
+              "AW/W FIFO join"
+            ],
+            "released_by": [
+              "B",
+              "reset"
+            ],
+            "description": "joined AW/W transactions awaiting B"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "shared-egress-contention",
+      "expected": "manager0 then manager1 own target0 and receive the matching completion",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "event_count": 8,
+    "causal_edge_count": 6,
+    "final_quiescent": true
+  },
+  "metadata": {
+    "publication": "showcase/generated/vdut/axi4-lite-2x2-crossbar",
+    "network_scope": "non-coherent AXI4-Lite 2x2 address network",
+    "raw_pin_capture": false,
+    "reference_role": "execution_witness_not_cycle_golden",
+    "time_basis": "model_step"
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "causality.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "vdut_structure",
+      "path": "crossbar-structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "interconnect_interface_map",
+      "path": "interconnect-interface-map.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_step_view",
+      "path": "model-steps.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "vdut_structure_source",
+      "path": "sources/crossbar-structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "interconnect_interface_map_source",
+      "path": "sources/interconnect-interface-map.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "execution_step_view_source",
+      "path": "sources/model-steps.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "architecture_explanation_source",
+      "path": "sources/trace-conformance.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "architecture_explanation",
+      "path": "trace-conformance.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

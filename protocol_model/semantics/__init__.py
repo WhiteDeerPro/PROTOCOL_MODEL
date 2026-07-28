@@ -1,4 +1,4 @@
-"""Scope-aware semantic IR used by link and system protocols."""
+"""Scope-aware semantic IR shared by interface, module, and system models."""
 
 from .causal import CausalGraph, PartialOrderViolation
 from .fragment import SemanticFragment, compose_fragments
@@ -25,9 +25,12 @@ from .model import (
     ConstraintKind,
     ConstraintScope,
     ObligationDecl,
+    ResourceDemand,
     ResourceDecl,
+    ResourceExhaustionPolicy,
     SemanticConstraint,
 )
+from .schema import EventField, EventSchema
 
 __all__ = [
     "ConstraintKind",
@@ -38,12 +41,16 @@ __all__ = [
     "ConstantDomain",
     "EnumDomain",
     "EventConstraint",
+    "EventField",
     "EventOffer",
+    "EventSchema",
     "IntDomain",
     "NaturalDomain",
     "ObligationDecl",
     "PartialOrderViolation",
+    "ResourceDemand",
     "ResourceDecl",
+    "ResourceExhaustionPolicy",
     "SemanticConstraint",
     "SemanticComponent",
     "SemanticFault",

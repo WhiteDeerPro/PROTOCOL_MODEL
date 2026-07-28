@@ -1,0 +1,170 @@
+{
+  "schema": "protocol-model.run/v4",
+  "subject": "vdut-apb4-queued-responder",
+  "run_id": "apb4-queued-responder",
+  "generated_at": "2026-07-26T19:11:54.779147+00:00",
+  "tool_version": "0.4.0",
+  "verdict": "PASS",
+  "protocols": [
+    {
+      "scope": "system",
+      "identity": "apb4_random_to_queued_memory",
+      "definition": "apb4_random_to_queued_memory",
+      "parameters": {},
+      "lineage": [],
+      "metadata": {
+        "virtual_duts": [
+          "queued_memory",
+          "random_source"
+        ],
+        "connections": [
+          "apb4_bus"
+        ],
+        "boundary": []
+      }
+    },
+    {
+      "scope": "interface",
+      "identity": "apb4",
+      "definition": "apb4",
+      "parameters": {
+        "address_width": 32,
+        "data_width": 32,
+        "revision": "APB4",
+        "pprot_present": true,
+        "pstrb_present": true,
+        "pready_default": true,
+        "pslverr_default": false
+      },
+      "lineage": [],
+      "metadata": {
+        "interface_family": "amba.apb",
+        "roles": [
+          "completer",
+          "requester"
+        ],
+        "event_kinds": [
+          "READ",
+          "READ_RESPONSE",
+          "WRITE",
+          "WRITE_RESPONSE"
+        ],
+        "monitors": [
+          "apb.transfer"
+        ],
+        "resources": [
+          {
+            "name": "apb.pending_transfer",
+            "scope": "interface",
+            "capacity": 1,
+            "acquired_by": [
+              "READ or WRITE"
+            ],
+            "released_by": [
+              "matching response",
+              "reset"
+            ],
+            "description": "transfer observed in SETUP and awaiting completed ACCESS"
+          }
+        ]
+      }
+    }
+  ],
+  "cases": [
+    {
+      "name": "random-write-readback-with-dynamic-delay",
+      "expected": "fault-free, equal readback, final quiescence",
+      "observed": "PASS",
+      "artifacts": []
+    }
+  ],
+  "state": {
+    "event_count": 4,
+    "causal_edge_count": 2,
+    "final_quiescent": true
+  },
+  "metadata": {
+    "publication": "showcase/generated/vdut/apb4-queued-responder",
+    "waveform_interpretation": "event/service-step projection",
+    "raw_pin_capture": false
+  },
+  "artifacts": [
+    {
+      "kind": "demo_guide",
+      "path": "README.md",
+      "media_type": "text/markdown",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality",
+      "path": "causality.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "provenance",
+      "path": "provenance.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "execution_result",
+      "path": "result.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "causality_source",
+      "path": "sources/causality.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "vdut_structure_source",
+      "path": "sources/target-structure.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "topology_source",
+      "path": "sources/topology.dot",
+      "media_type": "text/vnd.graphviz",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "waveform_source",
+      "path": "sources/waveform.json",
+      "media_type": "application/json",
+      "case": null,
+      "source": true
+    },
+    {
+      "kind": "vdut_structure",
+      "path": "target-structure.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "topology",
+      "path": "topology.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    },
+    {
+      "kind": "waveform",
+      "path": "waveform.svg",
+      "media_type": "image/svg+xml",
+      "case": null,
+      "source": false
+    }
+  ]
+}

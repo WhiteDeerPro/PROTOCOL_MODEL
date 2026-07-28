@@ -1,6 +1,6 @@
 # VirtualDut：只把模块描述到通信需要的深度
 
-[返回架构地图](README.md) · [协议集成与绑定](04-integration-and-binding.md) · [术语表](glossary.md)
+[返回架构地图](README.md) · [协议集成与绑定](04-integration-and-binding.md) · [术语表](../terminology.md)
 
 VirtualDut 首先表示系统图中的一个具体、具名 module。它是“虚拟”的，因为行为可以来自 Python 模型、
 外部 RTL、RPC、trace 或嵌套系统；并不意味着它只是一个轻量 agent，也不要求内部状态有限或可枚举。
@@ -49,10 +49,10 @@ route 或随机状态显式构造出来。
 
 ### 状态放在哪里
 
-- attachment 保存单端口运输状态，例如 APB pending、AHB phase context、AXI AW/W join；
+- attachment 保存单端口接口关联状态，例如 APB pending、AHB phase context、AXI AW/W join；
 - backend 保存功能状态和跨端口关系，例如寄存器内容、route、request owner；
-- LinkSession 保存某条 link 的协议状态；
-- SystemSession 保存各 link 与各 VirtualDut 的一次运行状态。
+- InterfaceSession 保存某条 interface connection 的协议状态；
+- SystemSession 保存各 interface connection 与各 VirtualDut 的一次运行状态。
 
 把这些状态合并成一个大 FSM 会使每增加一个协议或端口都产生组合爆炸，因此工程按作用域分别拥有。
 
@@ -62,7 +62,7 @@ route 或随机状态显式构造出来。
 构造顺序是：
 
 ```text
-声明 ProtocolPort
+声明 InterfacePort
     + 选择 attachment / binding
     + 选择 backend
     + 可选 capability / clock / reset / semantics
@@ -92,7 +92,7 @@ VirtualDut "peripheral_fabric"
 └── backend  : route + pending owner + response mux
 ```
 
-这既可以画成传统“一条总线挂设备”，也可以画成星形连接；底层 topology 仍是明确的 port-to-port links。
+这既可以画成传统“一条总线挂设备”，也可以画成星形连接；实际 topology 仍是明确的 port-to-port connections。
 
 实现见 [`boundary/module.py`](../../../protocol_model/virtual_dut/boundary/module.py)。
 

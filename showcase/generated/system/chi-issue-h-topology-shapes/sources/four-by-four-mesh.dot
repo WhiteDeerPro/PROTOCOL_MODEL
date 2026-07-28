@@ -1,0 +1,80 @@
+digraph chi_four_by_four_mesh {
+  graph [layout=neato, overlap=false, splines=line, bgcolor="white", pad=0.55, outputorder=edgesfirst, labelloc="t", label="CHI Issue H · generated 4×4 mesh", fontname="sans-serif", fontsize=19];
+  node [fontname="sans-serif", fontsize=9, fixedsize=true];
+  edge [fontname="sans-serif", fontsize=8];
+  r00 [pos="0.0,0.0!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R00"];
+  r01 [pos="0.0,2.25!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R01"];
+  r02 [pos="0.0,4.5!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R02"];
+  r03 [pos="0.0,6.75!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R03"];
+  r10 [pos="2.25,0.0!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R10"];
+  r11 [pos="2.25,2.25!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R11"];
+  r12 [pos="2.25,4.5!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R12"];
+  r13 [pos="2.25,6.75!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R13"];
+  r20 [pos="4.5,0.0!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R20"];
+  r21 [pos="4.5,2.25!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R21"];
+  r22 [pos="4.5,4.5!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R22"];
+  r23 [pos="4.5,6.75!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R23"];
+  r30 [pos="6.75,0.0!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R30"];
+  r31 [pos="6.75,2.25!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R31"];
+  r32 [pos="6.75,4.5!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R32"];
+  r33 [pos="6.75,6.75!", pin=true, shape=box, width=0.70, height=0.56, style="rounded,filled", fillcolor="#ede9fe", color="#7c3aed", label="R33"];
+  rn [pos="-2.5,0.0!", pin=true, shape=box, width=1.58, height=0.84, style="rounded,filled", fillcolor="#dbeafe", color="#2563eb", label="RN requester\nexecuted"];
+  corner_a [pos="-2.5,6.75!", pin=true, shape=box, width=1.58, height=0.84, style="rounded,filled", fillcolor="#f8fafc", color="#64748b", label="Corner A\ndeclared · idle"];
+  corner_b [pos="9.25,0.0!", pin=true, shape=box, width=1.58, height=0.84, style="rounded,filled", fillcolor="#f8fafc", color="#64748b", label="Corner B\ndeclared · idle"];
+  hn [pos="9.25,6.75!", pin=true, shape=box, width=1.58, height=0.84, style="rounded,filled", fillcolor="#ffedd5", color="#ea580c", label="Home\nexecuted"];
+  r00 -> r10 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r00 -> r01 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r01 -> r11 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r01 -> r02 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r02 -> r12 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r02 -> r03 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r03 -> r13 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r10 -> r20 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r10 -> r11 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r11 -> r21 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r11 -> r12 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r12 -> r22 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r12 -> r13 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r13 -> r23 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r20 -> r30 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r20 -> r21 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r21 -> r31 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r21 -> r22 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r22 -> r32 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r22 -> r23 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r23 -> r33 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r30 -> r31 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r31 -> r32 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  r32 -> r33 [dir=both, color="#94a3b8", penwidth=2.0, arrowsize=0.45];
+  rn -> r00 [dir=both, color="#94a3b8", penwidth=1.5, arrowsize=0.42];
+  corner_a -> r03 [dir=both, color="#94a3b8", penwidth=1.5, arrowsize=0.42];
+  corner_b -> r30 [dir=both, color="#94a3b8", penwidth=1.5, arrowsize=0.42];
+  hn -> r33 [dir=both, color="#94a3b8", penwidth=1.5, arrowsize=0.42];
+  rn -> r00 [constraint=false, color="#2563eb", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#2563eb"];
+  r00 -> r10 [constraint=false, color="#2563eb", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#2563eb"];
+  r10 -> r20 [constraint=false, color="#2563eb", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#2563eb"];
+  r20 -> r30 [constraint=false, color="#2563eb", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#2563eb"];
+  r30 -> r31 [constraint=false, color="#2563eb", penwidth=3.1, arrowsize=0.72, label="REQ", fontcolor="#2563eb"];
+  r31 -> r32 [constraint=false, color="#2563eb", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#2563eb"];
+  r32 -> r33 [constraint=false, color="#2563eb", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#2563eb"];
+  r33 -> hn [constraint=false, color="#2563eb", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#2563eb"];
+  hn -> r33 [constraint=false, color="#c026d3", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#c026d3"];
+  r33 -> r23 [constraint=false, color="#c026d3", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#c026d3"];
+  r23 -> r13 [constraint=false, color="#c026d3", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#c026d3"];
+  r13 -> r03 [constraint=false, color="#c026d3", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#c026d3"];
+  r03 -> r02 [constraint=false, color="#c026d3", penwidth=3.1, arrowsize=0.72, label="DAT", fontcolor="#c026d3"];
+  r02 -> r01 [constraint=false, color="#c026d3", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#c026d3"];
+  r01 -> r00 [constraint=false, color="#c026d3", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#c026d3"];
+  r00 -> rn [constraint=false, color="#c026d3", penwidth=3.1, arrowsize=0.72, label="", fontcolor="#c026d3"];
+  legend [pos="3.38,-2.25!", pin=true, fixedsize=false, shape=plain, label=<
+    <TABLE BORDER="0" CELLBORDER="0" CELLSPACING="8"><TR>
+      <TD><FONT COLOR="#2563eb">● REQ · X then Y</FONT></TD>
+      <TD><FONT COLOR="#c026d3">● DAT · X then Y</FONT></TD>
+      <TD><FONT COLOR="#94a3b8">● declared, not traversed here</FONT></TD>
+    </TR><TR><TD COLSPAN="3"><FONT POINT-SIZE="9" COLOR="#475569">
+      16 routers · 24 physical grid edges · 56 directed hops · 64 exact routes
+    </FONT></TD></TR><TR><TD COLSPAN="3"><FONT POINT-SIZE="9" COLOR="#475569">
+      One corner round trip executes 8+8 hops; grey interior links remain declared topology.
+    </FONT></TD></TR></TABLE>
+  >];
+}

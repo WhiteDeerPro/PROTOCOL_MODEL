@@ -3,18 +3,14 @@ from __future__ import annotations
 from random import Random
 import unittest
 
-from protocol_model import (
-    AtomicFrame,
-    EventOffer,
-    QuietConstraint,
-    QuietMode,
-    ReadyValidSignals,
-)
-from protocol_model.link.amba.axi.axi4 import (
+from protocol_model.observation import AtomicFrame, ReadyValidSignals
+from protocol_model.patterns import QuietConstraint, QuietMode
+from protocol_model.protocols.amba.axi.axi4 import (
     Axi4ObservationPolicy,
     Axi4ObservationSession,
     build_axi4_read_only_profile,
 )
+from protocol_model.semantics import EventOffer
 from protocol_model.visualization import LaneDisplayPolicy
 
 

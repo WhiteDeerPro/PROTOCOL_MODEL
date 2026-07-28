@@ -2,35 +2,37 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
+from protocol_model.integrations.recipes.amba.endpoints import (
+    build_apb_address_space_vdut,
+)
+from protocol_model.semantics import CanonicalEvent
+from protocol_model.system import (
+    InterfaceConnection,
+    SystemAction,
+    SystemProtocol,
+    VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.address import (
     AccessResult,
     AddressSpace,
     AddressWrite,
-    CanonicalEvent,
-    CaptureModel,
-    CaptureState,
-    ProtocolLink,
-    ProtocolPort,
     RegisterRegion,
     RegisterSpec,
-    SystemAction,
-    SystemProtocol,
-    VirtualDut,
-    VirtualDutPortRef,
-    build_apb_address_space_vdut,
 )
+from protocol_model.virtual_dut.backend import CaptureBackend, CaptureState
+from protocol_model.virtual_dut.boundary import InterfacePort, VirtualDut
 from protocol_model.integrations.attachments.amba.apb import (
     ApbCompleterAttachment,
     ApbRequesterAttachment,
 )
-from protocol_model.link.amba.apb.apb4 import build_apb4_link
-from protocol_model.link.amba.apb.apb5 import Apb5Config, build_apb5_link
+from protocol_model.protocols.amba.apb.apb4 import build_apb4_interface
+from protocol_model.protocols.amba.apb.apb5 import Apb5Config, build_apb5_interface
 from protocol_model.virtual_dut.attachments import AddressRequest
 
 
 class ApbAddressSpaceEndpointTest(unittest.TestCase):
     def test_apb5_attachment_derives_optional_fields_from_schema(self) -> None:
-        protocol = build_apb5_link(
+        protocol = build_apb5_interface(
             Apb5Config(
                 rme_support=True,
                 user_request_width=4,
@@ -81,12 +83,12 @@ class ApbAddressSpaceEndpointTest(unittest.TestCase):
             dict(completion.events[0].payload),
         )
 
-    def test_apb_link_executes_register_write_read_and_decode_error(self) -> None:
-        protocol = build_apb4_link()
+    def test_apb_interface_executes_register_write_read_and_decode_error(self) -> None:
+        protocol = build_apb4_interface()
         manager = VirtualDut(
             "manager",
-            {"apb": ProtocolPort("apb", protocol, "requester")},
-            model=CaptureModel(),
+            {"apb": InterfacePort("apb", protocol, "requester")},
+            backend=CaptureBackend(),
         )
         registers = build_apb_address_space_vdut(
             "registers",
@@ -101,7 +103,7 @@ class ApbAddressSpaceEndpointTest(unittest.TestCase):
                 )
             ),
         )
-        link = ProtocolLink(
+        link = InterfaceConnection(
             "apb_bus",
             protocol,
             {

@@ -7,27 +7,26 @@
 - 内部状态可以不透明、不可枚举；
 - backend 提供的功能行为在当前验证范围内作为权威输入；
 - 本项目检查它在端口上表现出的协议和网络行为，不证明 backend 内部算法；
-- AXI、AHB、APB 等协议通过 `ProtocolPort` 绑定，不形成设备继承树。
+- AXI、AHB、APB 等协议通过 `InterfacePort` 绑定，不形成设备继承树。
 
 为了构造随机激励、理想 responder、bridge、crossbar 等测试环境，工程也允许用通用算子组合一个
 可执行 backend。这是可选构造路径，不限制外部 VirtualDut 的状态空间。
 
-因此存在两条等价入口：
+因此存在两条边界等价、内部可见深度不同的入口：
 
 ```text
-External/RPC/RTL/Trace backend ─────────────────────┐
-                                                    ▼
-primitive semantics → behavior operators → constructed backend
-                                                    │
-                                                    ▼
-                                              ProtocolPort
-                                                    │
-                                                    ▼
-                                               VirtualDut
-                                                    │
-                                                    ▼
-                                              SystemProtocol
+External/RPC/RTL/Trace implementation ──┐
+                                        ├── VirtualDut boundary + InterfacePort
+constructed components                  │                 │
+  ├─ attachment codec                   │                 ▼
+  ├─ FIFO/FSM/route/translation         ┘           InterfaceConnection
+  └─ executable backend                                   │
+                                                          ▼
+                                                    SystemProtocol
 ```
+
+外部实现可以保持黑盒；constructed realization 则允许把本项目实际装配的组件展开显示。二者共享相同的
+VirtualDut module 身份，不要求外部实现暴露与 constructed backend 相同的数据结构。
 
 ## 2. 与协议分层的对应关系
 
@@ -40,19 +39,19 @@ Constraint / Resource / Obligation    token / local transition / resource
               │                                      │
 SemanticFragment                      behavior operator graph
               │                                      │
-LinkProtocol                          opaque or constructed backend
+InterfaceProtocol                     opaque or constructed backend
               │                                      │
-              └────────────── ProtocolPort ──────────┘
+              └────────────── InterfacePort ──────────┘
                                       │
                                   VirtualDut
                                       │
-                              ProtocolLink / topology
+                              InterfaceConnection / topology
                                       │
                                 SystemProtocol
 ```
 
-`LinkProtocol` 回答“一条 link 上什么通信语言合法”；backend 回答“这个 module 想做什么”；
-`ProtocolPort` 把 backend 的行为绑定到一个协议角色；`SystemProtocol` 再判断多个 module 连接后的
+`InterfaceProtocol` 回答“一条接口连接上什么通信语言合法”；backend 回答“这个 module 想做什么”；
+`InterfacePort` 把 backend 的行为绑定到一个协议角色；`SystemProtocol` 再判断多个 module 连接后的
 全局行为。
 
 ## 3. 局部行为语义
@@ -99,7 +98,7 @@ LinkProtocol                          opaque or constructed backend
 | `Correlate/Join` | 按 FIFO、key 或 descriptor 归并多个 token | AW/W、request/response |
 | `Route/Fork` | decode、owner-return、multicast 和分支 | decoder、crossbar、router |
 | `Select/Arbitrate` | 从多个 enabled 候选中选择 | fixed/round-robin/weighted |
-| `Compose/Hide` | 连接算子、反馈、隐藏内部 token、封装边界 | bridge、DMA、复合 Vdut |
+| `Compose/Hide` | 连接算子、反馈、隐藏内部 token、封装边界 | bridge、DMA、复合 VirtualDut |
 
 本表中的 `Transform` 目前是行为意图和分解词汇，不代表源码里已经存在一个完整的通用算子。跨协议
 bridge 需要的可执行版本将收窄命名为 typed `TranslationStage`：它同时声明 source/target operation form、
@@ -131,6 +130,18 @@ backend 拥有功能状态并决定收到输入后产生什么输出。公共边
 opaque history + input → zero or more outputs
 ```
 
+backend 不是 integration 后 VirtualDut 的全部内部结构。对于 constructed realization，完整关系是：
+
+```text
+InterfacePort ↔ attachment codec ↔ backend
+                                  ├─ FIFO / table / FSM
+                                  ├─ AddressSpace / behavior handler
+                                  └─ route / translation / requester driver
+```
+
+attachment 保存协议运输和 operation 转换所需的端口局部状态；backend 负责模块决策、跨端口关系和服务
+调度；recipe 把两者与端口组合成最终 VirtualDut。
+
 预计支持以下 backend 形态：
 
 | Backend | 状态所有权 | 主要用途 |
@@ -145,6 +156,21 @@ opaque history + input → zero or more outputs
 只有需要 bounded exploration、snapshot 或 replay 时，backend 才额外提供可复制状态。外部 backend
 不因无法枚举内部状态而失去 VirtualDut 身份。
 
+当前组网实验使用三类较小的 constructed backend：地址可见的有限 Sensor FIFO、单 outstanding 的
+descriptor memory-copy engine，以及 edge notification 的 priority collector/EOI target。它们分别覆盖
+不可背压数据源、主动搬运和控制通知，但不扩张成“完整外设”模型。Sensor 与 DMA 可以通过固定源地址和
+递增目标地址组合；AMBA recipe 在构造期检查 beat 宽度和首末地址是否可编码。当前 copy engine 按
+descriptor 正向逐拍读取再写入，不为重叠区域提供 `memmove` 快照语义。中断控制平面先保持独立，后续再由
+completion/effect 到 notification 的组合关系连接。
+容量接纳、丢弃和错误完成的公共语义见[容量、接纳与背压](capacity-admission-and-backpressure.md)。
+
+`CacheCore` 与 `FullLineBackingCore` 是另一种较小的协议中立 state core：它们先于 CHI facet 存在，但本身
+不是 topology-visible `VirtualDutBackend`。CHI participant state 只嵌入一次相应 storage snapshot；
+cache directory permission 与 Home holder directory 不复制 payload。Home backing 另以 pure
+`prepare_write()` 和 line-local versioned `commit_write()` 支持跨 completion/ack 的延迟提交。当前
+canonical Home binder 因而拒绝同时带独立 executable backend 的 Vdut，直到通用 runtime 能表达同 module
+多 facet 共用一份动态 state，或显式 HN→SN 事务把两份 state 连接起来。
+
 该层关注：
 
 - input/output 调用边界；
@@ -153,44 +179,49 @@ opaque history + input → zero or more outputs
 - immediate、blocked、deferred emission；
 - 外部错误与模型基础设施错误的区分。
 
-## 6. ProtocolPort 与 attachment：协议边界
+## 6. InterfacePort 与 attachment：协议边界
 
-`ProtocolPort` 是 backend 与 LinkProtocol 的汇合点：
+`InterfacePort` 是 backend 与 InterfaceProtocol 的汇合点：
 
 ```text
 backend operation/output
         ↕ protocol attachment
 CanonicalEvent
-        ↕ LinkProtocol
-ProtocolLink
+        ↕ InterfaceProtocol
+InterfaceConnection
 ```
 
 这里需要区分三个对象，避免用一个 `attach()` 同时表示声明、实现和组网：
 
 | 对象 | 含义 | 状态所有权 |
 |---|---|---|
-| `ProtocolPort` | module 边界公开的 protocol、role、capability 和 domain | 不保存运输状态 |
-| `ProtocolAttachment` | 某 operation family 与 CanonicalEvent 的可复用转换 | 声明初态和静止条件 |
-| `PortAttachmentBinding` | 将一个 attachment 实例绑定到一个具体 port | 静态、不可变；动态状态仍在 backend state |
+| `InterfacePort` | module 边界公开的 protocol、role、capability 和 domain | 不保存接口运行状态 |
+| `InterfaceAttachment` | 某 operation family 与 CanonicalEvent 的可复用转换 | 声明初态和静止条件 |
+| `InterfaceAttachmentBinding` | 将一个 attachment 实例绑定到一个具体 port | 静态、不可变；动态状态仍在 backend state |
 
-`VirtualDutBuilder.bind_port()` 或 `.bind()` 执行本地绑定；`SystemProtocol` 的 `ProtocolLink` 只连接已经
+`VirtualDutBuilder.bind_port()` 或 `.bind()` 执行本地绑定；`SystemProtocol` 的 `InterfaceConnection` 只连接已经
 声明好的端口。SystemProtocol 不调用 APB/AHB/AXI attachment，也不反射 backend 私有状态。
 Attachment-aware backend 会投影自己实际使用的 binding；构造 `VirtualDut` 时要求该投影与公开
 binding 使用同一对象，避免“声明看见一个 adapter、运行时执行另一个 adapter”的双重配置。
 
 具体协议转换位于 `protocol_model/integrations/`。例如 APB address attachment 同时认识 APB event 和
-`AddressAccess`，但 APB `LinkProtocol` 本身不导入 VirtualDut。协议 refinement 通过稳定的 protocol
-family 和 transport shape 与 attachment 匹配，不依赖可能变化的显示名称。
+`AddressAccess`，但 APB `InterfaceProtocol` 本身不导入 VirtualDut。协议 refinement 通过稳定的 protocol
+family 和 interface shape 与 attachment 匹配，不依赖可能变化的显示名称。
+
+因此 integration recipe 的产物是一个带具体协议端口的 constructed VirtualDut。例如 queued APB endpoint
+包含 `InterfacePort(APB4, completer)`、`ApbCompleterAttachment`、有限请求 FIFO、delay/service controller
+和 AddressSpace handler。它仍只是 APB endpoint；当 requester 与 completer 两个 role 通过同一个
+`InterfaceConnection(APB4)` 绑定后，才形成一条具体 APB4 interface instance。
 
 该层关注：
 
-- 绑定的 LinkProtocol 和 role；
+- 绑定的 InterfaceProtocol 和 role；
 - 可接受、可发出的 channel/event direction；
 - typed capability/profile；
 - clock/reset domain；
 - pin、cycle、UVM transaction 与 CanonicalEvent 的 observation/driver；
 - backend operation 与协议事务的 translation；
-- 协议运输状态，例如 AXI ID、burst、AW/W join、AHB phase context。
+- 接口关联状态，例如 AXI ID、burst、AW/W join、AHB phase context。
 
 空端点也沿用同一边界：`idle source` 的本地 backend 不自主发出事件；`blackhole sink` 接收后不产生
 completion。后者在 APB、AHB 和 AXI 这类请求—响应协议上会留下未完成 obligation，适合挂起和
@@ -212,7 +243,7 @@ decode miss、只读写入等正常设备结果在 attachment 中映射为 AXI `
 ```text
 VirtualDut
   name / identity
-  ProtocolPorts
+  InterfacePorts
   boundary contract
   backend binding
   optional external resource/capability projection
@@ -230,20 +261,28 @@ VirtualDut
 `Storing`、`Transforming` 和 `Routing` 在这一层不是身份标签：它们是 constructed backend 使用的
 算子。外部 backend 可以具有同样行为而不公开内部 FIFO、table 或 route 实现。
 
+可视化层据此区分两种视图：opaque VirtualDut 只显示端口和外部实现边界；constructed VirtualDut 可以展开
+bindings、attachment、FIFO/FSM、translation stages、owner table 和 address handler。当前 projector 对已知
+backend 家族显式适配，未知 backend 保留为 opaque node；显示层不通过任意对象反射创造执行语义。
+
+当前可执行示例见 [APB4 queued responder](../../showcase/generated/vdut/apb4-queued-responder/README.md)：连接图
+展开 integration 后的 target VirtualDut，WaveDrom 则显示 canonical request、显式服务推进、FIFO phase 和
+completion。两张图分别回答“怎样连接”和“运行时怎样变化”。
+
 一个物理 crossbar 可以作为单个 routing VirtualDut；也可以展开成 decoder、FIFO、arbiter 和 router
-构成的内部 SystemProtocol，再封装回相同边界。两种形式的关系应由隐藏内部 link 后的 boundary
+构成的内部 SystemProtocol，再封装回相同边界。两种形式的关系应由隐藏内部 connections/hops 后的 boundary
 refinement 描述。
 
 ## 8. SystemProtocol：连接具体模块
 
 SystemProtocol 不查看 backend 私有状态，只组合 VirtualDut 的端口与边界 contract：
 
-- topology 和 link ownership；
+- topology 和 connection ownership；
 - address/route 闭合；
-- 跨 link ID、owner 和 response return；
+- 跨 connection ID、owner 和 response return；
 - network buffer、credit、outstanding 和 wait-for；
 - deadlock、livelock、starvation、QoS 和 fairness；
-- internal link hide 与整体 refinement。
+- internal connection/hop hide 与整体 refinement。
 
 Routing 的层级依作用域区分：crossbar module 内部的 route 选择属于其行为构造/backend；多个 VirtualDut 之间
 的端到端路径属于 SystemProtocol。展开或封装不应改变外部协议意义。
@@ -257,7 +296,7 @@ Routing 的层级依作用域区分：crossbar module 内部的 route 选择属�
 3. 需要本地构造时，将行为分解成 token-flow 构造方法。
 4. 为 Store、table、pool 等声明容量和生命周期。
 5. 用 Correlate、Route、Arbitrate 表达多通道和多端口关系。
-6. 将 backend operation 通过 attachment 绑定到 ProtocolPort。
+6. 将 backend operation 通过 attachment 绑定到 InterfacePort。
 7. 声明 module 边界的 assumption、guarantee 和 externally visible resource。
 8. 放入 SystemProtocol 检查全局闭合。
 9. 只有验证目标需要时才加入 deferred emission、time window 或 clock domain。
@@ -266,7 +305,7 @@ Routing 的层级依作用域区分：crossbar module 内部的 route 选择属�
 
 | 级别 | 主要关注 | 示例 |
 |---|---|---|
-| C0 | 外部端口声明 | opaque RTL/RPC Vdut |
+| C0 | 外部端口声明 | opaque RTL/RPC VirtualDut |
 | C1 | 无状态 token 转换 | mapper、field converter |
 | C2 | 局部状态和容量 | FIFO、register、ID pool |
 | C3 | correlation、route、arbitration | bridge、crossbar |
@@ -276,8 +315,8 @@ Routing 的层级依作用域区分：crossbar module 内部的 route 选择属�
 复杂度等级不是设备类别。一个外部 DMA 可以停在 C0；只有要在本项目内部构造 DMA fixture 时，才
 逐步进入 C2-C5。
 
-当前能力矩阵由[实现状态](implementation-status.md)维护；bridge/Transform 的拟议源码抽取和实施顺序见
-[事务转译 V1 计划](translation-implementation.md)。本页后续只说明稳定的源码职责边界。
+当前能力矩阵由[实现状态](implementation-status.md)维护；bridge/Transform 的 V1 落地范围和剩余边界见
+[事务转译 V1 实施状态](translation-implementation.md)。本页后续只说明稳定的源码职责边界。
 
 ## 10. 源码职责分层
 
@@ -285,34 +324,19 @@ Routing 的层级依作用域区分：crossbar module 内部的 route 选择属�
 
 ```text
 protocol_model/virtual_dut/
-├── boundary/
-│   ├── port.py              ProtocolPort
-│   └── module.py            VirtualDut、DutFacet
-├── binding/
-│   ├── port.py              PortAttachmentBinding
-│   └── builder.py           VirtualDutBuilder 本地装配
-├── backend/
-│   ├── transition.py        DutEffect、PortInput/Emission、DutTransition
-│   ├── base.py              VirtualDutModel contract
-│   ├── simple.py            Capture/Function fixture
-│   └── address_space.py     PassiveAddressSpaceBackend
-├── address/
-│   ├── access.py            AddressRead/Write、AccessResult
-│   ├── space.py             region dispatch
-│   ├── register.py          register reference region
-│   └── memory.py            sparse memory reference region
-├── attachments/
-│   ├── base.py              ProtocolAttachment SPI
-│   ├── address.py           requester/completer contract 与 DTO
-│   ├── empty.py             idle/blackhole 空端点意图
-│   └── validation.py        emission schema/direction validation
-├── fabric/
-│   ├── route.py             AddressRoute 与地址重映射
-│   ├── state.py             pending owner 与 fabric runtime state
-│   └── single_ingress.py    decoder、request/response path
-└── recipes/
-    └── empty.py             协议无关空端点装配
+├── boundary/       module 与 port 的外部身份
+├── binding/        port、attachment 与 module 的静态装配
+├── attachments/    协议无关的单端口 operation SPI
+├── backend/        状态迁移、显式推进与 constructed behavior
+├── address/        AddressAccess/Burst、AddressSpace 与 reference region
+├── fabric/         route、arbitrate、owner 与多端口 backend
+├── translation/    typed stage/plan、resource ledger 与 bridge backend
+└── recipes/        协议无关的最终装配根
 ```
+
+具体叶文件、已提供的 backend 和依赖规则由源码旁的
+[`protocol_model/virtual_dut/README.md`](../../protocol_model/virtual_dut/README.md) 维护；canonical 架构页不随
+每次新增 fixture 复制文件清单。
 
 协议专用集成另行放置：
 
@@ -325,22 +349,34 @@ protocol_model/integrations/
 │       ├── axi4/            burst transport 与 serialized requester
 │       ├── axi4_lite/       AddressAccess 两面
 │       └── axi4_stream/     StreamTransfer 两面
-└── recipes/amba/            具体 AMBA-bound VirtualDut 的 composition root
-    ├── endpoints/           AddressSpace、stream capture 与空端点
-    ├── fabrics/             同协议多端口 route/response-mux
-    └── bridges/             跨协议 transform/correlation module
+└── recipes/
+    ├── catalog/             按角色、端口形状和协议范围索引公共构造入口
+    ├── amba/                具体 AMBA-bound VirtualDut 的 composition root
+    │   ├── endpoints/       AddressSpace、DMA、Sensor FIFO、stream capture 与空 fixture
+    │   ├── fabrics/         同协议多端口 route/response-mux/crossbar
+    │   └── bridges/         跨端口 transform/correlation/completion module
+    └── control/             notification/EOI 控制链路成品
 ```
 
 这些目录是源码职责，不增加新的协议层。`fabric` 仍是一个 VirtualDut 内部的多端口 backend 家族；
-只有展开其内部 module/link 时才形成子 SystemProtocol。
+只有展开其内部 module/connection/hop 时才形成子 SystemProtocol。
+
+随机流量选择不放入上述 backend 树。当前 `protocol_model.scenario.traffic` 把 idle-source VirtualDut 与外部
+controller 配成测试 harness；VirtualDut 提供具体 module/port，controller 持有 RNG、生成策略和完整 interface
+历史。这个边界让同一个 seed 可复现，也避免把测试选择误认成 DUT 自身行为。
 
 依赖规则是：
 
 1. 内部模块从叶文件导入，不通过根 facade 形成反向依赖；
 2. attachment 只处理单端口，不依赖 fabric、boundary 或 recipe；
 3. fabric 组合 address、attachment contract 和 backend foundation，但不创建 VirtualDut；
-4. recipe 位于装配末端，负责把 ProtocolPort、attachment 和 backend 组合成具名 VirtualDut；
+4. recipe 位于装配末端，负责把 InterfacePort、attachment 和 backend 组合成具名 VirtualDut；
 5. SystemProtocol 直接依赖 boundary/transition 叶模块，避免加载具体 recipe。
 
 根 `protocol_model.virtual_dut` 只暴露常用构造面。具体 attachment、backend state 和 pending owner 等
 实现类型从所属子包访问，避免每次扩展协议都扩大顶层 API。
+
+可直接构造的公共产品和实例归属规则由源码旁的
+[`protocol_model/integrations/recipes/README.md`](../../protocol_model/integrations/recipes/README.md) 维护。
+catalog 保存 factory 描述，不保存网络实例；具名实例在 system construction、scenario 或调用方 project 中
+产生，测试和 showcase 分别承担验证与讲解职责。

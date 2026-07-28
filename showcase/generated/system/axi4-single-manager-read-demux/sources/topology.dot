@@ -1,0 +1,15 @@
+digraph system_topology {
+  rankdir=LR;
+  label="axi4_single_manager_read_demux";
+  labelloc="t";
+  graph [nodesep=0.5, ranksep=1.15, splines=polyline];
+  node [fontname="monospace"];
+  edge [fontname="sans-serif", fontsize=8];
+  dut0 [shape=box, style=rounded, label="manager\nVirtualDut"];
+  dut1 [shape=box, style=rounded, label="target0\nVirtualDut"];
+  dut2 [shape=box, style=rounded, label="target1\nVirtualDut"];
+  dut3 [shape=box, style=rounded, label="read_fabric\nVirtualDut · routing"];
+  dut0 -> dut3 [dir=none, penwidth=1.4, label="axi4_read_only\naxi ↔ s_axi"];
+  dut3 -> dut1 [dir=none, penwidth=1.4, label="axi4_read_only\nm0 ↔ axi"];
+  dut3 -> dut2 [dir=none, penwidth=1.4, label="axi4_read_only\nm1 ↔ axi"];
+}

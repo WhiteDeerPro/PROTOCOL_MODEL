@@ -1,6 +1,6 @@
 """Static VirtualDut port attachment bindings and construction."""
 
 from .builder import VirtualDutBuilder
-from .port import PortAttachmentBinding
+from .port import InterfaceAttachmentBinding
 
-__all__ = ["PortAttachmentBinding", "VirtualDutBuilder"]
+__all__ = ["InterfaceAttachmentBinding", "VirtualDutBuilder"]

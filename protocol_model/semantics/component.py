@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Generic, Iterable, Sequence, TypeVar
 
-from .model import ConstraintScope
+from .model import ConstraintScope, ResourceDemand
 
 
 InputT = TypeVar("InputT")
@@ -35,6 +35,15 @@ class SemanticStep(Generic[StateT, OutputT]):
     emissions: tuple[OutputT, ...] = ()
     fault: SemanticFault | None = None
     causal_predecessors: tuple[int, ...] = ()
+    blocked: ResourceDemand | None = None
+
+    def __post_init__(self) -> None:
+        if self.fault is not None and self.blocked is not None:
+            raise ValueError("a semantic step cannot be both faulted and blocked")
+        if self.blocked is not None and self.emissions:
+            raise ValueError("a blocked semantic step cannot emit accepted events")
+        if self.blocked is not None and self.causal_predecessors:
+            raise ValueError("a blocked semantic step cannot commit causal edges")
 
 
 @dataclass(frozen=True)
@@ -51,6 +60,7 @@ class SemanticRun(Generic[InputT, StateT, OutputT]):
     emissions: tuple[OutputT, ...]
     violations: tuple[TraceViolation[InputT], ...] = ()
     state_history: tuple[StateT, ...] = ()
+    blocked: ResourceDemand | None = None
 
     @property
     def ok(self) -> bool:
@@ -88,6 +98,14 @@ class SemanticComponent(ABC, Generic[InputT, StateT, OutputT]):
             state = transition.state
             history.append(state)
             emissions.extend(transition.emissions)
+            if transition.blocked is not None:
+                return SemanticRun(
+                    Verdict.INCONCLUSIVE,
+                    state,
+                    tuple(emissions),
+                    state_history=tuple(history),
+                    blocked=transition.blocked,
+                )
             if transition.fault is not None:
                 return SemanticRun(
                     Verdict.FAIL,

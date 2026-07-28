@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import CausalGraph, PartialOrderViolation
+from protocol_model.semantics import CausalGraph, PartialOrderViolation
 
 
 class CausalGraphTest(unittest.TestCase):

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
+from protocol_model.virtual_dut.address import (
     AccessStatus,
     AddressRead,
     AddressSpace,

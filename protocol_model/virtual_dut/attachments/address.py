@@ -5,11 +5,11 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.semantics import CanonicalEvent, SemanticFault
 
 from ..address.access import AccessResult, AddressAccess
-from .base import AttachmentEmission, ProtocolAttachment
+from .base import AttachmentEmission, InterfaceAttachment
 
 
 def _validate_request_id(request_id: int, *, subject: str) -> None:
@@ -58,10 +58,10 @@ class AddressCompletionDecode:
     fault: SemanticFault | None = None
 
 
-class AddressCompleterAttachment(ProtocolAttachment, ABC):
+class AddressCompleterAttachment(InterfaceAttachment, ABC):
     """Accept address requests and encode endpoint completions on one port."""
 
-    protocol: LinkProtocol
+    protocol: InterfaceProtocol
     role: str
 
     def initial_state(self) -> object:
@@ -83,10 +83,10 @@ class AddressCompleterAttachment(ProtocolAttachment, ABC):
         return True
 
 
-class AddressRequesterAttachment(ProtocolAttachment, ABC):
+class AddressRequesterAttachment(InterfaceAttachment, ABC):
     """Encode address requests and accept correlated completions on one port."""
 
-    protocol: LinkProtocol
+    protocol: InterfaceProtocol
     role: str
 
     def initial_state(self) -> object:

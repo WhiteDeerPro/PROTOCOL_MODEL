@@ -1,0 +1,31 @@
+digraph virtual_dut_structure {
+  rankdir=TB;
+  label="controller · VirtualDut · constructed";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.28, ranksep=0.62, splines=polyline, newrank=true];
+  node [fontname="sans-serif", fontsize=10, shape=box, style="rounded,filled", fillcolor="#ffffff"];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d"];
+  subgraph cluster_virtual_dut {
+    label="VirtualDut boundary";
+    color="#64748b";
+    penwidth=1.4;
+    style="rounded";
+    component_0 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="from_a\ninterface port\ninterface: interrupt_edge_notification · handler", tooltip="from_a\ninterface port\ninterface: interrupt_edge_notification · handler"];
+    component_1 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="from_b\ninterface port\ninterface: interrupt_edge_notification · handler", tooltip="from_b\ninterface port\ninterface: interrupt_edge_notification · handler"];
+    component_2 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="to_cpu\ninterface port\ninterface: interrupt_edge_notification · notifier", tooltip="to_cpu\ninterface port\ninterface: interrupt_edge_notification · notifier"];
+    component_3 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="notification handler\nattachment\nbinding: interrupt_edge_notification · handler", tooltip="notification handler\nattachment\nbinding: interrupt_edge_notification · handler"];
+    component_4 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="notification handler\nattachment\nbinding: interrupt_edge_notification · handler", tooltip="notification handler\nattachment\nbinding: interrupt_edge_notification · handler"];
+    component_5 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="notification source\nattachment\nbinding: interrupt_edge_notification · notifier", tooltip="notification source\nattachment\nbinding: interrupt_edge_notification · notifier"];
+    component_6 [shape=box, fillcolor="#fef3c7", color="#d97706", penwidth=1.0, label="retained edge notifications\ncapacity: 4\nfull: block", tooltip="retained edge notifications\ncapacity: 4\nfull: block"];
+    component_7 [shape=box, fillcolor="#ede9fe", color="#7c3aed", penwidth=1.0, label="priority / arrival-order select\npriority: lower value first\ntie: arrival order\npreemption: none", tooltip="priority / arrival-order select\npriority: lower value first\ntie: arrival order\npreemption: none"];
+    component_8 [shape=box, fillcolor="#ffedd5", color="#ea580c", penwidth=1.0, label="one active target delivery\ncompletion: matching EOI\nactive: 0 or 1", tooltip="one active target delivery\ncompletion: matching EOI\nactive: 0 or 1"];
+    component_0 -> component_3 [style=solid, constraint=true, weight=4, color="#475569", label="notification"];
+    component_1 -> component_4 [style=solid, constraint=true, weight=4, color="#475569", label="notification"];
+    component_5 -> component_2 [style=solid, constraint=true, weight=4, color="#475569", label="notification"];
+    component_3 -> component_6 [style=solid, constraint=true, weight=4, color="#475569", label="retain · from_a"];
+    component_4 -> component_6 [style=solid, constraint=true, weight=4, color="#475569", label="retain · from_b"];
+    component_6 -> component_7 [style=solid, constraint=true, weight=4, color="#475569", label="pending"];
+    component_7 -> component_8 [style=solid, constraint=true, weight=4, color="#475569", label="activate"];
+    component_8 -> component_5 [style=solid, constraint=true, weight=4, color="#475569", label="notify target"];
+  }
+}

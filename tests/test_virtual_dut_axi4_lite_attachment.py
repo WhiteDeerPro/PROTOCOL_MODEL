@@ -2,22 +2,23 @@ from __future__ import annotations
 
 import unittest
 
-from protocol_model import (
+from protocol_model.semantics import CanonicalEvent
+from protocol_model.system import (
+    InterfaceConnection,
+    SystemAction,
+    SystemProtocol,
+    VirtualDutPortRef,
+)
+from protocol_model.virtual_dut.address import (
     AccessResult,
     AccessStatus,
     AddressRead,
     AddressSpace,
     AddressWrite,
-    CanonicalEvent,
-    CaptureModel,
     MemoryRegion,
-    ProtocolLink,
-    ProtocolPort,
-    SystemAction,
-    SystemProtocol,
-    VirtualDut,
-    VirtualDutPortRef,
 )
+from protocol_model.virtual_dut.backend import CaptureBackend
+from protocol_model.virtual_dut.boundary import InterfacePort, VirtualDut
 from protocol_model.integrations.attachments.amba.axi.axi4_lite import (
     Axi4LiteCompleterAttachment,
     Axi4LiteRequesterAttachment,
@@ -25,13 +26,13 @@ from protocol_model.integrations.attachments.amba.axi.axi4_lite import (
 from protocol_model.integrations.recipes.amba.endpoints import (
     build_axi4_lite_address_space_vdut,
 )
-from protocol_model.link.amba.axi.axi4_lite import build_axi4_lite_link
+from protocol_model.protocols.amba.axi.axi4_lite import build_axi4_lite_interface
 from protocol_model.virtual_dut.attachments import AddressRequest
 
 
 class Axi4LiteAttachmentTest(unittest.TestCase):
     def test_w_before_aw_joins_and_preserves_unaligned_byte_lanes(self) -> None:
-        protocol = build_axi4_lite_link()
+        protocol = build_axi4_lite_interface()
         completer = Axi4LiteCompleterAttachment(protocol)
         data = completer.decode_request(
             completer.initial_state(),
@@ -58,7 +59,7 @@ class Axi4LiteAttachmentTest(unittest.TestCase):
         self.assertTrue(completer.is_quiescent(response.state))
 
     def test_requester_correlates_read_and_write_independently(self) -> None:
-        protocol = build_axi4_lite_link()
+        protocol = build_axi4_lite_interface()
         requester = Axi4LiteRequesterAttachment(protocol)
         read = requester.encode_request(
             requester.initial_state(),
@@ -93,18 +94,18 @@ class Axi4LiteAttachmentTest(unittest.TestCase):
         self.assertTrue(requester.is_quiescent(completed_read.state))
 
     def test_address_space_endpoint_executes_write_read_and_decode_error(self) -> None:
-        protocol = build_axi4_lite_link()
+        protocol = build_axi4_lite_interface()
         manager = VirtualDut(
             "manager",
-            {"axi": ProtocolPort("axi", protocol, "manager")},
-            model=CaptureModel(),
+            {"axi": InterfacePort("axi", protocol, "manager")},
+            backend=CaptureBackend(),
         )
         memory = build_axi4_lite_address_space_vdut(
             "memory",
             protocol,
             AddressSpace((MemoryRegion("ram", 0x100, base_address=0x1000),)),
         )
-        link = ProtocolLink(
+        link = InterfaceConnection(
             "axi_bus",
             protocol,
             {

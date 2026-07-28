@@ -10,16 +10,19 @@ Protocol Model 的目标是：用可执行语义和受约束的状态空间探�
 也不负责建立每一种 DUT 的完整功能模型。
 
 ```text
-协议要求
-  → SemanticFragment
-  → LinkProtocol + 具体 VirtualDut
-  → SystemProtocol + topology elaboration
-  → 有限 trace / 系统状态
-  → verdict + 最小诊断证据
+协议要求 → shared semantics ─┬─→ InterfaceProtocol ─┐
+                              ├─→ VirtualDut behavior ┼─→ SystemProtocol / scenario
+                              └─→ typed forms/codecs ──┘              │
+                                                                      ▼
+                                                     trace / verdict / diagnostic evidence
 ```
 
+这张图只表示构造依赖。约束的判定范围使用 event/interface/module/system 作用域；通信表示则按需要使用
+operation、transaction lifecycle、message、packet 和 flit。三者不合并为一条协议栈，具体边界见
+[通信建模的三张视图](docs/architecture/communication-scope-and-transport.md)。
+
 `network` 是 `SystemProtocol` 内部的 topology 概念；全局可观察通信合同本身称为
-`SystemProtocol`。当前设计分别使用 `LinkProtocol`、`ProtocolLink/SystemProtocol` 和
+`SystemProtocol`。当前设计分别使用 `InterfaceProtocol`、`InterfaceConnection/SystemProtocol` 和
 topology/runtime 表达协议定义、绑定与执行。
 
 后续工作遵守三个原则：
@@ -36,20 +39,25 @@ topology/runtime 表达协议定义、绑定与执行。
 
 ## 2. 当前基础
 
-以下方法已经进入新架构或完成取舍，不再作为未来计划重复列出：
+这里只列进入长期依赖图时已经具备的前置条件；协议、profile、场景和未覆盖条目的完整状态只在
+[实现状态](docs/architecture/implementation-status.md)维护：
 
-- `SemanticComponent` 统一 state/action/step/emission/fault，支持三值 verdict；
-- 类型化 payload domain、reset/ready-valid/quiet observation pattern；
-- cardinality、correlation、AW/W join、read/write obligation 和 per-ID token；
-- 有限因果偏序、拓扑序、并发查询和因果图；
-- AXI4 五通道、burst、4KB、WSTRB、narrow、读写事务及 link-local ordering；
-- 不可变 `LinkProtocol`、profile、`ProtocolLink` 和 `SystemProtocol`；
-- VirtualDut 的 source、sink、responder、bridge 原型及声明式 contract 元数据；
-- manifest、显式 `out/` 运行结果、系统拓扑/因果图和文档发布边界。
+- `SemanticComponent` 已统一 state/action/step/emission/fault/blocked，基础 event、resource、obligation、
+  causal relation 和三值 verdict 已可执行；
+- `InterfaceProtocol`、`InterfaceConnection`、具体 `VirtualDut` 和 `SystemProtocol` 的对象边界已经建立；
+- typed operation form、stage/plan、fan-out/completion ledger、capacity lease 与严格串行 executor 已形成
+  首条可复用转译路径，统一 AMBA serial bridge 已验证多个 ingress/egress family；
+- 有限容量、`ResourceDemand`、blocked reason、整步回滚、显式 advance 与 queued/stepped emission 已进入
+  局部 runtime；
+- canonical topology、resolved transport plan、显式 address contract 与 direct-neighbor resolution 已形成
+  首条 system construction 路径；
+- manifest、调用方选择的 run root、系统 topology/causality 投影和具名发布边界已经固定。
 
-当前主要缺口不是“再增加几个 case”，而是通用组合语义、resource-aware blocked/deferred 网络运行扩展、
-可达性分析、时钟模型和外部观测接入。现有同步 `SystemSession` fixed-point runtime 继续作为点到点与微型
-bridge 的执行基础。
+这些能力仍会继续扩展，但后续工作不再以“重新建立 typed stage/plan、首个 serial bridge 或首个 blocked
+reason”为目标。当前已经有首条 single-scope coherence authority 与 capability-backed construction；
+主要缺口转为 multi-Home/SAM 扩展、常用 coherence write 生命周期、resource-aware runtime 闭合，以及
+其后的可达性、时间模型和外部观测接入。现有同步 `SystemSession` fixed-point runtime 继续作为点到点与
+微型 bridge 的执行基础。
 
 ## 3. 工作主线
 
@@ -61,13 +69,15 @@ bridge 的执行基础。
 
 - **I/O LTS 组合**：同步积、异步并行、端口 rename/hide、输入输出 ownership；
 - **规则组合器**：guard、invariant、choice/conflict、join/fork、sequence、retry、timeout；
-- **资源语义**：credit、capacity、FIFO、token color、reservation 和 release；
+- **资源语义扩展**：在已有 capacity、lease 与 `ResourceDemand` 上增加 held-resource、waiting demand、
+  recoverable wakeup 和 release provenance；
 - **关系语义**：显式 precedence、independence、conflict 与 ordering domain；
 - **时间语义**：逻辑时钟、区间 deadline、跨域不可比时间，而不是默认使用单一 cycle；
 - **派生器**：对 channel、event domain、transaction model、capability 和 requirement 进行
   可追溯替换或收窄；
-- **类型化事务转译**：用 operation form、translation stage/plan、fan-out ledger、completion fold
-  和资源租约描述 bridge，不让成对协议 backend 随协议数量按平方扩张；
+- **转译与构造闭合**：在已有 operation form、typed stage/plan、fan-out ledger、completion fold、
+  capacity lease 和 serial executor 上，继续闭合 capability、construction provenance、多层 fan-out、
+  并发 child 与 admission/fold metadata；
 - **统一 provenance**：每个 fault、emission、因果边和派生约束能够回指规则、实例和原始采样；
 - **有界探索**：状态 canonicalization、visited-state、反例 trace、partial-order reduction；
 - **最小诊断相关集**：从失败状态反向提取最小相关事件、资源和规则集合。
@@ -84,7 +94,7 @@ bridge 的执行基础。
 
 | 图 | 节点/边 | 环的含义 |
 |---|---|---|
-| Topology graph | endpoint、link、bridge 及物理/逻辑连接 | 环可以合法；ring、反馈控制和 token 环都可能正常工作 |
+| Topology graph | endpoint、InterfaceConnection/transport hop、bridge 及物理连接 | 环可以合法；ring、反馈控制和 token 环都可能正常工作 |
 | Causal graph | 已发生事件之间的 happens-before | 必须是严格偏序；出现环说明语义自相矛盾 |
 | Wait-for graph | 当前状态中组件、端口、资源之间的等待 | 环是 deadlock 候选，不单独构成充分证明 |
 
@@ -112,8 +122,8 @@ enabled”的真实 deadlock。
 网络主线分为：
 
 1. typed port 与 role compatibility；
-2. topology elaboration、link ownership 和 event routing；
-3. 每条 link 独立 session state，禁止隐式共享；
+2. topology elaboration、connection ownership 和 event routing；
+3. 每条 InterfaceConnection 独立 session state，禁止隐式共享；
 4. buffer、credit、outstanding、route 和 obligation 的动态资源视图；
 5. SCC 作为廉价候选检测，再用有界可达性确认或排除 deadlock；
 6. 输出最小 wait cycle、被阻塞端口、持有资源、未完成义务和可能的 escape transition；
@@ -145,7 +155,7 @@ backend 提供；内部状态可以不透明，引擎不需要证明或枚举 ba
 - FIFO/table/pool/counter/register 等 Store/Resource；
 - Correlate/Join、Route/Fork 和 Select/Arbitrate；
 - Compose/Hide、boundary contract 和 backend binding；
-- 后续增加 blocked/deferred emission、latency 和 clock-domain 扩展。
+- blocked/deferred/scheduled output、emission-level admission、causal lineage、latency 和 clock-domain 扩展。
 
 其中 `Transform` 是行为构造词汇；跨协议 bridge 需要把它收窄为可执行的类型化转译合同。operation
 form、stage、执行资源和 completion 回收的边界以
@@ -157,7 +167,7 @@ QoS 和仲裁不是只能放在一个层次，正确划分如下：
 
 | 内容 | 归属 |
 |---|---|
-| QoS/priority 字段的宽度、握手稳定性和协议规定的 ordering | 基础 LinkProtocol |
+| QoS/priority 字段的宽度、握手稳定性和协议规定的 ordering | 基础 InterfaceProtocol |
 | endpoint 支持哪些 priority、outstanding 或 burst | Protocol profile / capability |
 | round-robin、fixed-priority、age-based 等选择算法 | interconnect/arbiter VirtualDut |
 | 最大等待、公平性、带宽配额、隔离目标 | scenario contract / verification property |
@@ -171,9 +181,9 @@ QoS 和仲裁不是只能放在一个层次，正确划分如下：
 
 新增协议的意义不是扩大协议名单，而是用不同协议压力测试公共抽象。
 
-#### UART：先做
+#### UART：时间抽象的首个压力场景
 
-UART 适合作为下一份协议，因为它迫使引擎处理串行化和时间容差，而不依赖复杂网络：
+UART 适合作为时间语义形成后的首个小型压力协议，因为它迫使引擎处理串行化和时间容差，而不依赖复杂网络：
 
 ```text
 line samples/edges
@@ -249,30 +259,29 @@ CDC lint，也不模拟模拟意义上的 metastability。metastability 只建�
 bridge 输出是否 refinement-compatible，以及两端 assumption/guarantee 是否能够闭合。这仍然只
 针对协议接口，不扩张到任意程序证明。
 
-## 4. 长期能力的依赖顺序
+## 4. 长期能力的依赖关系
 
-以下顺序描述从当前桥原型走向协议网络分析时的主要依赖。它是长期阶段建议；某一阶段的局部工作可以
-与相邻阶段并行，但不应绕过其输入合同。
+本节只记录“哪类事实必须先存在”，不分配版本、不维护当前施工编号，也不因为左侧能力已经出现首条
+可执行路径就宣称整条依赖链完成。当前完成度仍以[实现状态](docs/architecture/implementation-status.md)
+为准。
 
-| 阶段 | 主要交付 | 为什么先做 |
-|---|---|---|
-| P0 | typed operation form、TranslationPlan、fan-out/completion ledger、lease 与串行 executor | 先把已有 pair-specific bridge 提炼成可复用且可解释的转换过程 |
-| P1 | capability/address 投影、construction lowering 与 provenance | 让连接意图可以安全地生成显式 bridge VirtualDut 和两侧 links |
-| P2 | blocked reason、动态资源、resource-aware/deferred runtime extension、ready-valid ring 与死锁相关依赖子图 | 在局部容量生命周期稳定后，建立跨节点 wait-for 关系 |
-| P3 | opaque backend binding、Store/Route/Arbitrate backend 与 crossbar owner table | 同时接入外部 Vdut，并扩展多入口互连的局部调度能力 |
-| P4 | canonical JSON 与 VCD adapter | 把外部 DUT trace 接入同一语义入口 |
-| P5 | time domain 与 UART | 用较小协议验证串行和时间抽象 |
-| P6 | shared wire 与 I²C | 验证多驱动、仲裁、stretch 与共享总线 |
-| P7 | async bridge/FIFO 与 CDC contract | 在多时钟基础成熟后处理跨域协议 |
-| P8 | partial-order reduction、refinement、规模与插件化 | 在语义和资源边界稳定后解决状态爆炸和生态扩展 |
+| 长期依赖链 | 依赖保护的性质 |
+|---|---|
+| typed transaction translation → capability-backed construction → resource-aware runtime closure → wait-for/deadlock → QoS/fairness | 先闭合转换、边界能力和动态资源所有权，再对跨节点等待与长期调度作判断 |
+| boundary projection → opaque backend binding → external conformance | 外部实现先声明可校验的协议边界，再接入 RTL/RPC/trace 证据 |
+| semantic provenance → canonical trace schema → VCD/FSDB/UVM adapter → semantic diff/refinement | 外部采样必须能回链到 event、transaction、rule 和环境假设 |
+| time domains → UART → asynchronous bridge/FIFO 与 CDC contract | 先用较小串行协议检验时间窗口，再处理跨域不确定性与 reset epoch |
+| time domains + resolved shared wire + multi-owner drive intent → I²C | 多驱动解析、arbitration 与 clock stretching 需要共同的 wire/time 权威 |
+| 稳定的 state/resource identity → bounded exploration/POR → refinement、规模与插件化 | 先固定状态等价、资源生命周期和诊断 provenance，再处理状态爆炸与生态扩展 |
 
-依赖关系可以概括为：
+当前基线在这张图中的位置可以概括为：
 
 ```text
-semantic composition
-       └──► typed transaction translation
-                  └──► capability-backed construction
-                              └──► resource-aware runtime extension ──► wait-for/deadlock ──► QoS/fairness
+typed transaction translation（已有严格串行基线）
+       └──► capability-backed construction
+
+local capacity / ResourceDemand（已有局部事实）
+       └──► resource-aware runtime closure ──► wait-for/deadlock ──► QoS/fairness
 
 semantic provenance ──► trace schema ──► VCD/FSDB/UVM adapters
 
@@ -280,35 +289,20 @@ time domains ──► UART ──► CDC
            └──► resolved shared wire ──► I²C
 ```
 
-## 5. 近期版本建议
+## 5. 当前施工入口
 
-下一里程碑不以“增加协议数量”为目标，建议定义为：
+根 Roadmap 不再定义“下一版本 A/B/C”或复制一份近期任务清单。当前施工统一从
+[技术路线实施阶段](docs/architecture/technical-route/08-roadmap.md)中的三个入口读取：
 
-### 阶段 A：Typed Bridge and Composable Network
+- `C1`：从已闭合的 CHI participant/network、topology writeback witness 与 single-scope
+  address→Home/domain authority，推进常用一致性生命周期和后续 multi-Home/SAM 扩展；
+- `S3`：从已有 address projection/direct-neighbor closure 推进 capability-backed system construction；
+- `S4`：从已有有限容量、blocked reason 和显式 advance 推进 emission-level admission、lineage、
+  held/waiting resource 与 recoverable wakeup。
 
-- `AddressBurst` 等 operation form、类型化 stage/plan、fan-out ledger、lease 与串行 executor；
-- 用公共转译执行器重构 AXI4→APB，并增加第二种 egress 以检验复用边界；
-- capability/address 投影和 construction lowering，生成显式 bridge VirtualDut 与两侧 links；
-- 扩展现有 elaboration，闭合 capability、construction provenance 和生成后的 topology；
-- resource/wait reason IR；
-- topology、causal、wait-for 三图分离；
-- ready-valid ring 的 lock/safe/escape 三个 case；
-- 最小 deadlock witness 与诊断报告；
-- 一个由 Store 算子构造的 stateful FIFO VirtualDut fixture。
+三条入口可以按真实场景并行，但不合并成一个宽泛版本目标。wait-for/deadlock 由技术路线的 `S5` 承接，
+并以前述 `S4` 事实闭合为前提；UART、I²C、CDC 和外部 trace 继续保留为本页的长期压力方向，不取代当前
+施工入口。
 
-### 阶段 B：Timed and External Traces
-
-- canonical trace schema、VCD adapter；
-- clock domain 与时间区间；
-- UART 基础协议与 Tx/Rx 组合场景；
-- 外部 waveform 到规则/事件的 provenance。
-
-### 阶段 C：Shared Bus and CDC
-
-- resolved open-drain wire 与 I²C 基础事务；
-- 多 controller arbitration/stretches 诊断；
-- async ready-valid/async FIFO CDC 场景；
-- bounded exploration 与 partial-order reduction 的第一版。
-
-阶段名称只表示能力依赖顺序，不表示理论已经完备。每个里程碑都必须保留未覆盖规则和环境假设，
-避免把一次有限 witness 的 `PASS` 宣称为对完整协议或 RTL 的证明。
+每条路径都必须保留未覆盖规则和环境假设，并用合法 witness、单点负例及可解释的
+state/resource/causal projection 收束；一次有限 witness 的 `PASS` 不代表完整协议或 RTL 已被证明。

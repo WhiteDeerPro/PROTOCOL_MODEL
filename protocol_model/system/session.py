@@ -7,18 +7,21 @@ from dataclasses import dataclass, replace
 from types import MappingProxyType
 from typing import Any, Mapping
 
-from protocol_model.link import LinkSession, LinkSessionState
+from protocol_model.interface import InterfaceSession, InterfaceSessionState
 from protocol_model.semantics import (
     CanonicalEvent,
     ConstraintScope,
+    ResourceDemand,
     SemanticComponent,
     SemanticFault,
     SemanticStep,
 )
 from protocol_model.virtual_dut.backend.transition import PortInput
+from protocol_model.virtual_dut.backend.advance import ExplicitlyAdvanceableBackend
 
 from .elaboration import ElaboratedSystemProtocol
-from .protocol import VirtualDutPortRef
+from .topology.model import VirtualDutPortRef
+from .topology.ownership import PortOwnerKind
 
 
 @dataclass(frozen=True)
@@ -30,17 +33,40 @@ class SystemAction:
 
 
 @dataclass(frozen=True)
+class DutAdvanceAction:
+    """Explicitly request progress from one advanceable VirtualDut backend.
+
+    One step has no built-in clock or time unit.  A scenario may interpret it
+    as a service opportunity, while a future scheduler can map clock-domain
+    progress onto the same backend contract.
+    """
+
+    dut: str
+    steps: int = 1
+
+    def __post_init__(self) -> None:
+        if not self.dut:
+            raise ValueError("DUT advance action requires a DUT name")
+        if (
+            not isinstance(self.steps, int)
+            or isinstance(self.steps, bool)
+            or self.steps <= 0
+        ):
+            raise ValueError("DUT advance steps must be positive")
+
+
+@dataclass(frozen=True)
 class SystemEvent:
     index: int
-    link: str
-    channel: str
+    connection: str
+    event_kind: str
     source: VirtualDutPortRef
     destination: VirtualDutPortRef
     event: CanonicalEvent
 
     def short(self) -> str:
         return (
-            f"{self.link}:{self.source.qualified_name}"
+            f"{self.connection}:{self.source.qualified_name}"
             f"->{self.destination.qualified_name}:{self.event.short()}"
         )
 
@@ -61,24 +87,32 @@ class SystemTrace:
 
 @dataclass(frozen=True)
 class SystemSessionState:
-    link_states: Mapping[str, LinkSessionState]
+    connection_states: Mapping[str, InterfaceSessionState]
     dut_states: Mapping[str, Any]
-    link_event_globals: Mapping[str, tuple[int, ...]]
+    connection_event_globals: Mapping[str, tuple[int, ...]]
     events: tuple[SystemEvent, ...] = ()
     causal_edges: tuple[tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "link_states", MappingProxyType(dict(self.link_states)))
+        object.__setattr__(
+            self,
+            "connection_states",
+            MappingProxyType(dict(self.connection_states)),
+        )
         object.__setattr__(self, "dut_states", MappingProxyType(dict(self.dut_states)))
         object.__setattr__(
             self,
-            "link_event_globals",
-            MappingProxyType(dict(self.link_event_globals)),
+            "connection_event_globals",
+            MappingProxyType(dict(self.connection_event_globals)),
         )
 
 
 class SystemSession(
-    SemanticComponent[SystemAction, SystemSessionState, SystemEvent]
+    SemanticComponent[
+        SystemAction | DutAdvanceAction,
+        SystemSessionState,
+        SystemEvent,
+    ]
 ):
     """Execute a top-level DUT emission and all causally triggered DUT emissions."""
 
@@ -93,65 +127,174 @@ class SystemSession(
         self.system = system
         self.name = f"{system.spec.name}.system_session"
         self.max_internal_steps = max_internal_steps
-        self.link_sessions = {
-            name: LinkSession(link.protocol)
-            for name, link in system.spec.links.items()
+        self.connection_sessions = {
+            name: InterfaceSession(connection.protocol)
+            for name, connection in system.spec.interface_connections.items()
         }
 
     def initial_state(self) -> SystemSessionState:
         return SystemSessionState(
             {
                 name: session.initial_state()
-                for name, session in self.link_sessions.items()
+                for name, session in self.connection_sessions.items()
             },
             {
                 name: (
-                    dut.model.initial_state()
-                    if dut.model is not None
+                    dut.backend.initial_state()
+                    if dut.backend is not None
                     else None
                 )
                 for name, dut in self.system.spec.virtual_duts.items()
             },
-            {name: () for name in self.system.spec.links},
+            {name: () for name in self.system.spec.interface_connections},
         )
 
     def is_quiescent(self, state: SystemSessionState) -> bool:
-        links_quiescent = all(
-            session.is_quiescent(state.link_states[name])
-            for name, session in self.link_sessions.items()
+        connections_quiescent = all(
+            session.is_quiescent(state.connection_states[name])
+            for name, session in self.connection_sessions.items()
         )
         duts_quiescent = all(
-            dut.model is None
-            or dut.model.is_quiescent(state.dut_states[name])
+            dut.backend is None
+            or dut.backend.is_quiescent(state.dut_states[name])
             for name, dut in self.system.spec.virtual_duts.items()
         )
-        return links_quiescent and duts_quiescent
+        return connections_quiescent and duts_quiescent
 
     def trace(self, state: SystemSessionState) -> SystemTrace:
         return SystemTrace(state.events, state.causal_edges)
 
     def step(
-        self, state: SystemSessionState, action: SystemAction
+        self,
+        state: SystemSessionState,
+        action: SystemAction | DutAdvanceAction,
     ) -> SemanticStep[SystemSessionState, SystemEvent]:
-        link_states = dict(state.link_states)
+        connection_states = dict(state.connection_states)
         dut_states = dict(state.dut_states)
-        link_event_globals = dict(state.link_event_globals)
+        connection_event_globals = dict(state.connection_event_globals)
         events = list(state.events)
         edges = list(state.causal_edges)
         step_events: list[SystemEvent] = []
-        queue = deque(((action.origin, action.event, ()),))
+        queue = deque()
 
         def snapshot() -> SystemSessionState:
             return SystemSessionState(
-                link_states,
+                connection_states,
                 dut_states,
-                link_event_globals,
+                connection_event_globals,
                 tuple(events),
                 tuple(edges),
             )
 
         def fail(fault: SemanticFault) -> SemanticStep[SystemSessionState, SystemEvent]:
             return SemanticStep(snapshot(), tuple(step_events), fault=fault)
+
+        def block(
+            demand: ResourceDemand,
+            dut_name: str,
+        ) -> SemanticStep[SystemSessionState, SystemEvent]:
+            """Reject the entire external step without committing its prefix."""
+
+            location = (
+                dut_name
+                if not demand.location
+                else f"{dut_name}.{demand.location}"
+            )
+            located = replace(
+                demand,
+                resource=f"{dut_name}.{demand.resource}",
+                location=location,
+            )
+            return SemanticStep(state, blocked=located)
+
+        def block_connection(
+            demand: ResourceDemand,
+            connection_name: str,
+        ) -> SemanticStep[SystemSessionState, SystemEvent]:
+            """Reject an action when an interface monitor cannot admit it."""
+
+            location = (
+                connection_name
+                if not demand.location
+                else f"{connection_name}.{demand.location}"
+            )
+            located = replace(
+                demand,
+                resource=f"interface.{connection_name}.{demand.resource}",
+                location=location,
+            )
+            return SemanticStep(state, blocked=located)
+
+        def enqueue_emissions(
+            dut_name: str,
+            emissions,
+            trigger_parents: tuple[int, ...],
+        ) -> SemanticFault | None:
+            dut = self.system.spec.virtual_duts[dut_name]
+            for emission in emissions:
+                if emission.port not in dut.ports:
+                    return SemanticFault(
+                        f"{self.name}.{dut_name}.unknown_output_port",
+                        f"VirtualDut emitted through unknown port "
+                        f"{emission.port!r}",
+                        ConstraintScope.VIRTUAL_DUT,
+                        dut_name,
+                    )
+                queue.append(
+                    (
+                        VirtualDutPortRef(dut_name, emission.port),
+                        replace(emission.event, source=dut_name),
+                        trigger_parents,
+                    )
+                )
+            return None
+
+        if isinstance(action, SystemAction):
+            queue.append((action.origin, action.event, ()))
+        elif isinstance(action, DutAdvanceAction):
+            dut = self.system.spec.virtual_duts.get(action.dut)
+            if dut is None:
+                return fail(
+                    SemanticFault(
+                        f"{self.name}.unknown_dut",
+                        f"unknown VirtualDut {action.dut!r}",
+                        ConstraintScope.SYSTEM,
+                        action.dut,
+                    )
+                )
+            backend = dut.backend
+            if backend is None or not isinstance(
+                backend, ExplicitlyAdvanceableBackend
+            ):
+                return fail(
+                    SemanticFault(
+                        f"{self.name}.{action.dut}.not_advanceable",
+                        f"VirtualDut {action.dut!r} has no explicit "
+                        "advance contract",
+                        ConstraintScope.VIRTUAL_DUT,
+                        action.dut,
+                    )
+                )
+            dut_step = backend.advance(
+                dut_states[action.dut], steps=action.steps
+            )
+            if dut_step.blocked is not None:
+                return block(dut_step.blocked, action.dut)
+            dut_states[action.dut] = dut_step.state
+            if dut_step.fault is not None:
+                fault = dut_step.fault
+                if not fault.location:
+                    fault = replace(fault, location=action.dut)
+                return fail(fault)
+            emission_fault = enqueue_emissions(
+                action.dut, dut_step.emissions, ()
+            )
+            if emission_fault is not None:
+                return fail(emission_fault)
+        else:
+            raise TypeError(
+                "SystemSession requires SystemAction or DutAdvanceAction"
+            )
 
         internal_steps = 0
         while queue:
@@ -175,63 +318,73 @@ class SystemSession(
                         ConstraintScope.SYSTEM,
                     )
                 )
-            if not owner.startswith("link:"):
+            if owner.kind is not PortOwnerKind.INTERFACE_CONNECTION:
                 return fail(
                     SemanticFault(
-                        f"{self.name}.boundary_direction",
-                        f"{origin.qualified_name!r} is a boundary receive port, not an internal link origin",
+                        f"{self.name}.connection_kind",
+                        f"{origin.qualified_name!r} is owned by "
+                        f"{owner.qualified_name!r}, not an executable "
+                        "InterfaceConnection",
                         ConstraintScope.SYSTEM,
                     )
                 )
-            link_name = owner.split(":", 1)[1]
-            link = self.system.spec.links[link_name]
+            connection_name = owner.name
+            connection = self.system.spec.interface_connections[
+                connection_name
+            ]
             origin_port = self.system.spec.virtual_duts[origin.dut].port(origin.port)
             try:
-                channel = link.protocol.channel_for_event(event.kind)
+                event_kind = connection.protocol.event_kind_for(event.kind)
             except KeyError:
                 return fail(
                     SemanticFault(
-                        f"{self.name}.{link_name}.alphabet",
-                        f"event {event.kind!r} is not carried by link {link_name!r}",
-                        ConstraintScope.LINK,
-                        link_name,
+                        f"{self.name}.{connection_name}.alphabet",
+                        f"event {event.kind!r} is not carried by connection "
+                        f"{connection_name!r}",
+                        ConstraintScope.INTERFACE,
+                        connection_name,
                     )
                 )
-            if origin_port.role != channel.source_role:
+            if origin_port.role != event_kind.source_role:
                 return fail(
                     SemanticFault(
-                        f"{self.name}.{link_name}.direction",
+                        f"{self.name}.{connection_name}.direction",
                         f"{origin.qualified_name} has role {origin_port.role!r}; "
-                        f"event {event.kind!r} requires source role {channel.source_role!r}",
+                        f"event {event.kind!r} requires source role "
+                        f"{event_kind.source_role!r}",
                         ConstraintScope.SYSTEM,
                         origin.qualified_name,
                     )
                 )
-            destination = link.endpoints[channel.destination_role]
+            destination = connection.endpoints[event_kind.destination_role]
 
-            link_state = link_states[link_name]
-            local_index = link_state.next_index
-            transition = self.link_sessions[link_name].step(link_state, event)
+            connection_state = connection_states[connection_name]
+            local_index = connection_state.next_index
+            transition = self.connection_sessions[connection_name].step(
+                connection_state, event
+            )
+            if transition.blocked is not None:
+                return block_connection(transition.blocked, connection_name)
             if transition.fault is not None:
                 fault = transition.fault
                 if not fault.location:
-                    fault = replace(fault, location=link_name)
+                    fault = replace(fault, location=connection_name)
                 return fail(fault)
-            link_states[link_name] = transition.state
+            connection_states[connection_name] = transition.state
 
-            globals_for_link = link_event_globals[link_name]
+            globals_for_connection = connection_event_globals[connection_name]
             try:
                 local_parents = tuple(
-                    globals_for_link[index]
+                    globals_for_connection[index]
                     for index in transition.causal_predecessors
                 )
             except IndexError:
                 return fail(
                     SemanticFault(
-                        f"{self.name}.{link_name}.causal_index",
-                        "link monitor referenced an unavailable predecessor",
+                        f"{self.name}.{connection_name}.causal_index",
+                        "interface monitor referenced an unavailable predecessor",
                         ConstraintScope.SYSTEM,
-                        link_name,
+                        connection_name,
                     )
                 )
             global_index = len(events)
@@ -240,48 +393,42 @@ class SystemSession(
             )
             located = SystemEvent(
                 global_index,
-                link_name,
-                channel.name,
+                connection_name,
+                event_kind.name,
                 origin,
                 destination,
                 accepted,
             )
             events.append(located)
             step_events.append(located)
-            link_event_globals[link_name] = globals_for_link + (global_index,)
+            connection_event_globals[connection_name] = (
+                globals_for_connection + (global_index,)
+            )
             parents = tuple(dict.fromkeys((*local_parents, *trigger_parents)))
             edges.extend((parent, global_index) for parent in parents)
 
             destination_dut = self.system.spec.virtual_duts[destination.dut]
-            model = destination_dut.model
-            if model is None:
+            backend = destination_dut.backend
+            if backend is None:
                 continue
-            dut_step = model.accept(
+            dut_step = backend.accept(
                 dut_states[destination.dut],
                 PortInput(destination.port, accepted),
             )
+            if dut_step.blocked is not None:
+                return block(dut_step.blocked, destination.dut)
             dut_states[destination.dut] = dut_step.state
             if dut_step.fault is not None:
                 fault = dut_step.fault
                 if not fault.location:
                     fault = replace(fault, location=destination.dut)
                 return fail(fault)
-            for emission in dut_step.emissions:
-                if emission.port not in destination_dut.ports:
-                    return fail(
-                        SemanticFault(
-                            f"{self.name}.{destination.dut}.unknown_output_port",
-                            f"VirtualDut emitted through unknown port {emission.port!r}",
-                            ConstraintScope.VIRTUAL_DUT,
-                            destination.dut,
-                        )
-                    )
-                queue.append(
-                    (
-                        VirtualDutPortRef(destination.dut, emission.port),
-                        replace(emission.event, source=destination.dut),
-                        (global_index,),
-                    )
-                )
+            emission_fault = enqueue_emissions(
+                destination.dut,
+                dut_step.emissions,
+                (global_index,),
+            )
+            if emission_fault is not None:
+                return fail(emission_fault)
 
         return SemanticStep(snapshot(), tuple(step_events))

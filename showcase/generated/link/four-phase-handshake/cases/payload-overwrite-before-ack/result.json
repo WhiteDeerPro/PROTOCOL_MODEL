@@ -1,0 +1,56 @@
+{
+  "schema": "protocol-model.showcase.four-phase-case/v1",
+  "name": "payload-overwrite-before-ack",
+  "title": "非法传输：等待 ACK 时 payload 被覆盖",
+  "purpose": "默认 EARLY window 要求 REQ 上升至 ACK 上升期间 event identity 稳定。",
+  "data_window": "req_assert_to_ack_assert",
+  "expected": "FAIL",
+  "observed": "FAIL",
+  "expectation": "MET",
+  "fault": {
+    "rule": "showcase.payload-overwrite-before-ack.event_stability",
+    "reason": "the offered event changed after REQ at sequence 1",
+    "scope": "interface",
+    "location": "mailbox"
+  },
+  "emissions": [],
+  "final_state": {
+    "phase": "requested_10",
+    "quiescent": false
+  },
+  "samples": [
+    {
+      "sequence": 0,
+      "timestamp_ns": 0.0,
+      "req": false,
+      "ack": false,
+      "event": null
+    },
+    {
+      "sequence": 1,
+      "timestamp_ns": 2.0,
+      "req": true,
+      "ack": false,
+      "event": {
+        "kind": "TRANSFER",
+        "key": 23,
+        "payload": {
+          "data": 49
+        }
+      }
+    },
+    {
+      "sequence": 2,
+      "timestamp_ns": 7.5,
+      "req": true,
+      "ack": false,
+      "event": {
+        "kind": "TRANSFER",
+        "key": 23,
+        "payload": {
+          "data": 199
+        }
+      }
+    }
+  ]
+}

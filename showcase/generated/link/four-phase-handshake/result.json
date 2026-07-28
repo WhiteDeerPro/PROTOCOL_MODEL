@@ -1,0 +1,191 @@
+{
+  "schema": "protocol-model.showcase.four-phase/v1",
+  "protocol": "four_phase_token",
+  "wire_encoding": "four_phase_return_to_zero",
+  "case_count": 3,
+  "all_expectations_met": true,
+  "cases": [
+    {
+      "name": "legal-delayed-ack",
+      "expected": "PASS",
+      "observed": "PASS",
+      "fault_rule": null
+    },
+    {
+      "name": "ack-before-request",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "fault_rule": "showcase.ack-before-request.phase_order"
+    },
+    {
+      "name": "payload-overwrite-before-ack",
+      "expected": "FAIL",
+      "observed": "FAIL",
+      "fault_rule": "showcase.payload-overwrite-before-ack.event_stability"
+    }
+  ],
+  "frequency_analysis": {
+    "schema": "protocol-model.showcase.cdc-frequency/v1",
+    "high_delta": {
+      "write_frequency_hz": 250000000,
+      "read_frequency_hz": 100000000,
+      "delta_frequency_hz": 150000000,
+      "fifo_depth": 8,
+      "traffic": "finite eight-word burst",
+      "ideal_fill_time_without_backpressure_ns": 53.333333333333336,
+      "projection_window_ns": 80,
+      "write_admitted": 8,
+      "write_stalled": 0,
+      "read_consumed": 8,
+      "final_occupancy": 0,
+      "peak_occupancy": 5,
+      "sustained_stream": {
+        "rate_gap_words_per_second": 150000000,
+        "steady_state_backpressure_attempts_per_second": 150000000,
+        "interpretation": "finite FIFO absorbs a burst; sustained offered load above read bandwidth requires backpressure"
+      },
+      "trace": [
+        {
+          "time_ns": 0.0,
+          "kind": "write_edge",
+          "write_admitted": true,
+          "write_stalled": false,
+          "read_consumed": false,
+          "occupancy": 1
+        },
+        {
+          "time_ns": 1.0,
+          "kind": "read_edge",
+          "write_admitted": false,
+          "write_stalled": false,
+          "read_consumed": true,
+          "occupancy": 0
+        },
+        {
+          "time_ns": 4.0,
+          "kind": "write_edge",
+          "write_admitted": true,
+          "write_stalled": false,
+          "read_consumed": false,
+          "occupancy": 1
+        },
+        {
+          "time_ns": 8.0,
+          "kind": "write_edge",
+          "write_admitted": true,
+          "write_stalled": false,
+          "read_consumed": false,
+          "occupancy": 2
+        },
+        {
+          "time_ns": 11.0,
+          "kind": "read_edge",
+          "write_admitted": false,
+          "write_stalled": false,
+          "read_consumed": true,
+          "occupancy": 1
+        },
+        {
+          "time_ns": 12.0,
+          "kind": "write_edge",
+          "write_admitted": true,
+          "write_stalled": false,
+          "read_consumed": false,
+          "occupancy": 2
+        },
+        {
+          "time_ns": 16.0,
+          "kind": "write_edge",
+          "write_admitted": true,
+          "write_stalled": false,
+          "read_consumed": false,
+          "occupancy": 3
+        },
+        {
+          "time_ns": 20.0,
+          "kind": "write_edge",
+          "write_admitted": true,
+          "write_stalled": false,
+          "read_consumed": false,
+          "occupancy": 4
+        },
+        {
+          "time_ns": 21.0,
+          "kind": "read_edge",
+          "write_admitted": false,
+          "write_stalled": false,
+          "read_consumed": true,
+          "occupancy": 3
+        },
+        {
+          "time_ns": 24.0,
+          "kind": "write_edge",
+          "write_admitted": true,
+          "write_stalled": false,
+          "read_consumed": false,
+          "occupancy": 4
+        },
+        {
+          "time_ns": 28.0,
+          "kind": "write_edge",
+          "write_admitted": true,
+          "write_stalled": false,
+          "read_consumed": false,
+          "occupancy": 5
+        },
+        {
+          "time_ns": 31.0,
+          "kind": "read_edge",
+          "write_admitted": false,
+          "write_stalled": false,
+          "read_consumed": true,
+          "occupancy": 4
+        },
+        {
+          "time_ns": 41.0,
+          "kind": "read_edge",
+          "write_admitted": false,
+          "write_stalled": false,
+          "read_consumed": true,
+          "occupancy": 3
+        },
+        {
+          "time_ns": 51.0,
+          "kind": "read_edge",
+          "write_admitted": false,
+          "write_stalled": false,
+          "read_consumed": true,
+          "occupancy": 2
+        },
+        {
+          "time_ns": 61.0,
+          "kind": "read_edge",
+          "write_admitted": false,
+          "write_stalled": false,
+          "read_consumed": true,
+          "occupancy": 1
+        },
+        {
+          "time_ns": 71.0,
+          "kind": "read_edge",
+          "write_admitted": false,
+          "write_stalled": false,
+          "read_consumed": true,
+          "occupancy": 0
+        }
+      ]
+    },
+    "near_equal": {
+      "write_frequency_hz": 1000000001,
+      "read_frequency_hz": 1000000000,
+      "delta_frequency_hz": 1,
+      "beat_period_seconds": 1.0,
+      "write_cycles_per_beat": 1000000001,
+      "period_slip_seconds_per_paired_cycle": 9.99999999e-19,
+      "period_slip_attoseconds_per_paired_cycle": 0.999999999,
+      "net_word_drift_per_second": 1,
+      "depth_8_ideal_fill_time_seconds": 8.0,
+      "interpretation": "async FIFO handles CDC and finite elasticity; sustained rate mismatch still requires admission or rate matching"
+    }
+  }
+}

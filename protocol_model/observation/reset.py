@@ -40,7 +40,7 @@ class ResetEpochObserver(
     reset_lane: str
     inactive: Callable[[AtomicFrame], bool]
     inactive_reason: str
-    scope: ConstraintScope = ConstraintScope.LINK
+    scope: ConstraintScope = ConstraintScope.INTERFACE
     initially_asserted: bool = False
 
     def initial_state(self) -> ResetEpochState[StateT]:

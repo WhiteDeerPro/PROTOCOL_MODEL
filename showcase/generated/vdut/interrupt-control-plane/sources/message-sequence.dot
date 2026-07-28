@@ -1,0 +1,104 @@
+digraph interrupt_msc {
+  rankdir=TB;
+  label="Interrupt control plane · actual accepted event sequence";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.3, nodesep=0.85, ranksep=0.34, newrank=true];
+  node [fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9];
+  h_source_a [shape=box, style="rounded,filled", fillcolor="#f8fafc", group="source_a", label="notifier A\nlow arrives first"];
+  h_source_b [shape=box, style="rounded,filled", fillcolor="#f8fafc", group="source_b", label="notifier B\nhigh arrives second"];
+  h_controller [shape=box, style="rounded,filled", fillcolor="#f8fafc", group="controller", label="priority controller"];
+  h_cpu_target [shape=box, style="rounded,filled", fillcolor="#f8fafc", group="cpu_target", label="explicit-EOI target"];
+  { rank=same; h_source_a; h_source_b; h_controller; h_cpu_target; }
+  p0_source_a [shape=point, width=0.035, label="", color="#94a3b8", group="source_a"];
+  h_source_a -> p0_source_a [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p0_source_b [shape=point, width=0.035, label="", color="#94a3b8", group="source_b"];
+  h_source_b -> p0_source_b [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p0_controller [shape=point, width=0.035, label="", color="#94a3b8", group="controller"];
+  h_controller -> p0_controller [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p0_cpu_target [shape=point, width=0.035, label="", color="#94a3b8", group="cpu_target"];
+  h_cpu_target -> p0_cpu_target [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p0_source_a; p0_source_b; p0_controller; p0_cpu_target; }
+  p0_source_a -> p0_source_b -> p0_controller -> p0_cpu_target [style=invis, weight=100];
+  p0_source_a -> p0_controller [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e0 NOTIFY · id 40 · p7 · ref 9"];
+  p1_source_a [shape=point, width=0.035, label="", color="#94a3b8", group="source_a"];
+  p0_source_a -> p1_source_a [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p1_source_b [shape=point, width=0.035, label="", color="#94a3b8", group="source_b"];
+  p0_source_b -> p1_source_b [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p1_controller [shape=point, width=0.035, label="", color="#94a3b8", group="controller"];
+  p0_controller -> p1_controller [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p1_cpu_target [shape=point, width=0.035, label="", color="#94a3b8", group="cpu_target"];
+  p0_cpu_target -> p1_cpu_target [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p1_source_a; p1_source_b; p1_controller; p1_cpu_target; }
+  p1_source_a -> p1_source_b -> p1_controller -> p1_cpu_target [style=invis, weight=100];
+  p1_controller -> p1_source_a [constraint=false, penwidth=1.6, color="#059669", fontcolor="#059669", label="e1 RETAINED ACK · id 40 · ref 9"];
+  p2_source_a [shape=point, width=0.035, label="", color="#94a3b8", group="source_a"];
+  p1_source_a -> p2_source_a [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p2_source_b [shape=point, width=0.035, label="", color="#94a3b8", group="source_b"];
+  p1_source_b -> p2_source_b [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p2_controller [shape=point, width=0.035, label="", color="#94a3b8", group="controller"];
+  p1_controller -> p2_controller [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p2_cpu_target [shape=point, width=0.035, label="", color="#94a3b8", group="cpu_target"];
+  p1_cpu_target -> p2_cpu_target [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p2_source_a; p2_source_b; p2_controller; p2_cpu_target; }
+  p2_source_a -> p2_source_b -> p2_controller -> p2_cpu_target [style=invis, weight=100];
+  p2_source_b -> p2_controller [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e2 NOTIFY · id 11 · p1 · ref 2"];
+  p3_source_a [shape=point, width=0.035, label="", color="#94a3b8", group="source_a"];
+  p2_source_a -> p3_source_a [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p3_source_b [shape=point, width=0.035, label="", color="#94a3b8", group="source_b"];
+  p2_source_b -> p3_source_b [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p3_controller [shape=point, width=0.035, label="", color="#94a3b8", group="controller"];
+  p2_controller -> p3_controller [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p3_cpu_target [shape=point, width=0.035, label="", color="#94a3b8", group="cpu_target"];
+  p2_cpu_target -> p3_cpu_target [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p3_source_a; p3_source_b; p3_controller; p3_cpu_target; }
+  p3_source_a -> p3_source_b -> p3_controller -> p3_cpu_target [style=invis, weight=100];
+  p3_controller -> p3_source_b [constraint=false, penwidth=1.6, color="#059669", fontcolor="#059669", label="e3 RETAINED ACK · id 11 · ref 2"];
+  p4_source_a [shape=point, width=0.035, label="", color="#94a3b8", group="source_a"];
+  p3_source_a -> p4_source_a [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p4_source_b [shape=point, width=0.035, label="", color="#94a3b8", group="source_b"];
+  p3_source_b -> p4_source_b [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p4_controller [shape=point, width=0.035, label="", color="#94a3b8", group="controller"];
+  p3_controller -> p4_controller [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p4_cpu_target [shape=point, width=0.035, label="", color="#94a3b8", group="cpu_target"];
+  p3_cpu_target -> p4_cpu_target [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p4_source_a; p4_source_b; p4_controller; p4_cpu_target; }
+  p4_source_a -> p4_source_b -> p4_controller -> p4_cpu_target [style=invis, weight=100];
+  p4_controller -> p4_cpu_target [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e4 NOTIFY · id 11 · p1 · ref 0"];
+  p5_source_a [shape=point, width=0.035, label="", color="#94a3b8", group="source_a"];
+  p4_source_a -> p5_source_a [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p5_source_b [shape=point, width=0.035, label="", color="#94a3b8", group="source_b"];
+  p4_source_b -> p5_source_b [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p5_controller [shape=point, width=0.035, label="", color="#94a3b8", group="controller"];
+  p4_controller -> p5_controller [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p5_cpu_target [shape=point, width=0.035, label="", color="#94a3b8", group="cpu_target"];
+  p4_cpu_target -> p5_cpu_target [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p5_source_a; p5_source_b; p5_controller; p5_cpu_target; }
+  p5_source_a -> p5_source_b -> p5_controller -> p5_cpu_target [style=invis, weight=100];
+  p5_cpu_target -> p5_controller [constraint=false, penwidth=1.6, color="#059669", fontcolor="#059669", label="e5 EOI · id 11 · ref 0"];
+  p6_source_a [shape=point, width=0.035, label="", color="#94a3b8", group="source_a"];
+  p5_source_a -> p6_source_a [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p6_source_b [shape=point, width=0.035, label="", color="#94a3b8", group="source_b"];
+  p5_source_b -> p6_source_b [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p6_controller [shape=point, width=0.035, label="", color="#94a3b8", group="controller"];
+  p5_controller -> p6_controller [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p6_cpu_target [shape=point, width=0.035, label="", color="#94a3b8", group="cpu_target"];
+  p5_cpu_target -> p6_cpu_target [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p6_source_a; p6_source_b; p6_controller; p6_cpu_target; }
+  p6_source_a -> p6_source_b -> p6_controller -> p6_cpu_target [style=invis, weight=100];
+  p6_controller -> p6_cpu_target [constraint=false, penwidth=1.6, color="#2563eb", fontcolor="#2563eb", label="e6 NOTIFY · id 40 · p7 · ref 1"];
+  p7_source_a [shape=point, width=0.035, label="", color="#94a3b8", group="source_a"];
+  p6_source_a -> p7_source_a [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p7_source_b [shape=point, width=0.035, label="", color="#94a3b8", group="source_b"];
+  p6_source_b -> p7_source_b [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p7_controller [shape=point, width=0.035, label="", color="#94a3b8", group="controller"];
+  p6_controller -> p7_controller [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  p7_cpu_target [shape=point, width=0.035, label="", color="#94a3b8", group="cpu_target"];
+  p6_cpu_target -> p7_cpu_target [arrowhead=none, color="#cbd5e1", penwidth=1.0, weight=1000];
+  { rank=same; p7_source_a; p7_source_b; p7_controller; p7_cpu_target; }
+  p7_source_a -> p7_source_b -> p7_controller -> p7_cpu_target [style=invis, weight=100];
+  p7_cpu_target -> p7_controller [constraint=false, penwidth=1.6, color="#059669", fontcolor="#059669", label="e7 EOI · id 40 · ref 1"];
+  note [shape=note, style="rounded,filled", fillcolor="#fff7ed", color="#ea580c", label="Selection result: id 11 (p1) before id 40 (p7)
+Next delivery waits for explicit EOI"];
+  p7_controller -> note [style=dashed, color="#ea580c"];
+}

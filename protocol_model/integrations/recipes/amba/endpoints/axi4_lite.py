@@ -5,7 +5,7 @@ from __future__ import annotations
 from protocol_model.integrations.attachments.amba.axi.axi4_lite import (
     Axi4LiteCompleterAttachment,
 )
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.virtual_dut.address.access import ByteOrder
 from protocol_model.virtual_dut.address.space import AddressSpace
 from protocol_model.virtual_dut.boundary.module import VirtualDut
@@ -15,7 +15,7 @@ from ._address_space import build_passive_address_space_vdut
 
 def build_axi4_lite_address_space_vdut(
     name: str,
-    protocol: LinkProtocol,
+    protocol: InterfaceProtocol,
     address_space: AddressSpace,
     *,
     port_name: str = "axi",

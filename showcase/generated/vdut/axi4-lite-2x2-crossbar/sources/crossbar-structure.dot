@@ -1,0 +1,48 @@
+digraph virtual_dut_structure {
+  rankdir=TB;
+  label="crossbar · VirtualDut · constructed";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.28, ranksep=0.62, splines=polyline, newrank=true];
+  node [fontname="sans-serif", fontsize=10, shape=box, style="rounded,filled", fillcolor="#ffffff"];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d"];
+  subgraph cluster_virtual_dut {
+    label="VirtualDut boundary";
+    color="#64748b";
+    penwidth=1.4;
+    style="rounded";
+    component_0 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="s_manager0\ninterface port\ninterface: axi4_lite · subordinate", tooltip="s_manager0\ninterface port\ninterface: axi4_lite · subordinate"];
+    component_1 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="s_manager1\ninterface port\ninterface: axi4_lite · subordinate", tooltip="s_manager1\ninterface port\ninterface: axi4_lite · subordinate"];
+    component_2 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="m_target0\ninterface port\ninterface: axi4_lite · manager", tooltip="m_target0\ninterface port\ninterface: axi4_lite · manager"];
+    component_3 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="m_target1\ninterface port\ninterface: axi4_lite · manager", tooltip="m_target1\ninterface port\ninterface: axi4_lite · manager"];
+    component_4 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address completer\nattachment\nbinding: axi4_lite · subordinate", tooltip="address completer\nattachment\nbinding: axi4_lite · subordinate"];
+    component_5 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address completer\nattachment\nbinding: axi4_lite · subordinate", tooltip="address completer\nattachment\nbinding: axi4_lite · subordinate"];
+    component_6 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address requester\nattachment\nbinding: axi4_lite · manager", tooltip="address requester\nattachment\nbinding: axi4_lite · manager"];
+    component_7 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address requester\nattachment\nbinding: axi4_lite · manager", tooltip="address requester\nattachment\nbinding: axi4_lite · manager"];
+    component_8 [shape=box, fillcolor="#fce7f3", color="#db2777", penwidth=1.0, label="shared address decoder / remap\nroutes: 0x1000+0x100→m_target0, 0x2000+0x100→m_target1\nmiss: ordered decode-error completion", tooltip="shared address decoder / remap\nroutes: 0x1000+0x100→m_target0, 0x2000+0x100→m_target1\nmiss: ordered decode-error completion"];
+    component_9 [shape=box, fillcolor="#ffedd5", color="#ea580c", penwidth=1.0, label="active owner / return table\nkey: request_id\nmapping: ingress ↔ egress\nmax active: 2", tooltip="active owner / return table\nkey: request_id\nmapping: ingress ↔ egress\nmax active: 2"];
+    component_10 [shape=box, fillcolor="#fef3c7", color="#d97706", penwidth=1.0, label="s_manager0\ncomplete-request FIFO\ncapacity: 2\nordering: FIFO", tooltip="s_manager0\ncomplete-request FIFO\ncapacity: 2\nordering: FIFO"];
+    component_11 [shape=box, fillcolor="#fef3c7", color="#d97706", penwidth=1.0, label="s_manager1\ncomplete-request FIFO\ncapacity: 2\nordering: FIFO", tooltip="s_manager1\ncomplete-request FIFO\ncapacity: 2\nordering: FIFO"];
+    component_12 [shape=box, fillcolor="#ede9fe", color="#7c3aed", penwidth=1.0, label="m_target0\nround-robin arbiter / cursor\npolicy: round-robin\ngrant: at most one / advance", tooltip="m_target0\nround-robin arbiter / cursor\npolicy: round-robin\ngrant: at most one / advance"];
+    component_13 [shape=box, fillcolor="#ede9fe", color="#7c3aed", penwidth=1.0, label="m_target1\nround-robin arbiter / cursor\npolicy: round-robin\ngrant: at most one / advance", tooltip="m_target1\nround-robin arbiter / cursor\npolicy: round-robin\ngrant: at most one / advance"];
+    { rank=source; component_0; component_1; }
+    { rank=sink; component_2; component_3; }
+    { rank=same; component_4; component_5; }
+    { rank=same; component_6; component_7; }
+    component_4 -> component_9 [style=invis, constraint=true, weight=1];
+    component_9 -> component_6 [style=invis, constraint=true, weight=1];
+    component_0 -> component_4 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_1 -> component_5 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_6 -> component_2 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_7 -> component_3 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_4 -> component_8 [style=solid, constraint=true, weight=4, color="#475569", label="complete access"];
+    component_8 -> component_10 [style=solid, constraint=true, weight=4, color="#475569", label="routed / remapped"];
+    component_5 -> component_8 [style=solid, constraint=true, weight=4, color="#475569", label="complete access"];
+    component_8 -> component_11 [style=solid, constraint=true, weight=4, color="#475569", label="routed / remapped"];
+    component_10 -> component_12 [style=solid, constraint=true, weight=4, color="#475569", label="eligible head · m_target0"];
+    component_11 -> component_12 [style=solid, constraint=true, weight=4, color="#475569", label="eligible head · m_target0"];
+    component_12 -> component_6 [style=solid, constraint=true, weight=4, color="#475569", label="request · m_target0"];
+    component_10 -> component_13 [style=solid, constraint=true, weight=4, color="#475569", label="eligible head · m_target1"];
+    component_11 -> component_13 [style=solid, constraint=true, weight=4, color="#475569", label="eligible head · m_target1"];
+    component_13 -> component_7 [style=solid, constraint=true, weight=4, color="#475569", label="request · m_target1"];
+  }
+}

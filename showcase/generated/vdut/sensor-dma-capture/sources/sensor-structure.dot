@@ -1,0 +1,25 @@
+digraph virtual_dut_structure {
+  rankdir=LR;
+  label="sensor · VirtualDut · constructed";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.28, ranksep=0.62, splines=polyline, newrank=true];
+  node [fontname="sans-serif", fontsize=10, shape=box, style="rounded,filled", fillcolor="#ffffff"];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d"];
+  subgraph cluster_virtual_dut {
+    label="VirtualDut boundary";
+    color="#64748b";
+    penwidth=1.4;
+    style="rounded";
+    component_0 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="axi\ninterface port\ninterface: axi4_lite · subordinate", tooltip="axi\ninterface port\ninterface: axi4_lite · subordinate"];
+    component_1 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address completer\nattachment\nbinding: axi4_lite · subordinate", tooltip="address completer\nattachment\nbinding: axi4_lite · subordinate"];
+    component_2 [shape=box, fillcolor="#dcfce7", color="#16a34a", penwidth=1.0, label="sample value policy", tooltip="sample value policy"];
+    component_3 [shape=box, fillcolor="#ede9fe", color="#7c3aed", penwidth=1.0, label="explicit sample opportunity\ntrigger: DutAdvanceAction\nclock: scenario-owned", tooltip="explicit sample opportunity\ntrigger: DutAdvanceAction\nclock: scenario-owned"];
+    component_4 [shape=box, fillcolor="#fef3c7", color="#d97706", penwidth=1.0, label="sensor sample FIFO\ncapacity: 2\nfull: drop_newest\nempty: block", tooltip="sensor sample FIFO\ncapacity: 2\nfull: drop_newest\nempty: block"];
+    component_5 [shape=box, fillcolor="#dcfce7", color="#16a34a", penwidth=1.0, label="read-to-pop data register\naddress: 0x0\nsample: 4 bytes", tooltip="read-to-pop data register\naddress: 0x0\nsample: 4 bytes"];
+    component_0 -> component_1 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_2 -> component_3 [style=solid, constraint=true, weight=4, color="#475569", label="next sample"];
+    component_3 -> component_4 [style=solid, constraint=true, weight=4, color="#475569", label="enqueue / overrun"];
+    component_1 -> component_5 [style=solid, constraint=true, weight=4, color="#475569", label="AddressRead"];
+    component_4 -> component_5 [style=solid, constraint=true, weight=4, color="#475569", label="oldest sample"];
+  }
+}

@@ -1,7 +1,7 @@
 """Small construction vocabulary shared by the AXI4 example themes.
 
 The helpers only make complete AXI4 inputs less noisy.  Legality remains the
-responsibility of ``LinkSession`` and ``Axi4ObservationSession``.
+responsibility of ``InterfaceSession`` and ``Axi4ObservationSession``.
 """
 
 from __future__ import annotations
@@ -9,15 +9,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from protocol_model import AtomicFrame, CanonicalEvent, ReadyValidSignals, Verdict
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
+from protocol_model.observation import AtomicFrame, ReadyValidSignals
+from protocol_model.semantics import CanonicalEvent, Verdict
 
 
 AXI4_CHANNELS = ("AW", "W", "B", "AR", "R")
 
 
 class ExecutionMode(str, Enum):
-    LINK = "link-events"
+    INTERFACE = "interface-events"
     OBSERVATION = "atomic-frames"
 
 
@@ -31,7 +32,7 @@ class ExampleCase:
     title_zh: str
     claim_en: str
     claim_zh: str
-    protocol: LinkProtocol
+    protocol: InterfaceProtocol
     mode: ExecutionMode
     actions: tuple[CanonicalEvent | AtomicFrame, ...]
     expected_verdict: Verdict

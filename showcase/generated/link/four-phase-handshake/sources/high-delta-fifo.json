@@ -1,0 +1,77 @@
+{
+  "signal": [
+    {
+      "name": "ANALYTIC EDGE ORDER · not one clock",
+      "wave": "================",
+      "data": [
+        "0ns",
+        "1ns",
+        "4ns",
+        "8ns",
+        "11ns",
+        "12ns",
+        "16ns",
+        "20ns",
+        "21ns",
+        "24ns",
+        "28ns",
+        "31ns",
+        "41ns",
+        "51ns",
+        "61ns",
+        "71ns"
+      ]
+    },
+    {
+      "name": "250MHz write · edge",
+      "wave": "101.01..01.0...."
+    },
+    {
+      "name": "250MHz write · admitted",
+      "wave": "101.01..01.0...."
+    },
+    {
+      "name": "250MHz write · backpressure",
+      "wave": "0..............."
+    },
+    {
+      "name": "100MHz read · edge",
+      "wave": "010.10..10.1...."
+    },
+    {
+      "name": "100MHz read · consumed",
+      "wave": "010.10..10.1...."
+    },
+    {
+      "name": "idealized FIFO occupancy / 8",
+      "wave": "================",
+      "data": [
+        "1",
+        "0",
+        "1",
+        "2",
+        "1",
+        "2",
+        "3",
+        "4",
+        "3",
+        "4",
+        "5",
+        "4",
+        "3",
+        "2",
+        "1",
+        "0"
+      ]
+    }
+  ],
+  "head": {
+    "text": "High Δf finite burst: 250 MHz → depth-8 async FIFO → 100 MHz"
+  },
+  "foot": {
+    "text": "8-beat burst drains; sustained load fills in ≈53.33 ns and needs backpressure · idealized occupancy"
+  },
+  "config": {
+    "hscale": 1
+  }
+}

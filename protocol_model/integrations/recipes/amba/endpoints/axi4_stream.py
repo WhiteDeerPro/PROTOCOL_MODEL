@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from protocol_model.link import LinkProtocol
+from protocol_model.interface import InterfaceProtocol
 from protocol_model.virtual_dut.backend.stream import StreamCaptureBackend
-from protocol_model.virtual_dut.binding import PortAttachmentBinding, VirtualDutBuilder
+from protocol_model.virtual_dut.binding import InterfaceAttachmentBinding, VirtualDutBuilder
 from protocol_model.virtual_dut.boundary.module import VirtualDut
-from protocol_model.virtual_dut.boundary.port import ProtocolPort
+from protocol_model.virtual_dut.boundary.port import InterfacePort
 
 from protocol_model.integrations.attachments.amba.axi.axi4_stream import (
     Axi4StreamReceiverAttachment,
@@ -15,7 +15,7 @@ from protocol_model.integrations.attachments.amba.axi.axi4_stream import (
 
 def build_axi4_stream_capture_vdut(
     name: str,
-    protocol: LinkProtocol,
+    protocol: InterfaceProtocol,
     *,
     port_name: str = "stream",
     capability: object | None = None,
@@ -23,8 +23,8 @@ def build_axi4_stream_capture_vdut(
     """Construct a receiver that retains normalized stream transfers."""
 
     attachment = Axi4StreamReceiverAttachment(protocol)
-    binding = PortAttachmentBinding(
-        ProtocolPort(
+    binding = InterfaceAttachmentBinding(
+        InterfacePort(
             port_name,
             protocol,
             attachment.role,
@@ -36,7 +36,7 @@ def build_axi4_stream_capture_vdut(
     return (
         VirtualDutBuilder(name)
         .bind(binding)
-        .with_model(backend)
+        .with_backend(backend)
         .describe("AXI4-Stream receiver capture endpoint")
         .build()
     )

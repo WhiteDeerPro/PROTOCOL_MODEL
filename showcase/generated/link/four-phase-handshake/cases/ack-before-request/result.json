@@ -1,0 +1,37 @@
+{
+  "schema": "protocol-model.showcase.four-phase-case/v1",
+  "name": "ack-before-request",
+  "title": "非法传输：ACK 在 REQ 前出现",
+  "purpose": "idle 不能直接进入 01；错误在单 link observation 边界定位。",
+  "data_window": "req_assert_to_ack_assert",
+  "expected": "FAIL",
+  "observed": "FAIL",
+  "expectation": "MET",
+  "fault": {
+    "rule": "showcase.ack-before-request.phase_order",
+    "reason": "illegal four-phase transition from idle_00 to REQ=0, ACK=1",
+    "scope": "interface",
+    "location": "mailbox"
+  },
+  "emissions": [],
+  "final_state": {
+    "phase": "idle_00",
+    "quiescent": true
+  },
+  "samples": [
+    {
+      "sequence": 0,
+      "timestamp_ns": 0.0,
+      "req": false,
+      "ack": false,
+      "event": null
+    },
+    {
+      "sequence": 1,
+      "timestamp_ns": 3.1,
+      "req": false,
+      "ack": true,
+      "event": null
+    }
+  ]
+}

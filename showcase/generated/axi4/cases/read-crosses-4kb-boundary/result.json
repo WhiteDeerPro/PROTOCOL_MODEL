@@ -11,9 +11,9 @@
     "zh-CN": "从 0xFFC 开始的两个四字节传输会跨越该边界。"
   },
   "execution": {
-    "mode": "link-events",
+    "mode": "interface-events",
     "protocol": "axi4",
-    "model": "LinkSession"
+    "model": "InterfaceSession"
   },
   "presentation": {
     "level": "catalog",
@@ -21,12 +21,12 @@
   },
   "expected": {
     "verdict": "FAIL",
-    "rule": "axi4.link_session.AR.event_schema",
+    "rule": "axi4.interface_session.AR.event_schema",
     "reason_contains": "4KB"
   },
   "observed": {
     "verdict": "FAIL",
-    "rule": "axi4.link_session.AR.event_schema",
+    "rule": "axi4.interface_session.AR.event_schema",
     "expectation_met": true
   },
   "inputs": [
@@ -63,16 +63,16 @@
       "axi4.write.pending_descriptors": 0
     },
     "final": {
-      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
       "axi4.write.pending_descriptors": 0,
       "axi4.read.pending_transactions": 0,
+      "axi4.write.pending_completions": 0,
       "axi4.write.assembling_data": 0,
-      "axi4.exclusive.reservations": 0,
-      "axi4.write.pending_data_bursts": 0
+      "axi4.exclusive.reservations": 0
     }
   },
   "fault": {
-    "rule": "axi4.link_session.AR.event_schema",
+    "rule": "axi4.interface_session.AR.event_schema",
     "reason": "burst crosses a 4KB address boundary",
     "scope": "event",
     "location": ""

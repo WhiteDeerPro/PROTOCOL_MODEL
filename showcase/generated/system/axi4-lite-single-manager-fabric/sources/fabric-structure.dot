@@ -1,0 +1,36 @@
+digraph virtual_dut_structure {
+  rankdir=LR;
+  label="fabric · VirtualDut · constructed";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.25, nodesep=0.28, ranksep=0.62, splines=polyline, newrank=true];
+  node [fontname="sans-serif", fontsize=10, shape=box, style="rounded,filled", fillcolor="#ffffff"];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d"];
+  subgraph cluster_virtual_dut {
+    label="VirtualDut boundary";
+    color="#64748b";
+    penwidth=1.4;
+    style="rounded";
+    component_0 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="upstream\ninterface port\ninterface: axi4_lite · subordinate", tooltip="upstream\ninterface port\ninterface: axi4_lite · subordinate"];
+    component_1 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="control\ninterface port\ninterface: axi4_lite · manager", tooltip="control\ninterface port\ninterface: axi4_lite · manager"];
+    component_2 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="status\ninterface port\ninterface: axi4_lite · manager", tooltip="status\ninterface port\ninterface: axi4_lite · manager"];
+    component_3 [shape=box, fillcolor="#dbeafe", color="#2563eb", penwidth=1.5, label="memory\ninterface port\ninterface: axi4_lite · manager", tooltip="memory\ninterface port\ninterface: axi4_lite · manager"];
+    component_4 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address completer\nattachment\nbinding: axi4_lite · subordinate", tooltip="address completer\nattachment\nbinding: axi4_lite · subordinate"];
+    component_5 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address requester\nattachment\nbinding: axi4_lite · manager", tooltip="address requester\nattachment\nbinding: axi4_lite · manager"];
+    component_6 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address requester\nattachment\nbinding: axi4_lite · manager", tooltip="address requester\nattachment\nbinding: axi4_lite · manager"];
+    component_7 [shape=box, fillcolor="#e0f2fe", color="#0284c7", penwidth=1.0, label="address requester\nattachment\nbinding: axi4_lite · manager", tooltip="address requester\nattachment\nbinding: axi4_lite · manager"];
+    component_8 [shape=box, fillcolor="#fce7f3", color="#db2777", penwidth=1.0, label="address decoder / remap\nroutes: 0x1000+0x4→control, 0x2000+0x4→status, 0x4000+0x100→memory", tooltip="address decoder / remap\nroutes: 0x1000+0x4→control, 0x2000+0x4→status, 0x4000+0x100→memory"];
+    component_9 [shape=box, fillcolor="#ffedd5", color="#ea580c", penwidth=1.0, label="pending owner / response mux\nactive requests: 1", tooltip="pending owner / response mux\nactive requests: 1"];
+    { rank=source; component_0; }
+    { rank=sink; component_1; component_2; component_3; }
+    { rank=same; component_5; component_6; component_7; }
+    component_0 -> component_4 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_5 -> component_1 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_6 -> component_2 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_7 -> component_3 [style=solid, constraint=true, weight=4, color="#475569", label="request"];
+    component_4 -> component_8 [style=solid, constraint=true, weight=4, color="#475569", label="decoded access"];
+    component_8 -> component_9 [style=solid, constraint=true, weight=4, color="#475569", label="selected egress"];
+    component_9 -> component_5 [style=solid, constraint=true, weight=4, color="#475569", label="request · control"];
+    component_9 -> component_6 [style=solid, constraint=true, weight=4, color="#475569", label="request · status"];
+    component_9 -> component_7 [style=solid, constraint=true, weight=4, color="#475569", label="request · memory"];
+  }
+}

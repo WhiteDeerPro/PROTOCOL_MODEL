@@ -1,4 +1,4 @@
-"""Construction-time capability, effect, and bridge profile contracts."""
+"""Construction-time capability, effect, and translation profile contracts."""
 
 from __future__ import annotations
 
@@ -158,7 +158,7 @@ class CompletionOrigin(str, Enum):
 
 class EquivalenceLevel(str, Enum):
     OPERATION_EFFECT = "operation_effect"
-    LINK_TRANSACTION_ORDER = "link_transaction_order"
+    INTERFACE_TRANSACTION_ORDER = "interface_transaction_order"
     PIN_CYCLE = "pin_cycle"
 
 
@@ -200,8 +200,8 @@ class StageContract:
 
 
 @dataclass(frozen=True)
-class BridgeProfile:
-    """The construction promise selected for one concrete bridge."""
+class TranslationProfile:
+    """The construction promise selected for one translation realization."""
 
     name: str
     source: OperationSignature
@@ -230,11 +230,11 @@ class BridgeProfile:
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name:
-            raise ValueError("bridge profile requires a name")
+            raise ValueError("translation profile requires a name")
         if not isinstance(self.source, OperationSignature) or not isinstance(
             self.target, OperationSignature
         ):
-            raise TypeError("bridge profile requires operation signatures")
+            raise TypeError("translation profile requires operation signatures")
         if any(not isinstance(item, str) or not item for item in self.ordering):
             raise ValueError("ordering declarations must be non-empty strings")
         if any(

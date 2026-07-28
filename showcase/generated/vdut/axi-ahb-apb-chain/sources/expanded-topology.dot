@@ -1,0 +1,66 @@
+digraph bridge_chain_expanded {
+  rankdir=TB;
+  label="AXI4-Lite → AHB-Lite → APB4 · attached VirtualDut realization";
+  labelloc="t";
+  graph [bgcolor="white", pad=0.28, nodesep=0.38, ranksep=0.62,
+         splines=polyline, ordering=out];
+  node [fontname="sans-serif", fontsize=10];
+  edge [fontname="sans-serif", fontsize=9, color="#52606d", penwidth=1.3];
+
+  scenario [shape=note, style="rounded,dashed,filled", fillcolor="#fff7ed",
+            color="#ea580c", label="scenario-owned actions\noutside VirtualDut"];
+
+  initiator [shape=plain, label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#2563eb">
+      <TR><TD BGCOLOR="#eff6ff"><B>initiator · VirtualDut</B></TD></TR>
+      <TR><TD PORT="axi" BGCOLOR="#dbeafe">AXI4-Lite manager port</TD></TR>
+      <TR><TD BGCOLOR="#ecfdf5">capture returned B / R events</TD></TR>
+    </TABLE>>];
+
+  axi_ahb [shape=plain, label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#ea580c">
+      <TR><TD BGCOLOR="#fff7ed"><B>axi_to_ahb · Bridge VirtualDut</B><BR/><FONT POINT-SIZE="9">request flows downward · completion folds upward</FONT></TD></TR>
+      <TR><TD PORT="s_axi" BGCOLOR="#e0f2fe">s_axi port + AXI4-Lite completer attachment</TD></TR>
+      <TR><TD BGCOLOR="#ecfeff">AddressAccess operation adapter</TD></TR>
+      <TR><TD BGCOLOR="#fdf4ff">decode protection → route → target shape → encode</TD></TR>
+      <TR><TD BGCOLOR="#f5f3ff">serial child scheduler · capacity 8 · one child active</TD></TR>
+      <TR><TD BGCOLOR="#fff7ed">child owner table · child completion → parent completion</TD></TR>
+      <TR><TD PORT="m_ahb" BGCOLOR="#e0f2fe">m_ahb port + AHB requester attachment</TD></TR>
+    </TABLE>>];
+
+  ahb_apb [shape=plain, label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#ea580c">
+      <TR><TD BGCOLOR="#fff7ed"><B>ahb_to_apb · Bridge VirtualDut</B><BR/><FONT POINT-SIZE="9">request flows downward · completion folds upward</FONT></TD></TR>
+      <TR><TD PORT="s_ahb" BGCOLOR="#e0f2fe">s_ahb port + AHB completer attachment</TD></TR>
+      <TR><TD BGCOLOR="#ecfeff">AddressAccess operation adapter</TD></TR>
+      <TR><TD BGCOLOR="#fdf4ff">decode protection → route → target shape → encode</TD></TR>
+      <TR><TD BGCOLOR="#f5f3ff">serial child scheduler · capacity 8 · one child active</TD></TR>
+      <TR><TD BGCOLOR="#fff7ed">child owner table · child completion → parent completion</TD></TR>
+      <TR><TD PORT="m_apb" BGCOLOR="#e0f2fe">m_apb port + APB requester attachment</TD></TR>
+    </TABLE>>];
+
+  fabric [shape=plain, label=<
+    <TABLE BORDER="1" CELLBORDER="1" CELLSPACING="0" CELLPADDING="6" COLOR="#db2777">
+      <TR><TD BGCOLOR="#fdf2f8" COLSPAN="2"><B>apb_fabric · VirtualDut</B></TD></TR>
+      <TR><TD PORT="up" BGCOLOR="#e0f2fe" COLSPAN="2">upstream port + APB completer attachment</TD></TR>
+      <TR><TD BGCOLOR="#fdf2f8" COLSPAN="2">address decoder · 0x1000 control / 0x2000 status</TD></TR>
+      <TR><TD BGCOLOR="#fff7ed" COLSPAN="2">pending owner + response mux</TD></TR>
+      <TR><TD PORT="control" BGCOLOR="#e0f2fe">control requester attachment</TD><TD PORT="status" BGCOLOR="#e0f2fe">status requester attachment</TD></TR>
+    </TABLE>>];
+
+  control [shape=box, style="rounded,filled", fillcolor="#ecfdf5", color="#059669",
+           label="control · VirtualDut\nAPB attachment + register region", group="control"];
+  status [shape=box, style="rounded,filled", fillcolor="#ecfdf5", color="#059669",
+          label="status · VirtualDut\nAPB attachment + register region", group="status"];
+
+  { rank=same; scenario; initiator; axi_ahb; ahb_apb; }
+  { rank=same; control; status; }
+
+  scenario -> initiator [style=dashed, color="#ea580c", label="drive / observe"];
+  initiator:axi -> axi_ahb:s_axi [dir=none, label=<<B>AXI4-Lite</B><BR/><FONT POINT-SIZE="8">axi_link · initiator.axi ↔ axi_to_ahb.s_axi</FONT>>];
+  axi_ahb:m_ahb -> ahb_apb:s_ahb [dir=none, label=<<B>AHB-Lite</B><BR/><FONT POINT-SIZE="8">ahb_link · axi_to_ahb.m_ahb ↔ ahb_to_apb.s_ahb</FONT>>];
+  ahb_apb:m_apb -> fabric:up [dir=none, label=<<B>APB4</B><BR/><FONT POINT-SIZE="8">apb_upstream · ahb_to_apb.m_apb ↔ apb_fabric.upstream</FONT>>];
+  fabric:control -> control [dir=none, label=<<B>APB4</B><BR/><FONT POINT-SIZE="8">apb_control · apb_fabric.control ↔ control.apb</FONT>>];
+  fabric:status -> status [dir=none, label=<<B>APB4</B><BR/><FONT POINT-SIZE="8">apb_status · apb_fabric.status ↔ status.apb</FONT>>];
+  control -> status [style=invis, weight=80];
+}

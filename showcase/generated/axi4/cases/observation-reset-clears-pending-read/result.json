@@ -229,18 +229,18 @@
       "axi4.write.pending_descriptors": 0
     },
     "final": {
-      "axi4.write.pending_completions": 0,
+      "axi4.write.pending_data_bursts": 0,
       "axi4.write.pending_descriptors": 0,
       "axi4.read.pending_transactions": 0,
+      "axi4.write.pending_completions": 0,
       "axi4.write.assembling_data": 0,
-      "axi4.exclusive.reservations": 0,
-      "axi4.write.pending_data_bursts": 0
+      "axi4.exclusive.reservations": 0
     }
   },
   "fault": {
     "rule": "axi4.read.orphan_beat",
     "reason": "completion for key 4 has no pending obligation",
-    "scope": "link",
+    "scope": "interface",
     "location": ""
   }
 }

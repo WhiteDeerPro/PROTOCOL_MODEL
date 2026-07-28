@@ -11,9 +11,9 @@
     "zh-CN": "没有 reservation 的独占写可以完成，但不能返回 EXOKAY。"
   },
   "execution": {
-    "mode": "link-events",
+    "mode": "interface-events",
     "protocol": "axi4",
-    "model": "LinkSession"
+    "model": "InterfaceSession"
   },
   "presentation": {
     "level": "catalog",
@@ -122,18 +122,18 @@
       "axi4.write.pending_descriptors": 1
     },
     "final": {
-      "axi4.write.pending_completions": 1,
+      "axi4.write.pending_data_bursts": 0,
       "axi4.write.pending_descriptors": 0,
       "axi4.read.pending_transactions": 0,
+      "axi4.write.pending_completions": 1,
       "axi4.write.assembling_data": 0,
-      "axi4.exclusive.reservations": 0,
-      "axi4.write.pending_data_bursts": 0
+      "axi4.exclusive.reservations": 0
     }
   },
   "fault": {
     "rule": "axi4.exclusive.unmatched_success",
     "reason": "EXOKAY requires a matching completed exclusive read sequence",
-    "scope": "link",
+    "scope": "interface",
     "location": ""
   }
 }

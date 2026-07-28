@@ -636,6 +636,56 @@ def _copyback_operation_for_pending(
     return None
 
 
+def _clean_copyback_terminal_response(
+    pending: ChiHomeWriteEvictPending | ChiHomeWriteEvictOrEvictPending,
+) -> ChiRespCode:
+    """Return the clean state encoded by one live CopyBack terminal."""
+
+    if (
+        isinstance(pending, ChiHomeWriteEvictPending)
+        and pending.admission
+        is ChiHomeCopyBackAdmission.CURRENT_SHARED_HOLDER
+    ):
+        return ChiRespCode.SC
+    if (
+        isinstance(pending, ChiHomeWriteEvictOrEvictPending)
+        and pending.request.likely_shared
+    ):
+        return ChiRespCode.SC
+    return ChiRespCode.UC
+
+
+def _copyback_admission_matches_outcome(
+    pending: (
+        ChiHomeWriteBackPending
+        | ChiHomeWriteEvictPending
+        | ChiHomeWriteEvictOrEvictPending
+    ),
+    outcome: ChiRnCopyBackOutcome,
+) -> bool:
+    """Match trusted Home authority to the Requester's post-Snoop state."""
+
+    if pending.admission is ChiHomeCopyBackAdmission.SNOOP_CANCELED:
+        return outcome is ChiRnCopyBackOutcome.CANCELED_I
+    if (
+        pending.admission
+        is ChiHomeCopyBackAdmission.CURRENT_SHARED_HOLDER
+    ):
+        return (
+            isinstance(pending, ChiHomeWriteEvictPending)
+            and outcome is ChiRnCopyBackOutcome.LIVE_SC
+        )
+    if isinstance(pending, ChiHomeWriteBackPending):
+        return outcome is ChiRnCopyBackOutcome.LIVE_UD
+    if isinstance(pending, ChiHomeWriteEvictPending):
+        return outcome is ChiRnCopyBackOutcome.LIVE_UC
+    return outcome is (
+        ChiRnCopyBackOutcome.LIVE_SC
+        if pending.request.likely_shared
+        else ChiRnCopyBackOutcome.LIVE_UC
+    )
+
+
 def _copyback_legacy_projections(
     ledger: ChiCopyBackPhaseLedger,
 ) -> tuple[
@@ -925,15 +975,9 @@ def _validate_copyback_phase_ledger(
                     expected_rn_pending_type,
                 )
                 or requester_pending.request != home_pending.request
-                or (
-                    (
-                        home_pending.admission
-                        is ChiHomeCopyBackAdmission.SNOOP_CANCELED
-                    )
-                    != (
-                        requester_pending.outcome
-                        is ChiRnCopyBackOutcome.CANCELED_I
-                    )
+                or not _copyback_admission_matches_outcome(
+                    home_pending,
+                    requester_pending.outcome,
                 )
                 or (
                     operation
@@ -1025,17 +1069,8 @@ def _validate_copyback_phase_ledger(
                     and not canceled
                     and (
                         message.response
-                        is not (
-                            ChiRespCode.SC
-                            if (
-                                operation
-                                is (
-                                    ChiCopyBackOperation
-                                    .WRITE_EVICT_OR_EVICT
-                                )
-                                and home_pending.request.likely_shared
-                            )
-                            else ChiRespCode.UC
+                        is not _clean_copyback_terminal_response(
+                            home_pending
                         )
                         or not 0 <= message.data < (1 << 512)
                         or message.byte_enable != (1 << 64) - 1
@@ -1080,13 +1115,7 @@ def _validate_copyback_phase_ledger(
                 ChiRespCode.I
                 if canceled
                 else (
-                    ChiRespCode.SC
-                    if (
-                        operation
-                        is ChiCopyBackOperation.WRITE_EVICT_OR_EVICT
-                        and home_pending.request.likely_shared
-                    )
-                    else ChiRespCode.UC
+                    _clean_copyback_terminal_response(home_pending)
                 )
             )
             or line is None
@@ -1640,15 +1669,9 @@ class ChiCoherenceState:
                     rn_pending, ChiRnWriteBackPending
                 )
                 or rn_pending.request != home_pending.request
-                or (
-                    (
-                        home_pending.admission
-                        is ChiHomeCopyBackAdmission.SNOOP_CANCELED
-                    )
-                    != (
-                        rn_pending.outcome
-                        is ChiRnCopyBackOutcome.CANCELED_I
-                    )
+                or not _copyback_admission_matches_outcome(
+                    home_pending,
+                    rn_pending.outcome,
                 )
             ):
                 raise ValueError(
@@ -1715,15 +1738,9 @@ class ChiCoherenceState:
                     rn_pending, ChiRnWriteEvictPending
                 )
                 or rn_pending.request != home_pending.request
-                or (
-                    (
-                        home_pending.admission
-                        is ChiHomeCopyBackAdmission.SNOOP_CANCELED
-                    )
-                    != (
-                        rn_pending.outcome
-                        is ChiRnCopyBackOutcome.CANCELED_I
-                    )
+                or not _copyback_admission_matches_outcome(
+                    home_pending,
+                    rn_pending.outcome,
                 )
             ):
                 raise ValueError(
@@ -1817,15 +1834,9 @@ class ChiCoherenceState:
                     ChiRnWriteEvictOrEvictPending,
                 )
                 or rn_pending.request != home_pending.request
-                or (
-                    (
-                        home_pending.admission
-                        is ChiHomeCopyBackAdmission.SNOOP_CANCELED
-                    )
-                    != (
-                        rn_pending.outcome
-                        is ChiRnCopyBackOutcome.CANCELED_I
-                    )
+                or not _copyback_admission_matches_outcome(
+                    home_pending,
+                    rn_pending.outcome,
                 )
             ):
                 raise ValueError(
@@ -1931,14 +1942,8 @@ class ChiCoherenceState:
                     and not canceled
                     and (
                         message.response
-                        is not (
-                            ChiRespCode.SC
-                            if isinstance(
-                                home_pending,
-                                ChiHomeWriteEvictOrEvictPending,
-                            )
-                            and home_pending.request.likely_shared
-                            else ChiRespCode.UC
+                        is not _clean_copyback_terminal_response(
+                            home_pending
                         )
                         or not 0 <= message.data < (1 << 512)
                         or message.byte_enable != (1 << 64) - 1
@@ -4102,7 +4107,58 @@ class ChiCoherenceSession(
                 admission = ChiHomeCopyBackAdmission.CURRENT_OWNER
                 entry = state.home.directory.get(message.address)
                 line = requester_state.line_at(message.address)
+                backing_line = state.home.backing.line_at(message.address)
                 if (
+                    pending_write_evict.outcome
+                    is ChiRnCopyBackOutcome.LIVE_SC
+                ):
+                    if any(
+                        item.request.address == message.address
+                        for item in state.home.pending.values()
+                    ) or any(
+                        item.request.address == message.address
+                        for item in state.home.pending_copybacks.values()
+                    ):
+                        return SemanticStep(
+                            state,
+                            blocked=ResourceDemand(
+                                chi_line_resource_name(
+                                    self.home.name,
+                                    message.address,
+                                ),
+                                ConstraintScope.SYSTEM,
+                                available=0,
+                                capacity=1,
+                                reason=(
+                                    "post-SnpShared WriteEvictFull waits for "
+                                    "the same-line Home transaction to commit "
+                                    "its directory transition"
+                                ),
+                                location=self.name,
+                            ),
+                        )
+                    if (
+                        entry is None
+                        or line is None
+                        or line.state is not ChiCacheState.SC
+                        or line.data is None
+                        or packet.source_id not in entry.sharers
+                        or entry.shared_dirty_owner == packet.source_id
+                        or backing_line is None
+                        or line.data != backing_line.data
+                        or message.address
+                        in requester_state.copy_at_home_lines
+                    ):
+                        return self._fault(
+                            state,
+                            "write_evict_shared_admission_evidence",
+                            "post-SnpShared WriteEvictFull lacks matching "
+                            "LIVE_SC, clean-sharer, and backing evidence",
+                        )
+                    admission = (
+                        ChiHomeCopyBackAdmission.CURRENT_SHARED_HOLDER
+                    )
+                elif (
                     entry is not None
                     and entry.unique_owner != packet.source_id
                 ):
@@ -4155,15 +4211,10 @@ class ChiCoherenceSession(
                                 message.address
                                 not in requester_state.copy_at_home_lines
                                 or (
-                                    state.home.backing.line_at(
-                                        message.address
-                                    )
-                                    is None
+                                    backing_line is None
                                 )
                                 or line.data
-                                != state.home.backing.line_at(
-                                    message.address
-                                ).data
+                                != backing_line.data
                             )
                         )
                     )
@@ -5429,15 +5480,10 @@ class ChiCoherenceSession(
                         ChiRespCode.I
                         if conditional_copyback_pending.outcome
                         is ChiRnCopyBackOutcome.CANCELED_I
-                        else (
-                            ChiRespCode.UC
-                            if is_write_evict
-                            else (
-                                ChiRespCode.SC
-                                if conditional_copyback_pending
-                                .request.likely_shared
-                                else ChiRespCode.UC
-                            )
+                        else _clean_copyback_terminal_response(
+                            state.home.pending_copybacks[
+                                message.data_buffer_id
+                            ]
                         )
                     )
                     if (

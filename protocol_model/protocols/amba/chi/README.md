@@ -156,9 +156,12 @@ Snoop-domain clean residency 仍存在时选择 `Comp→CompAck_UC`，或继续�
 尚未产生时到达 `SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`：当前 line/payload 和 cached
 provenance 清除为 `I`，frozen request/TxnID 中的 `CAH=1` 历史仍保留；data/no-data outcome 分别以
 `CopyBackWrData_I(Data=0, BE=0)`/`CompAck_I` 退休。system-derived `SNOOP_CANCELED` 只退休旧
-reservation，不覆盖新 owner、backing 或 clean residency。`UC→SC`/非失效 Snoop、Retry/error 与容量
-驱动 outcome 仍未闭合；Home 已发 `Comp`/`CompDBIDResp` 后须先等 `CompAck`/DAT，post-response
-同址 Snoop 是 ordering 负向边界，不是正向 transient。
+reservation，不覆盖新 owner、backing 或 clean residency。response 前 `SnpShared` 另使当前 line
+从 `UC→SC`、返回 `SnpResp_SC`，并把 frozen WEF outcome 记为 `LIVE_SC`；`CAH={0,1}` 的 data
+terminal 使用 `CopyBackWrData_SC`，CAH=1 的 no-data terminal 使用 `CompAck_SC`。system 只从
+matching RN outcome、Home clean-sharer directory 与 backing evidence 派生 shared-holder admission。
+Retry/error 与容量驱动 outcome 仍未闭合；Home 已发 `Comp`/`CompDBIDResp` 后须先等
+`CompAck`/DAT，post-response 同址 Snoop 是 ordering 负向边界，不是正向 transient。
 `WriteEvictOrEvict(0x42, CAH=0)` 的双 outcome base 也已闭合。Requester 可从 resident `UC` 或
 clean `SC` 发起，并以 `LikelyShared` 区分；Home 的显式 policy 可以选择
 `CompDBIDResp→CopyBackWrData_{UC,SC}` data outcome，或 `Comp_I→CompAck` no-data outcome。两条路径
@@ -180,7 +183,7 @@ ordering 作为负例。
 
 | 维度 | 当前边界与影响 |
 |---|---|
-| CHI lifecycle/profile 覆盖 | coherent DERR、post-Snoop error、MakeUnique Retry/error/MTE Update/partial write、Retry cancel/multi-waiter，以及 WEF/WEOE 已闭合 response 前 invalidating-Snoop→`I` 之外的 `UC→SC`/非失效 same-line transient 尚未闭合；post-response/pre-terminal 同址 Snoop 是 ordering 负向边界 |
+| CHI lifecycle/profile 覆盖 | coherent DERR、post-Snoop error、MakeUnique Retry/error/MTE Update/partial write、Retry cancel/multi-waiter；WEF 已闭合 response 前 invalidating-Snoop→`I` 与 `SnpShared→SC`，WEOE 和其他 CopyBack opcode/phase 的非失效 same-line transient 仍需分别建模；post-response/pre-terminal 同址 Snoop 是 ordering 负向边界 |
 | representation / packetization | opcode/conditional-field encoding inventory 与 packed layout 属于表示；multi-packet DAT 的分片字段属于表示，split/reassembly、缺失/重复/乱序处理及 terminal retirement 属于 transaction/session。可执行 opcode 还需要 lifecycle、capability/flow、状态效应与 witness |
 | observation / external integration | physical phit/lane、raw pin、RTL adapter/conformance 是观察和接入工作，不计作 CHI lifecycle 功能缺口；CDC/异步采样是跨协议的通用时间方法议题 |
 | participant / VirtualDut policy | victim/LRU 与自动 replacement/writeback 是 Cache policy；snoop filter 是 Home/ICN 的 cache-presence/选靶结构，当前 exact directory holder set 是 reference oracle，带容量、更新和误判行为的 filter 才是可选 backend policy |
@@ -195,7 +198,8 @@ Participant facet、identity/capability resolver 和 scheduler 仍是 CHI family
 后续扩展继续以可执行 lifecycle 为单位增加，不把此处建议固化成永久顺序。
 `WriteEvictOrEvict` 与 `WriteEvictFull(CAH=1)` response 前的 invalidating-Snoop→`I`
 outcome/correlation 均已闭合；后者也已闭合 cached-CAH/hidden-copy provenance 与正常双终态。下一决策点
-比较 `UC→SC`/非失效 Snoop、Retry/error modifier、deliberate dirty invalidate 与其他未闭合 operation；
+不再包含 WEF response 前 `SnpShared→SC`，该组合及 SC data/no-data terminal 已闭合；后续比较
+Retry/error modifier、deliberate dirty invalidate，以及其他 CopyBack opcode/phase 的非失效 Snoop。
 容量驱动 outcome 归 Home/Cache VirtualDut policy，post-response/pre-terminal Snoop 保留为 ordering
 负向边界。若下一场景首先受
 并发资源阻塞，则先闭合同一 Home/type 下多个 waiter 的具名选择、释放与公平性 witness。

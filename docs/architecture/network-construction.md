@@ -355,9 +355,11 @@ Requester→Home CompAck capability flow，但不产生 SNP。WEF REQ 已发出�
 `SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid` 可使当前 line/provenance 清除为 `I`，同时保留 frozen
 request/TxnID 中的 `CAH=1` 历史；之后 data/no-data outcome 分别以
 `CopyBackWrData_I(Data=0, BE=0)`/`CompAck_I` 退休。system-derived `SNOOP_CANCELED` 只退休旧
-reservation，不覆盖新 owner、reference backing 或 clean residency。该窄片不包含 `UC→SC`/非失效
-Snoop、Retry/error；Home 已发 `Comp`/`CompDBIDResp` 后须先等 `CompAck`/DAT，post-response Snoop
-是 ordering 负向边界而非正向 transient。
+reservation，不覆盖新 owner、reference backing 或 clean residency。response 前 `SnpShared` 另使 RN
+从 `UC→SC`、保留 frozen WEF，并以 system-derived shared-holder admission 闭合
+`CopyBackWrData_SC`（CAH={0,1}）或 `CompAck_SC`（仅 CAH=1）终态。Retry/error 仍未闭合；Home 已发
+`Comp`/`CompDBIDResp` 后须先等 `CompAck`/DAT，post-response Snoop 是 ordering 负向边界而非正向
+transient。
 session 中三类 CopyBack 的 delivery correlation 由 typed `ChiCopyBackPhaseLedger` 统一保存
 operation、TxnID/DBID identity 和 response/data/ack phase；旧 operation-specific mappings 仅为构造兼容输入
 与只读投影，不再构成平行权威。

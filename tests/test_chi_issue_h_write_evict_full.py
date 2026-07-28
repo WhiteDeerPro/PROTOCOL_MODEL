@@ -41,6 +41,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiSnpCleanInvalidMessage,
     ChiSnpMakeInvalidMessage,
     ChiSnpRespMessage,
+    ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
     ChiWriteBackFullMessage,
     ChiWriteEvictFullMessage,
@@ -1761,6 +1762,71 @@ class ChiIssueHWriteEvictFullTest(unittest.TestCase):
                 self.assertIs(ChiRespCode.I, copyback.response)
                 self.assertEqual(0, copyback.data)
                 self.assertEqual(0, copyback.byte_enable)
+
+    def test_pre_dbid_snp_shared_retires_cah_zero_with_sc_data(
+        self,
+    ) -> None:
+        rn = self.build_rn()
+        issued = self.apply(
+            rn,
+            rn.initial_state(),
+            ChiRnIssueWriteEvictFull(
+                ChiWriteEvictFullMessage(self.TXN_ID, self.ADDRESS)
+            ),
+        )
+        snooped = self.apply(
+            rn,
+            issued.state,
+            ChiRnAcceptSnoop(
+                ChiNetworkPacket.snoop(
+                    ChiSnpSharedMessage(0x100, self.ADDRESS),
+                    source_id=self.HOME,
+                    target_id=self.RN,
+                )
+            ),
+        )
+
+        line = snooped.state.line_at(self.ADDRESS)
+        self.assertIsNotNone(line)
+        assert line is not None
+        self.assertIs(ChiCacheState.SC, line.state)
+        self.assertEqual(self.DATA, line.data)
+        pending = snooped.state.pending_copybacks[self.TXN_ID]
+        self.assertFalse(pending.request.copy_at_home)
+        self.assertIs(ChiRnCopyBackOutcome.LIVE_SC, pending.outcome)
+        snoop_response = snooped.emissions[0].message
+        self.assertIsInstance(snoop_response, ChiSnpRespMessage)
+        self.assertIs(ChiRespCode.SC, snoop_response.response)
+
+        copied = self.apply(
+            rn,
+            snooped.state,
+            ChiRnAcceptCompDBIDResp(
+                ChiNetworkPacket.response(
+                    ChiCompDBIDRespMessage(
+                        transaction_id=self.TXN_ID,
+                        data_buffer_id=self.DBID,
+                    ),
+                    source_id=self.HOME,
+                    target_id=self.RN,
+                )
+            ),
+        )
+
+        self.assertFalse(copied.state.pending_copybacks)
+        retired = copied.state.line_at(self.ADDRESS)
+        self.assertIsNotNone(retired)
+        assert retired is not None
+        self.assertIs(ChiCacheState.I, retired.state)
+        self.assertIsNone(retired.data)
+        self.assertEqual(1, len(copied.emissions))
+        copyback = copied.emissions[0].message
+        self.assertIsInstance(copyback, ChiCopyBackWrDataMessage)
+        self.assertEqual(self.DBID, copyback.transaction_id)
+        self.assertIs(ChiRespCode.SC, copyback.response)
+        self.assertEqual(self.DATA, copyback.data)
+        self.assertEqual((1 << 64) - 1, copyback.byte_enable)
+        self.assertTrue(rn.is_quiescent(copied.state))
 
     def test_clean_unique_snoop_cancels_delayed_write_evict_exactly(
         self,

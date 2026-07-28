@@ -545,6 +545,7 @@ CHI_CLEAN_READ_SHARED_DEFINITION = ChiFeatureDefinition(
         ChiRoleRequirement(
             "requester",
             CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
+            ChiRoleCardinality.FINITE_SET,
         ),
         ChiRoleRequirement(
             "home",
@@ -600,6 +601,7 @@ CHI_CLEAN_READ_UNIQUE_DEFINITION = ChiFeatureDefinition(
         ChiRoleRequirement(
             "requester",
             CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
+            ChiRoleCardinality.FINITE_SET,
         ),
         ChiRoleRequirement(
             "home",
@@ -923,6 +925,7 @@ CHI_WRITE_EVICT_FULL_DEFINITION = ChiFeatureDefinition(
         ChiRoleRequirement(
             "requester",
             CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+            ChiRoleCardinality.FINITE_SET,
         ),
         ChiRoleRequirement(
             "home",
@@ -960,10 +963,10 @@ CHI_WRITE_EVICT_FULL_DEFINITION = ChiFeatureDefinition(
 # ReadUnique supplies the provenance-producing acquisition lifecycle.  This
 # definition adds only the alternate Comp/CompAck terminal path.  Runtime
 # execution deliberately narrows that permission to an explicit
-# CHECK_CURRENT_COPY policy: a live current-owner no-data completion requires
-# a current matching Home clean-residency entry, while Snoop-canceled
-# completion returns CompAck_I without exposing a hidden copy.  CHI does not
-# make the residency lookup a universal CAH=1 requirement.
+# CHECK_CURRENT_COPY policy: a live current Unique or clean Shared holder's
+# no-data completion requires a current matching Home clean-residency entry,
+# while Snoop-canceled completion returns CompAck_I without exposing a hidden
+# copy.  CHI does not make the residency lookup a universal CAH=1 requirement.
 CHI_WRITE_EVICT_FULL_COPY_AT_HOME_DEFINITION = ChiFeatureDefinition(
     CHI_FEATURE_WRITE_EVICT_FULL_COPY_AT_HOME,
     dependencies=frozenset(
@@ -976,6 +979,7 @@ CHI_WRITE_EVICT_FULL_COPY_AT_HOME_DEFINITION = ChiFeatureDefinition(
         ChiRoleRequirement(
             "requester",
             CHI_WRITE_EVICT_FULL_COPY_AT_HOME_REQUESTER_CAPABILITIES,
+            ChiRoleCardinality.FINITE_SET,
         ),
         ChiRoleRequirement(
             "home",

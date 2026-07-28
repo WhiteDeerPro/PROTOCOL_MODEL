@@ -74,9 +74,10 @@ Request-Retry/P-Credit 合同和原有 ReadUnique lifecycle。Retry 阶段不建
 credit 与重发。一次 Retry 后成功是独立基线；下文另记录已闭合的 Retry/Snoop/pre-Snoop-NDERR 窄组合。
 cancel 与多 waiter fairness 仍未实现。
 第一条 construction authority
-切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home。scalar requester
-从 coherence-domain membership 派生 `eligible Snoopees = members - requester`；CleanUnique 与 dirty
-WriteBack 的有限 requester set 则取各 requester eligible-peer 的并集。NodeID、逐成员 capability 与
+切片现已闭合：CHI 合同引用通用 `AddressClaim`，为本次 feature scope 选择唯一 Home。每个 requester
+从 coherence-domain membership 派生 `eligible Snoopees = members - requester`；clean Shared/Unique、
+CleanUnique、dirty WriteBack、WriteEvictFull base 与 CopyAtHome modifier 可声明有限 requester set，
+其 Snoopee authority 取各 requester eligible-peer 的并集。NodeID、逐成员 capability 与
 REQ/SNP/RSP/DAT flow 随后使用同一派生结果闭合。Home directory 仍只选择一笔事务的实际 holder，不取代
 静态 domain authority。
 
@@ -214,6 +215,15 @@ provenance 清除并进入 `I`，但 pending 中冻结的原 REQ/TxnID/`CAH=1` �
 `SNOOP_CANCELED` 只允许旧 CopyBack reservation 安全退休，不删除或覆盖期间建立的新
 owner、reference backing 或 clean residency。
 
+下一条 response 前 same-line slice 现已闭合 `SnpShared` 导致的 `UC→SC`。RN 返回
+`SnpResp_SC`、保留 frozen WEF，并把 post-Snoop outcome 记录为 `LIVE_SC`；当前 CAH provenance 随
+降级清除。`CAH={0,1}` 的 data 分支都要求 `CopyBackWrData_SC`，只有 CAH=1 modifier 可选择
+no-data `Comp→CompAck_SC`。`CURRENT_SHARED_HOLDER` 由 system 根据 RN `LIVE_SC`、Home clean-sharer
+directory 与 backing 一致性派生，不是 wire field。2RN+HN+XP resolved witness 在 RN 接收
+`SnpShared` 并进入 `LIVE_SC` 后即把 WEF 送向 Home；ReadShared 的 directory transition 尚未提交时，
+WEF 在 Home line resource 阻塞。五包 `ReadShared/SnpShared/SnpResp_SC/CompData_SC/CompAck`
+完成后 runtime replay WEF，并走三包 data 或 no-data terminal；每个 case 恰好运输八个 endpoint packet。
+
 CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 + 必要基本状态”闭合。当前构造顺序如下：
 
 | 顺序与功能 | 协议原子 | 可复用组合 | 新增基本状态或机制 | 当前阶段 |
@@ -231,6 +241,7 @@ CHI 功能不按 opcode 数量推进，而按“协议原子 + 可复用组合 +
 | 10 · `WriteEvictOrEvict` response 前 Snoop cancel | pending WEOE、`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`、迟到 `CompDBIDResp`/`Comp`、`CopyBackWrData_I`/`CompAck_I` | 复用 invalidating-Snoop、`CANCELED_I`、system-derived stale-holder admission、Home snapshot/version guard 与既有 WEOE RSP/DAT/Ack evidence | 原 REQ/`LikelyShared` 与 post-Snoop outcome 分离；`UC/SC × data/no-data` direct 双 Requester witness | 本切片已闭合 |
 | 11 · `WriteEvictFull(CAH=1)` | clean `ReadUnique→CompData_UC(CAH=1)` acquisition；`WriteEvictFull` 后由 Home 选择 `CompDBIDResp→CopyBackWrData_UC` 或 `Comp→CompAck_UC` | 复用 WEF base、clean residency、CompAck、feature/capability/flow closure 与统一 CopyBack phase evidence | RN unchanged-line provenance；显式 current-copy policy；WEF dual terminal | 本切片已闭合 |
 | 12 · `WriteEvictFull(CAH=1)` response 前 invalidating Snoop | pending CAH=1 WEF、`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`、随后到达的 `CompDBIDResp`/`Comp`、`CopyBackWrData_I(0/BE0)`/`CompAck_I` | 复用 `CANCELED_I`、typed CopyBack ledger、system-derived `SNOOP_CANCELED` 与 snapshot/version guard | frozen request CAH 历史和当前 cached provenance 分离；旧 reservation 不覆盖新 owner/backing/residency | 本窄切片已闭合 |
+| 13 · `WriteEvictFull` response 前 `SnpShared` | pending WEF、`SnpShared→SnpResp_SC`、随后到达的 `CompDBIDResp`/`Comp`、`CopyBackWrData_SC`/`CompAck_SC` | 复用 clean ReadShared、typed CopyBack ledger、finite requester capability/flow closure 与 system-derived `CURRENT_SHARED_HOLDER` | WEF `LIVE_SC`；CAH={0,1} 共用 SC data 规则，CAH=1 另有 SC no-data ack；2RN+HN+XP 八包 witness | 本窄切片已闭合 |
 
 对 [Arm IHI 0050 Issue H](https://developer.arm.com/documentation/ihi0050/h/) 的 CopyBack transaction、
 CAH 与 requester state 规则进行切片级核对后，后续候选的证据成熟度并不相同：
@@ -238,8 +249,8 @@ CAH 与 requester state 规则进行切片级核对后，后续候选的证据�
 | 候选 | 协议依据与当前依赖 | 路线判断 |
 |---|---|---|
 | `WriteEvictOrEvict` response 前 same-line invalidating Snoop | RN 以 `CANCELED_I` 保留原 REQ/TxnID，迟到 data/no-data Home outcome 分别产生零载荷 `CopyBackWrData_I`/`CompAck_I`；system exact evidence 只退休旧 correlation | 已闭合；不据此声称 post-response/非失效 Snoop、Retry/error 或动态 allocation policy |
-| `WriteEvictFull(CAH=1)` 正常终态与 response 前 invalidating Snoop | CAH=1 是 RN 未修改该行的 cached provenance，不证明 Home 当前仍有 copy；首个 profile 从 clean `CompData_UC(CAH=1)` 获取，并用显式 current-copy policy 收窄 no-data 结果。窄 Snoop slice 保留 frozen REQ/CAH 历史，清除当前 provenance，以 `CopyBackWrData_I(0/BE0)`/`CompAck_I` 退休 | 正常双终态与三种 invalidating-Snoop→`I` 已闭合；`SNOOP_CANCELED` 不覆盖新 owner/backing/residency |
-| CAH CopyBack 的其余 same-line/ordering | 广义 Snoop hazard 还需要非失效 Snoop 及 `UC→SC`/SC terminal；Home 发出 `Comp` 后须等 `CompAck`，发出 `CompDBIDResp` 后须等 DAT，才能再发同址 Snoop | 前者留作独立 lifecycle；post-response Snoop 不建正向路径，作为当前 ordering 负向边界 |
+| `WriteEvictFull` 正常终态与 response 前 Snoop | CAH=1 是 RN 未修改该行的 cached provenance，不证明 Home 当前仍有 copy；首个 profile 从 clean `CompData_UC(CAH=1)` 获取，并用显式 current-copy policy 收窄 no-data 结果。invalidating Snoop 形成 `I` terminal；`SnpShared` 形成 `LIVE_SC`，由 system 派生 `CURRENT_SHARED_HOLDER` | CAH=1 正常双终态、三种 invalidating-Snoop→`I`、以及 CAH={0,1} 的 SC data/CAH=1 SC no-data 规则已闭合 |
+| CAH CopyBack 的其余 same-line/ordering | Home 发出 `Comp` 后须等 `CompAck`，发出 `CompDBIDResp` 后须等 DAT，才能再发同址 Snoop；其他 CopyBack opcode/phase 的非失效 Snoop 仍需各自 lifecycle | WEF pre-response `SnpShared` 已闭合；post-response Snoop 不建正向路径，作为当前 ordering 负向边界 |
 | WriteEvict Retry/error | Retry 需要 RetryAck/P-Credit、容量预留与 reissue 后仍正确维持 CAH provenance；error 需要分别定义错误来源、形成 phase 与 clean payload disposition，当前没有相应 ECC/Poison/DataCheck 来源 | 与 Snoop modifier 分离并后置，不用普通 decode/access failure 冒充 |
 | 容量驱动 data/no-data outcome | 需要 Home/Cache VirtualDut 的容量、victim/replacement 与 residency policy；当前 fixed sparse residency 不提供这些决策 | 保持为可选 participant policy，不把它冒充 CHI transaction 必备功能 |
 | deliberate dirty invalidate 后的 `Evict` | 规范允许由 deliberate action 触发 dirty→I，并可用 Evict 使其可见；当前没有 caller-visible invalidate/discard intent | 等具体 invalidate 场景提出，不把普通 replacement 当成 deliberate action |
@@ -253,9 +264,9 @@ directory、backing 与 residency effect 继续分开；该收敛不新增 wire 
 witness 保持原语义，并让 WEF(CAH=1) 的 DAT/ack 双终态不再增加一组平行 evidence authority。
 
 1. pending `WriteEvictOrEvict` response 前 invalidating Snoop、`WriteEvictFull(CAH=1)` 正常双终态，
-   以及 WEF(CAH=1) response 前三种 invalidating-Snoop→`I` 的窄切片已经闭合，并保持 exact terminal
-   correlation。下一 lifecycle 决策点只比较 CAH CopyBack 的 `UC→SC`/非失效 Snoop、Retry/error 与
-   deliberate dirty invalidate；Home 已发 `Comp`/`CompDBIDResp` 后的同址 Snoop 不作为正向候选，而是
+   以及 WEF response 前 invalidating-Snoop→`I` 和 `SnpShared→SC` 的窄切片已经闭合，并保持 exact
+   terminal correlation。下一 lifecycle 决策点比较 Retry/error、deliberate dirty invalidate 与其他
+   CopyBack opcode/phase 的 same-line 组合；Home 已发 `Comp`/`CompDBIDResp` 后的同址 Snoop 不作为正向候选，而是
    “先等 `CompAck`/DAT” ordering 的负向边界。容量驱动 outcome 继续等待 Home/Cache VirtualDut policy，
    不从 fixed residency 外推。若下一真实场景首先受并发资源阻塞，
    则先做同 Home/type 多 waiter 的具名选择、释放和公平性 witness。DERR 继续等待
@@ -276,8 +287,9 @@ witness 保持原语义，并让 WEF(CAH=1) 的 DAT/ack 双终态不再增加一
 scalar Home，RN participant 仍投影一个预配置 `home_node_id` 并由 resolver 核对；同一 runtime 按地址动态
 切换多个 Home、由 SAM（System Address Map）route 派生 system-visible window、remap 和跨 domain 执行属于后续
 SystemProtocol authority/construction，不是当前单 Home network 的 opcode 缺口。
-read/retry 及其余 coherence feature profile 仍固定单 Requester；CleanUnique 与 dirty WriteBack 可在同一
-scope 绑定同构有限 requester set。所有 profile 仍只覆盖受限 opcode 与 full-line DAT；
+MakeUnique、Evict/retry 及其余未具名扩展的 coherence feature profile 仍固定单 Requester；clean
+Shared/Unique、CleanUnique、dirty WriteBack、WriteEvictFull base 与 CopyAtHome modifier 可在同一 scope
+绑定同构有限 requester set。所有 profile 仍只覆盖受限 opcode 与 full-line DAT；
 AddressTarget 路径固定对齐，只闭合成功与 decode/access→NDERR completion；coherent path 另闭合
 pre-snoop `ReadUnique` NDERR 及其与 Retry/独立同址 Snoop 的窄组合。两者都未覆盖 DERR、
 post-snoop failure、sideband lowering 或

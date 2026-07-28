@@ -86,6 +86,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_BUILTIN_FEATURE_CATALOG,
     CHI_CLEAN_EVICT_DEFINITION,
     CHI_CLEAN_EVICT_RETRY_DEFINITION,
+    CHI_CLEAN_READ_SHARED_DEFINITION,
     CHI_CLEAN_READ_UNIQUE_DEFINITION,
     CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION,
     CHI_CLEAN_READ_UNIQUE_RETRY_DEFINITION,
@@ -112,6 +113,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,
     CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE,
     CHI_WRITE_EVICT_FULL_DEFINITION,
+    CHI_WRITE_EVICT_FULL_COPY_AT_HOME_DEFINITION,
     CHI_WRITE_EVICT_OR_EVICT_DEFINITION,
     CHI_MAKE_UNIQUE_DEFINITION,
     CHI_SYSTEM_MAKE_UNIQUE_LIFECYCLE,
@@ -124,6 +126,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     ChiFlowCapability,
     ChiFlowRequirement,
     ChiFlowProjectionGapKind,
+    ChiRoleCardinality,
     ChiRoleRequirement,
     ChiTransportNetworkSession,
     bind_chi_flow_requirement,
@@ -285,6 +288,44 @@ class ChiIssueHCapabilityClosureTest(unittest.TestCase):
         self.assertIn(custom_key, extended.definitions)
         with self.assertRaises(TypeError):
             extended.definitions[custom_key] = custom
+
+
+class ChiIssueHRequesterRoleCardinalityTest(unittest.TestCase):
+    @staticmethod
+    def requester_role(
+        definition: ChiFeatureDefinition,
+    ) -> ChiRoleRequirement:
+        requesters = tuple(
+            role for role in definition.roles if role.role == "requester"
+        )
+        if len(requesters) != 1:
+            raise AssertionError(
+                "CHI feature definition must have exactly one requester role"
+            )
+        return requesters[0]
+
+    def test_selected_coherent_copyback_requesters_are_finite_sets(
+        self,
+    ) -> None:
+        for definition in (
+            CHI_CLEAN_READ_SHARED_DEFINITION,
+            CHI_CLEAN_READ_UNIQUE_DEFINITION,
+            CHI_WRITE_EVICT_FULL_DEFINITION,
+            CHI_WRITE_EVICT_FULL_COPY_AT_HOME_DEFINITION,
+        ):
+            with self.subTest(feature=str(definition.key)):
+                self.assertIs(
+                    ChiRoleCardinality.FINITE_SET,
+                    self.requester_role(definition).cardinality,
+                )
+
+    def test_make_unique_requester_remains_single(self) -> None:
+        self.assertIs(
+            ChiRoleCardinality.SINGLE,
+            self.requester_role(
+                CHI_MAKE_UNIQUE_DEFINITION
+            ).cardinality,
+        )
 
 
 class ChiIssueHReadNoSnpNderrCapabilityTest(unittest.TestCase):

@@ -838,20 +838,24 @@ Snoop 只返回无数据 `SnpResp_I` 并进入 `I`。pending MakeUnique 收到�
 `LIVE_UD` 转成 `CANCELED_I`，并在 DBID 返回后发送零数据 `CopyBackWrData_I`。Home 仍只允许一个已接纳
 的同址 lifecycle；direct packet-delivery fixture 已表达两个 requester 的 CleanUnique 串行化；
 CleanUnique 与延迟 WriteBack cancel 另有 resolved XP witness。当前有限 requester set 只对
-CleanUnique/dirty WriteBack 的同构 feature scope 开放，不能据此声称异构 per-feature 或一般多 Requester
-topology 已闭合。pending `WriteEvictOrEvict` 也已在 direct 双 Requester
+clean Shared/Unique、CleanUnique、dirty WriteBack、WriteEvictFull base 与 CopyAtHome modifier 的同构
+feature scope 开放，不能据此声称异构 per-feature 或一般多 Requester topology 已闭合。pending
+`WriteEvictOrEvict` 也已在 direct 双 Requester
 `UC/SC × data/no-data` witness 中闭合 response 前的 invalidating-Snoop cancel；它复用现有 Snoop
 与 WEOE response/DAT/Ack evidence，不把该 direct witness 扩大成一般多 Requester resolved topology。
 pending `WriteEvictFull(CAH=1)` 另闭合 response 前三种 invalidating Snoop→`I` 与 data/no-data
-terminal；它保留 frozen request 的 CAH 历史而清除当前 provenance。`UC→SC`/非失效 Snoop 仍未闭合；
+terminal；它保留 frozen request 的 CAH 历史而清除当前 provenance。response 前 `SnpShared` 也已闭合：
+RN 从 `UC→SC` 并保留 frozen WEF，CAH={0,1} 的 data terminal 使用 `CopyBackWrData_SC`，CAH=1
+no-data terminal 使用 `CompAck_SC`。2RN+HN+XP witness 在 RN 降级后即把 WEF 送向 Home；ReadShared
+尚未提交 directory transition 时，WEF 在 Home line resource 阻塞，五包 ReadShared 完成后再由
+runtime replay；该 witness 同时核对 shared-holder authority 与路由。
 post-`Comp`/post-`CompDBIDResp`、pre-terminal 同址 Snoop 按 Home ordering 作为负例。
 
 以下是分属不同维度的未实现事项，不合并成一条 CHI lifecycle 或网络完整度：
 
 - lifecycle/profile：coherent DERR、post-Snoop error、MakeUnique Retry/error/MTE/partial-write、
-  Retry/writeback 组合、其他 WriteBack/Snoop phase、WEF(CAH=1) 的 `UC→SC`/非失效 Snoop 及
-  Retry/error 组合，
-  WEOE post-response/其他 Snoop phase/CAH=1、容量驱动 outcome、一般 transient/Retry cancel 和可选
+  Retry/writeback 组合、其他 WriteBack/Snoop phase、WEF Retry/error 组合、WEOE
+  post-response/其他 Snoop phase/CAH=1、容量驱动 outcome、一般 transient/Retry cancel 和可选
   forwarding/DCT；
 - participant/VirtualDut policy：自动 victim/writeback scheduling 与 stateful snoop filter；
 - coherence state/policy：可生成、维持和替换的完整 `SD`/Owned lifecycle；

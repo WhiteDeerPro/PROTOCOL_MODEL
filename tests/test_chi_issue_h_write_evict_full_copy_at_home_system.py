@@ -9,21 +9,32 @@ from protocol_model.integrations.recipes.amba.chi import (
     build_chi_cache_participant_fixture,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
+    CHI_CLEAN_READ_SHARED_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_COPY_AT_HOME_HOME_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_COPY_AT_HOME_REQUESTER_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES,
+    ChiBehaviorFacet,
     ChiCacheLine,
     ChiCacheState,
     ChiCoherentHomeNode,
     ChiCopyBackDecision,
+    ChiExactNodeRoute,
+    ChiFacetKind,
     ChiHomeCopyBackAdmission,
     ChiHomeDirectoryEntry,
+    ChiParticipantBinding,
     ChiParticipantCapability,
+    ChiParticipantPortBinding,
+    ChiRnAcceptSnoop,
     ChiRnCopyBackOutcome,
     ChiRnIssueWriteEvictFull,
+    ChiStoreForwardRouterNode,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiChannelKind,
@@ -36,21 +47,27 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiIssueHDatProfile,
     ChiIssueHReqProfile,
     ChiIssueHRspProfile,
+    ChiIssueHSnpProfile,
     ChiNetworkPacket,
+    ChiReadSharedMessage,
     ChiReadUniqueMessage,
     ChiRespCode,
     ChiSnpCleanInvalidMessage,
+    ChiSnpSharedMessage,
     ChiSnpRespMessage,
     ChiWriteEvictFullMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.system import (
+    CHI_FEATURE_CLEAN_READ_SHARED,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
     CHI_FEATURE_WRITE_EVICT_FULL,
     CHI_FEATURE_WRITE_EVICT_FULL_COPY_AT_HOME,
+    CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,
     CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
     CHI_SYSTEM_WRITE_EVICT_FULL_COPY_AT_HOME_LIFECYCLE,
     CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,
+    ChiAdvanceCoherenceNetwork,
     ChiCoherenceAuthorityContract,
     ChiCoherenceDomain,
     ChiCoherenceNetworkEventKind,
@@ -71,6 +88,7 @@ from protocol_model.protocols.amba.chi.issue_h.transport import (
     ChiDatChannelProfile,
     ChiReqChannelProfile,
     ChiRspChannelProfile,
+    ChiSnpChannelProfile,
     ChiTransportLinkProfile,
 )
 from protocol_model.semantics import Verdict
@@ -88,6 +106,7 @@ from protocol_model.virtual_dut.backend import (
     FullLineBackingCore,
 )
 from protocol_model.virtual_dut.boundary import (
+    DutBehaviorTag,
     TransportDirection,
     TransportPort,
     VirtualDut,
@@ -305,6 +324,15 @@ class ChiIssueHWriteEvictFullCopyAtHomeSystemTest(
                 if ChiChannelKind.RSP in channels
                 else None
             ),
+            snoop=(
+                ChiSnpChannelProfile(
+                    ChiIssueHSnpProfile(),
+                    1,
+                    f"{name}.snp",
+                )
+                if ChiChannelKind.SNP in channels
+                else None
+            ),
             data=(
                 ChiDatChannelProfile(
                     ChiIssueHDatProfile(data_width=512),
@@ -503,6 +531,321 @@ class ChiIssueHWriteEvictFullCopyAtHomeSystemTest(
                     (
                         CHI_SYSTEM_WRITE_EVICT_FULL_COPY_AT_HOME_LIFECYCLE
                     ),
+                )
+            ),
+        )
+
+    def build_resolved_shared_snoop_network(
+        self,
+        decision: ChiCopyBackDecision,
+    ):
+        builder = SystemProtocolBuilder(
+            f"chi_copy_at_home_shared_snoop_{decision.value}"
+        )
+        for name in ("rn0", "rn1", "hn0"):
+            builder.add_dut(
+                VirtualDut(
+                    name,
+                    {
+                        "tx_to_xp": self.network_port(
+                            "tx_to_xp",
+                            TransportDirection.TRANSMIT,
+                        ),
+                        "rx_from_xp": self.network_port(
+                            "rx_from_xp",
+                            TransportDirection.RECEIVE,
+                        ),
+                    },
+                )
+            )
+        builder.add_dut(
+            VirtualDut(
+                "xp0",
+                {
+                    **{
+                        f"from_{name}": self.network_port(
+                            f"from_{name}",
+                            TransportDirection.RECEIVE,
+                        )
+                        for name in ("rn0", "rn1", "hn0")
+                    },
+                    **{
+                        f"to_{name}": self.network_port(
+                            f"to_{name}",
+                            TransportDirection.TRANSMIT,
+                        )
+                        for name in ("rn0", "rn1", "hn0")
+                    },
+                },
+                behavior_tags=frozenset((DutBehaviorTag.ROUTING,)),
+            )
+        )
+        rn_tx_channels = frozenset(
+            (
+                ChiChannelKind.REQ,
+                ChiChannelKind.RSP,
+                ChiChannelKind.DAT,
+            )
+        )
+        rn_rx_channels = frozenset(
+            (
+                ChiChannelKind.RSP,
+                ChiChannelKind.SNP,
+                ChiChannelKind.DAT,
+            )
+        )
+        home_tx_channels = frozenset(
+            (
+                ChiChannelKind.RSP,
+                ChiChannelKind.SNP,
+                ChiChannelKind.DAT,
+            )
+        )
+        home_rx_channels = frozenset(
+            (
+                ChiChannelKind.REQ,
+                ChiChannelKind.RSP,
+                ChiChannelKind.DAT,
+            )
+        )
+        connections = (
+            *(
+                (
+                    f"{name}_to_xp",
+                    VirtualDutPortRef(name, "tx_to_xp"),
+                    VirtualDutPortRef("xp0", f"from_{name}"),
+                    rn_tx_channels,
+                )
+                for name in ("rn0", "rn1")
+            ),
+            (
+                "hn0_to_xp",
+                VirtualDutPortRef("hn0", "tx_to_xp"),
+                VirtualDutPortRef("xp0", "from_hn0"),
+                home_tx_channels,
+            ),
+            *(
+                (
+                    f"xp_to_{name}",
+                    VirtualDutPortRef("xp0", f"to_{name}"),
+                    VirtualDutPortRef(name, "rx_from_xp"),
+                    rn_rx_channels,
+                )
+                for name in ("rn0", "rn1")
+            ),
+            (
+                "xp_to_hn0",
+                VirtualDutPortRef("xp0", "to_hn0"),
+                VirtualDutPortRef("hn0", "rx_from_xp"),
+                home_rx_channels,
+            ),
+        )
+        for name, transmitter, receiver, channels in connections:
+            builder.connect_transport(
+                name,
+                CHI_ISSUE_H_TRANSPORT_FAMILY,
+                transmitter,
+                receiver,
+                profile=self.network_link_profile(name, channels),
+            )
+        claim_name = "hn0.cache_line"
+        builder.add_address_claim(
+            AddressClaim(
+                claim_name,
+                VirtualDutPortRef("hn0", "rx_from_xp"),
+                AddressWindow(self.ADDRESS, 0x40),
+            )
+        )
+        system = builder.build().elaborate()
+        duts = system.spec.virtual_duts
+
+        rn0 = bind_chi_issue_h_cache_lines(
+            duts["rn0"],
+            self.RN,
+            self.HOME,
+            port_channels={
+                "tx_to_xp": rn_tx_channels,
+                "rx_from_xp": rn_rx_channels,
+            },
+            initial_lines=(
+                ChiCacheLine(
+                    self.ADDRESS,
+                    ChiCacheState.UC,
+                    self.DATA,
+                    copy_at_home=True,
+                ),
+            ),
+            participant_name="old_owner",
+            binding_name="rn0",
+        )
+        rn1 = bind_chi_issue_h_cache_lines(
+            duts["rn1"],
+            self.NEW_RN,
+            self.HOME,
+            port_channels={
+                "tx_to_xp": rn_tx_channels,
+                "rx_from_xp": rn_rx_channels,
+            },
+            participant_name="new_reader",
+            binding_name="rn1",
+        )
+        backing_core = FullLineBackingCore(
+            "hn0.shared_snoop.backing",
+            line_bytes=64,
+            initial_lines=(BackingLine(self.ADDRESS, self.DATA),),
+        )
+        clean_residency_core = CacheCore(
+            "hn0.shared_snoop.clean",
+            CacheLineStore(
+                "hn0.shared_snoop.clean.lines",
+                line_bytes=64,
+                initial_lines=(
+                    CacheLinePayload(self.ADDRESS, self.DATA),
+                ),
+            ),
+        )
+        home = bind_chi_issue_h_home_vdut(
+            duts["hn0"],
+            backing_core,
+            self.HOME,
+            port_channels={
+                "rx_from_xp": home_rx_channels,
+                "tx_to_xp": home_tx_channels,
+            },
+            initial_directory=(
+                ChiHomeDirectoryEntry(
+                    self.ADDRESS,
+                    unique_owner=self.RN,
+                ),
+            ),
+            clean_residency_core=clean_residency_core,
+            participant_name="home",
+            binding_name="hn0",
+            initial_data_buffer_id=self.DBID,
+            read_unique_copy_at_home_policy=(
+                lambda request, state: (
+                    state.clean_residency.line_at(request.address)
+                    is not None
+                )
+            ),
+            write_evict_full_current_copy_policy=(
+                lambda _request, _state: decision
+            ),
+        )
+        router = ChiStoreForwardRouterNode(
+            "xp0",
+            ingress_ports=("from_rn0", "from_rn1", "from_hn0"),
+            egress_ports=("to_rn0", "to_rn1", "to_hn0"),
+            routes=(
+                ChiExactNodeRoute(
+                    self.RN,
+                    "to_rn0",
+                    rn_rx_channels,
+                ),
+                ChiExactNodeRoute(
+                    self.NEW_RN,
+                    "to_rn1",
+                    rn_rx_channels,
+                ),
+                ChiExactNodeRoute(
+                    self.HOME,
+                    "to_hn0",
+                    home_rx_channels,
+                ),
+            ),
+            queue_capacity=1,
+        )
+        router_binding = ChiParticipantBinding(
+            "xp0",
+            duts["xp0"],
+            router,
+            tuple(
+                ChiParticipantPortBinding(
+                    duts["xp0"].port(port_name),
+                    channels,
+                )
+                for port_name, channels in (
+                    ("from_rn0", rn_tx_channels),
+                    ("from_rn1", rn_tx_channels),
+                    ("from_hn0", home_tx_channels),
+                    ("to_rn0", rn_rx_channels),
+                    ("to_rn1", rn_rx_channels),
+                    ("to_hn0", home_rx_channels),
+                )
+            ),
+        )
+        requester_capabilities = (
+            CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES
+            | CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES
+            | CHI_WRITE_EVICT_FULL_REQUESTER_CAPABILITIES
+            | CHI_WRITE_EVICT_FULL_COPY_AT_HOME_REQUESTER_CAPABILITIES
+        )
+        snoopee_capabilities = (
+            CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES
+            | CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES
+        )
+        return resolve_chi_system(
+            system,
+            facets=(
+                rn0.facets.facets[0],
+                rn1.facets.facets[0],
+                home.facets.facets[0],
+                ChiBehaviorFacet.from_binding(
+                    router_binding,
+                    ChiFacetKind.FORWARDING,
+                ),
+            ),
+            feature_contract=ChiFeatureContract(
+                {},
+                frozenset(
+                    (
+                        CHI_FEATURE_CLEAN_READ_SHARED,
+                        CHI_FEATURE_WRITE_EVICT_FULL_COPY_AT_HOME,
+                    )
+                ),
+                {
+                    "requester": frozenset(("rn0", "rn1")),
+                },
+            ),
+            authority_contract=ChiCoherenceAuthorityContract(
+                authorities=(
+                    ChiHomeAuthority(
+                        claim_name,
+                        "hn0",
+                        "coherent_agents",
+                    ),
+                ),
+                domains=(
+                    ChiCoherenceDomain(
+                        "coherent_agents",
+                        frozenset(("rn0", "rn1")),
+                    ),
+                ),
+            ),
+            feature_address_claim=claim_name,
+            participant_capabilities=(
+                ChiParticipantCapability(
+                    "rn0",
+                    requester_capabilities | snoopee_capabilities,
+                ),
+                ChiParticipantCapability(
+                    "rn1",
+                    requester_capabilities | snoopee_capabilities,
+                ),
+                ChiParticipantCapability(
+                    "hn0",
+                    CHI_CLEAN_READ_SHARED_HOME_CAPABILITIES
+                    | CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES
+                    | CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES
+                    | CHI_WRITE_EVICT_FULL_COPY_AT_HOME_HOME_CAPABILITIES,
+                ),
+            ),
+            system_capabilities=frozenset(
+                (
+                    CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,
+                    CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE,
+                    CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE,
+                    CHI_SYSTEM_WRITE_EVICT_FULL_COPY_AT_HOME_LIFECYCLE,
                 )
             ),
         )
@@ -1012,6 +1355,91 @@ class ChiIssueHWriteEvictFullCopyAtHomeSystemTest(
             replayed_ack,
             committed.state,
             "completion_ack_correlation",
+        )
+
+    def test_shared_holder_admission_rejects_backing_mismatch_atomically(
+        self,
+    ) -> None:
+        session = self.build_multi_requester_session(
+            ChiCopyBackDecision.REQUEST_DATA,
+            name="copy_at_home_shared_backing_mismatch",
+        )
+        initial = session.initial_state()
+        request = ChiWriteEvictFullMessage(
+            self.WRITE_EVICT_TXN_ID,
+            self.ADDRESS,
+            copy_at_home=True,
+        )
+        issued = self.apply(
+            session,
+            initial,
+            ChiSubmitWriteEvictFull(self.RN, request),
+        )
+        requester = session.request_nodes[self.RN]
+        snooped = self.apply(
+            requester,
+            issued.state.request_nodes[self.RN],
+            ChiRnAcceptSnoop(
+                ChiNetworkPacket.snoop(
+                    ChiSnpSharedMessage(0x300, self.ADDRESS),
+                    source_id=self.HOME,
+                    target_id=self.RN,
+                )
+            ),
+        )
+        self.assertIs(
+            ChiRnCopyBackOutcome.LIVE_SC,
+            snooped.state.pending_copybacks[
+                self.WRITE_EVICT_TXN_ID
+            ].outcome,
+        )
+        self.assertNotIn(
+            self.ADDRESS,
+            snooped.state.copy_at_home_lines,
+        )
+
+        shared_home = replace(
+            issued.state.home,
+            directory={
+                self.ADDRESS: ChiHomeDirectoryEntry(
+                    self.ADDRESS,
+                    sharers=frozenset((self.RN,)),
+                )
+            },
+        )
+        mismatched_cache = requester.cache_store.install(
+            snooped.state.cache,
+            CacheLinePayload(self.ADDRESS, self.DATA ^ 1),
+        ).state
+        mismatched_requester = replace(
+            snooped.state,
+            cache=mismatched_cache,
+        )
+        forged_state = replace(
+            issued.state,
+            home=shared_home,
+            request_nodes={
+                **issued.state.request_nodes,
+                self.RN: mismatched_requester,
+            },
+        )
+
+        rejected = session.step(
+            forged_state,
+            ChiDeliverCoherencePacket(issued.emissions[0]),
+        )
+        self.assert_atomic_fault(
+            rejected,
+            forged_state,
+            "write_evict_shared_admission_evidence",
+        )
+        assert rejected.fault is not None
+        self.assertEqual(
+            (
+                f"{session.name}."
+                "write_evict_shared_admission_evidence"
+            ),
+            rejected.fault.rule,
         )
 
     def test_clean_unique_snoop_cancels_delayed_cah_one_write_evict(
@@ -1784,6 +2212,465 @@ class ChiIssueHWriteEvictFullCopyAtHomeSystemTest(
                     initial.coherence,
                     write_run.final_state.coherence,
                 )
+
+    def test_resolved_xp_delays_cah_write_evict_until_shared_downgrade(
+        self,
+    ) -> None:
+        cases = (
+            (
+                ChiCopyBackDecision.REQUEST_DATA,
+                ChiCompDBIDRespMessage,
+                ChiCopyBackWrDataMessage,
+                ChiCopyBackDeliveryPhase.REQUESTER_DATA,
+            ),
+            (
+                ChiCopyBackDecision.COMPLETE_WITHOUT_DATA,
+                ChiCompMessage,
+                ChiCompAckMessage,
+                ChiCopyBackDeliveryPhase.REQUESTER_ACK,
+            ),
+        )
+        for decision, response_type, terminal_type, terminal_phase in cases:
+            with self.subTest(decision=decision.value):
+                resolved = self.build_resolved_shared_snoop_network(
+                    decision
+                )
+                self.assertTrue(resolved.is_closed)
+                self.assertEqual(
+                    ("rn0_to_xp", "xp_to_hn0"),
+                    resolved.capabilities.require(
+                        CHI_FEATURE_WRITE_EVICT_FULL
+                    ).flows[
+                        "write_evict_request[rn0->hn0]"
+                    ].connections,
+                )
+                self.assertEqual(
+                    ("hn0_to_xp", "xp_to_rn0"),
+                    resolved.capabilities.require(
+                        CHI_FEATURE_CLEAN_READ_SHARED
+                    ).flows[
+                        "snoop[hn0->rn0]"
+                    ].connections,
+                )
+
+                session = ChiCoherenceNetworkSession.from_resolved(
+                    resolved
+                )
+                initial = session.initial_state()
+                state = initial
+                events = []
+
+                def commit(
+                    action,
+                    label: str,
+                    *,
+                    required: bool = True,
+                ) -> bool:
+                    nonlocal state
+                    transition = session.step(state, action)
+                    if transition.fault is not None:
+                        self.fail(
+                            f"{label} faulted: "
+                            f"{transition.fault.rule}: "
+                            f"{transition.fault.reason}"
+                        )
+                    if transition.blocked is not None:
+                        if required:
+                            self.fail(
+                                f"{label} blocked: "
+                                f"{transition.blocked.reason}"
+                            )
+                        return False
+                    self.assertEqual(
+                        1,
+                        len(transition.emissions),
+                        label,
+                    )
+                    state = transition.state
+                    events.extend(transition.emissions)
+                    return True
+
+                write_request = ChiWriteEvictFullMessage(
+                    self.WRITE_EVICT_TXN_ID,
+                    self.ADDRESS,
+                    copy_at_home=True,
+                )
+                commit(
+                    ChiSubmitWriteEvictFull(self.RN, write_request),
+                    "issue delayed WriteEvictFull(CAH=1)",
+                )
+                commit(
+                    ChiAdvanceCoherenceNetwork("egress.enqueue"),
+                    "enqueue WriteEvictFull before XP capture",
+                )
+                commit(
+                    ChiSubmitCoherentRead(
+                        self.NEW_RN,
+                        ChiReadSharedMessage(
+                            self.READ_TXN_ID,
+                            self.ADDRESS,
+                        ),
+                    ),
+                    "issue contender ReadShared",
+                )
+                commit(
+                    ChiAdvanceCoherenceNetwork("egress.enqueue"),
+                    "enqueue contender ReadShared",
+                )
+
+                held_candidate = "capture.rn0_to_xp.req"
+                selected_candidates = tuple(
+                    candidate
+                    for candidate in session.scheduler_candidates
+                    if candidate != held_candidate
+                )
+
+                def write_evict_downgraded() -> bool:
+                    coherence = state.coherence
+                    pending = coherence.request_nodes[
+                        self.RN
+                    ].pending_copybacks[self.WRITE_EVICT_TXN_ID]
+                    line = coherence.request_nodes[self.RN].line_at(
+                        self.ADDRESS
+                    )
+                    return (
+                        pending.outcome is ChiRnCopyBackOutcome.LIVE_SC
+                        and line is not None
+                        and line.state is ChiCacheState.SC
+                    )
+
+                def shared_read_retired() -> bool:
+                    coherence = state.coherence
+                    entry = coherence.home.directory[self.ADDRESS]
+                    old_line = coherence.request_nodes[
+                        self.RN
+                    ].line_at(self.ADDRESS)
+                    new_line = coherence.request_nodes[
+                        self.NEW_RN
+                    ].line_at(self.ADDRESS)
+                    return (
+                        entry.unique_owner is None
+                        and entry.sharers
+                        == frozenset((self.RN, self.NEW_RN))
+                        and old_line is not None
+                        and old_line.state is ChiCacheState.SC
+                        and new_line is not None
+                        and new_line.state is ChiCacheState.SC
+                        and not coherence.home.pending
+                        and not coherence.expected_coherent_read_completions
+                    )
+
+                for _round in range(256):
+                    if write_evict_downgraded():
+                        break
+                    progressed = False
+                    for candidate in selected_candidates:
+                        progressed = (
+                            commit(
+                                ChiAdvanceCoherenceNetwork(candidate),
+                                f"advance {candidate}",
+                                required=False,
+                            )
+                            or progressed
+                        )
+                        if write_evict_downgraded():
+                            break
+                    if not progressed:
+                        self.fail(
+                            "SnpShared cannot downgrade the WEF requester while "
+                            "the WEF request remains held before XP capture"
+                        )
+                else:
+                    self.fail(
+                        "SnpShared exhausted the selected-move budget"
+                    )
+
+                transient = state.coherence
+                transient_entry = transient.home.directory[self.ADDRESS]
+                self.assertEqual(self.RN, transient_entry.unique_owner)
+                self.assertFalse(transient_entry.sharers)
+                self.assertTrue(transient.home.pending)
+
+                commit(
+                    ChiAdvanceCoherenceNetwork(held_candidate),
+                    "release downgraded WriteEvictFull into XP",
+                )
+                commit(
+                    ChiAdvanceCoherenceNetwork(
+                        "forward.xp_to_hn0.req"
+                    ),
+                    "forward downgraded WriteEvictFull toward Home",
+                )
+                commit(
+                    ChiAdvanceCoherenceNetwork("tick.xp_to_hn0"),
+                    "make downgraded WriteEvictFull visible at Home",
+                )
+                before_block = state
+                blocked = session.step(
+                    state,
+                    ChiAdvanceCoherenceNetwork(
+                        "endpoint.xp_to_hn0.req"
+                    ),
+                )
+                self.assertIsNone(blocked.fault)
+                self.assertIsNotNone(blocked.blocked)
+                assert blocked.blocked is not None
+                self.assertIs(before_block, blocked.state)
+                self.assertFalse(blocked.emissions)
+                self.assertEqual(
+                    (
+                        f"{session.coherence.home.name}"
+                        f".line[{self.ADDRESS:#x}]"
+                    ),
+                    blocked.blocked.resource,
+                )
+                self.assertIn(
+                    "directory transition",
+                    blocked.blocked.reason,
+                )
+
+                for _round in range(256):
+                    if shared_read_retired():
+                        break
+                    progressed = False
+                    for candidate in selected_candidates:
+                        if candidate == "endpoint.xp_to_hn0.req":
+                            continue
+                        progressed = (
+                            commit(
+                                ChiAdvanceCoherenceNetwork(candidate),
+                                f"advance {candidate}",
+                                required=False,
+                            )
+                            or progressed
+                        )
+                        if shared_read_retired():
+                            break
+                    if not progressed:
+                        self.fail(
+                            "ReadShared cannot retire while the blocked WEF "
+                            "waits at the Home endpoint"
+                        )
+                else:
+                    self.fail(
+                        "ReadShared exhausted the selected-move budget"
+                    )
+
+                downgraded = state.coherence
+                old_state = downgraded.request_nodes[self.RN]
+                old_line = old_state.line_at(self.ADDRESS)
+                self.assertIsNotNone(old_line)
+                assert old_line is not None
+                self.assertIs(ChiCacheState.SC, old_line.state)
+                self.assertEqual(self.DATA, old_line.data)
+                self.assertFalse(old_line.copy_at_home)
+                self.assertNotIn(
+                    self.ADDRESS,
+                    old_state.copy_at_home_lines,
+                )
+                frozen = old_state.pending_copybacks[
+                    self.WRITE_EVICT_TXN_ID
+                ]
+                self.assertEqual(write_request, frozen.request)
+                self.assertTrue(frozen.request.copy_at_home)
+                self.assertIs(
+                    ChiRnCopyBackOutcome.LIVE_SC,
+                    frozen.outcome,
+                )
+                self.assertEqual(
+                    initial.coherence.home.backing,
+                    downgraded.home.backing,
+                )
+                self.assertEqual(
+                    initial.coherence.home.clean_residency,
+                    downgraded.home.clean_residency,
+                )
+
+                before_release_packets = tuple(
+                    event.packet
+                    for event in events
+                    if (
+                        event.kind
+                        is ChiCoherenceNetworkEventKind.ENDPOINT_ACCEPT
+                        and event.packet is not None
+                    )
+                )
+                self.assertEqual(
+                    (
+                        ChiReadSharedMessage,
+                        ChiSnpSharedMessage,
+                        ChiSnpRespMessage,
+                        ChiCompDataMessage,
+                        ChiCompAckMessage,
+                    ),
+                    tuple(
+                        type(packet.message)
+                        for packet in before_release_packets
+                    ),
+                )
+                router_before_release = state.network.routers["xp0"]
+                self.assertEqual(6, router_before_release.accepted_count)
+                self.assertEqual(6, router_before_release.forwarded_count)
+                self.assertEqual(0, router_before_release.depth)
+
+                response_packet = None
+                terminal_packet = None
+                for _round in range(256):
+                    if session.is_quiescent(state):
+                        break
+                    progressed = False
+                    for candidate in session.scheduler_candidates:
+                        before_count = len(events)
+                        progressed = (
+                            commit(
+                                ChiAdvanceCoherenceNetwork(candidate),
+                                f"advance {candidate}",
+                                required=False,
+                            )
+                            or progressed
+                        )
+                        if len(events) == before_count:
+                            continue
+                        event = events[-1]
+                        packet = (
+                            event.packet
+                            if event.kind
+                            is ChiCoherenceNetworkEventKind.ENDPOINT_ACCEPT
+                            else None
+                        )
+                        if packet is None:
+                            continue
+                        message = packet.message
+                        if isinstance(
+                            message,
+                            ChiWriteEvictFullMessage,
+                        ):
+                            expectation = (
+                                state.coherence.copyback_phase_ledger
+                                .for_request(
+                                    self.RN,
+                                    self.WRITE_EVICT_TXN_ID,
+                                )
+                            )
+                            self.assertIsNotNone(expectation)
+                            assert expectation is not None
+                            self.assertIs(
+                                ChiCopyBackDeliveryPhase.HOME_RESPONSE,
+                                expectation.phase,
+                            )
+                            self.assertIsInstance(
+                                expectation.packet.message,
+                                response_type,
+                            )
+                            home_pending = (
+                                state.coherence.home.pending_copybacks[
+                                    expectation.identity.data_buffer_id
+                                ]
+                            )
+                            self.assertIs(
+                                ChiHomeCopyBackAdmission.CURRENT_SHARED_HOLDER,
+                                home_pending.admission,
+                            )
+                            self.assertEqual(
+                                frozenset((self.RN, self.NEW_RN)),
+                                home_pending.directory_snapshot.sharers,
+                            )
+                            response_packet = expectation.packet
+                        elif (
+                            response_packet is not None
+                            and packet == response_packet
+                        ):
+                            expectation = (
+                                state.coherence.copyback_phase_ledger
+                                .for_data_buffer(
+                                    self.RN,
+                                    packet.message.data_buffer_id,
+                                )
+                            )
+                            self.assertIsNotNone(expectation)
+                            assert expectation is not None
+                            self.assertIs(
+                                terminal_phase,
+                                expectation.phase,
+                            )
+                            self.assertIsInstance(
+                                expectation.packet.message,
+                                terminal_type,
+                            )
+                            terminal_packet = expectation.packet
+                        elif (
+                            terminal_packet is not None
+                            and packet == terminal_packet
+                        ):
+                            self.assertFalse(
+                                state.coherence
+                                .copyback_phase_ledger.entries
+                            )
+                        if session.is_quiescent(state):
+                            break
+                    if not progressed:
+                        self.fail(
+                            "replayed WriteEvictFull cannot reach its "
+                            "selected SC terminal"
+                        )
+                else:
+                    self.fail(
+                        "WriteEvictFull exhausted the scheduler budget"
+                    )
+
+                self.assertIsNotNone(response_packet)
+                self.assertIsNotNone(terminal_packet)
+                assert terminal_packet is not None
+                terminal = terminal_packet.message
+                if isinstance(terminal, ChiCopyBackWrDataMessage):
+                    self.assertIs(ChiRespCode.SC, terminal.response)
+                    self.assertEqual(self.DATA, terminal.data)
+                    self.assertEqual((1 << 64) - 1, terminal.byte_enable)
+                else:
+                    self.assertIsInstance(terminal, ChiCompAckMessage)
+                    self.assertEqual(int(ChiRespCode.SC), terminal.response)
+
+                final = state.coherence
+                self.assertTrue(session.is_quiescent(state))
+                self.assertFalse(final.copyback_phase_ledger.entries)
+                final_entry = final.home.directory[self.ADDRESS]
+                self.assertIsNone(final_entry.unique_owner)
+                self.assertIsNone(final_entry.shared_dirty_owner)
+                self.assertEqual(
+                    frozenset((self.NEW_RN,)),
+                    final_entry.sharers,
+                )
+                old_line = final.request_nodes[self.RN].line_at(
+                    self.ADDRESS
+                )
+                new_line = final.request_nodes[self.NEW_RN].line_at(
+                    self.ADDRESS
+                )
+                self.assertIsNotNone(old_line)
+                self.assertIsNotNone(new_line)
+                assert old_line is not None and new_line is not None
+                self.assertIs(ChiCacheState.I, old_line.state)
+                self.assertIsNone(old_line.data)
+                self.assertIs(ChiCacheState.SC, new_line.state)
+                self.assertEqual(self.DATA, new_line.data)
+                self.assertEqual(
+                    initial.coherence.home.backing,
+                    final.home.backing,
+                )
+                final_backing = final.home.backing.line_at(self.ADDRESS)
+                self.assertIsNotNone(final_backing)
+                assert final_backing is not None
+                self.assertEqual(0, final_backing.version)
+                final_residency = final.home.clean_residency.line_at(
+                    self.ADDRESS
+                )
+                self.assertIsNotNone(final_residency)
+                assert final_residency is not None
+                self.assertEqual(self.DATA, final_residency.data)
+                router = state.network.routers["xp0"]
+                self.assertEqual(8, router.accepted_count)
+                self.assertEqual(8, router.forwarded_count)
+                self.assertEqual(0, router.depth)
 
 
 if __name__ == "__main__":

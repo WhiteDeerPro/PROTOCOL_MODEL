@@ -16,7 +16,9 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     ChiHomeAcceptCopyBackData,
     ChiHomeAcceptCoherentRead,
     ChiHomeAcceptWriteEvictFull,
+    ChiHomeCopyBackAdmission,
     ChiHomeDirectoryEntry,
+    ChiHomeWriteEvictPending,
     ChiRnAcceptComp,
     ChiRnAcceptCompDBIDResp,
     ChiRnAcceptCompData,
@@ -38,6 +40,7 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiSnpCleanInvalidMessage,
     ChiSnpMakeInvalidMessage,
     ChiSnpRespMessage,
+    ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
     ChiWriteEvictFullMessage,
 )
@@ -55,6 +58,7 @@ class ChiIssueHWriteEvictFullCopyAtHomeParticipantTest(
     unittest.TestCase
 ):
     RN = 0x07
+    PEER = 0x08
     HOME = 0x21
     ADDRESS = 0x8000
     DATA = (1 << 400) | 0xCA11_600D
@@ -334,6 +338,60 @@ class ChiIssueHWriteEvictFullCopyAtHomeParticipantTest(
                 clean_residency=CacheLineStoreState(),
             )
 
+    def test_shared_holder_pending_requires_clean_requester_snapshot(
+        self,
+    ) -> None:
+        request = ChiWriteEvictFullMessage(
+            self.WRITE_EVICT_TXN_ID,
+            self.ADDRESS,
+            copy_at_home=True,
+        )
+        invalid_snapshots = (
+            ChiHomeDirectoryEntry(
+                self.ADDRESS,
+                unique_owner=self.RN,
+            ),
+            ChiHomeDirectoryEntry(
+                self.ADDRESS,
+                sharers=frozenset((self.RN,)),
+                shared_dirty_owner=self.RN,
+            ),
+        )
+        for snapshot in invalid_snapshots:
+            with self.subTest(snapshot=snapshot):
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "requires a clean requester",
+                ):
+                    ChiHomeWriteEvictPending(
+                        self.RN,
+                        request,
+                        self.DBID,
+                        snapshot,
+                        0,
+                        admission=(
+                            ChiHomeCopyBackAdmission.CURRENT_SHARED_HOLDER
+                        ),
+                    )
+
+        snapshot = ChiHomeDirectoryEntry(
+            self.ADDRESS,
+            sharers=frozenset((self.RN, self.PEER)),
+        )
+        pending = ChiHomeWriteEvictPending(
+            self.RN,
+            request,
+            self.DBID,
+            snapshot,
+            0,
+            admission=ChiHomeCopyBackAdmission.CURRENT_SHARED_HOLDER,
+        )
+        self.assertEqual(snapshot, pending.directory_snapshot)
+        self.assertIs(
+            ChiHomeCopyBackAdmission.CURRENT_SHARED_HOLDER,
+            pending.admission,
+        )
+
     def test_forged_copy_at_home_issue_is_atomic_fault(self) -> None:
         rn = self.build_rn(copy_at_home=False)
         initial = rn.initial_state()
@@ -372,7 +430,7 @@ class ChiIssueHWriteEvictFullCopyAtHomeParticipantTest(
             home_state.clean_residency.line_at(self.ADDRESS).data,
         )
 
-    def test_pre_response_invalidating_snoop_cancels_both_terminals(
+    def test_invalidating_snoop_then_shared_stays_canceled_for_both_terminals(
         self,
     ) -> None:
         snoop_types = (
@@ -453,6 +511,49 @@ class ChiIssueHWriteEvictFullCopyAtHomeParticipantTest(
                         snoop_response.response,
                     )
 
+                    shared_after_cancel = self.apply(
+                        rn,
+                        snooped.state,
+                        ChiRnAcceptSnoop(
+                            ChiNetworkPacket.snoop(
+                                ChiSnpSharedMessage(
+                                    0x301,
+                                    self.ADDRESS,
+                                ),
+                                source_id=self.HOME,
+                                target_id=self.RN,
+                            )
+                        ),
+                    )
+                    line = shared_after_cancel.state.line_at(
+                        self.ADDRESS
+                    )
+                    self.assertIsNotNone(line)
+                    assert line is not None
+                    self.assertIs(ChiCacheState.I, line.state)
+                    self.assertIsNone(line.data)
+                    pending = (
+                        shared_after_cancel.state.pending_copybacks[
+                            self.WRITE_EVICT_TXN_ID
+                        ]
+                    )
+                    self.assertEqual(frozen_request, pending.request)
+                    self.assertIs(
+                        ChiRnCopyBackOutcome.CANCELED_I,
+                        pending.outcome,
+                    )
+                    shared_response = (
+                        shared_after_cancel.emissions[0].message
+                    )
+                    self.assertIsInstance(
+                        shared_response,
+                        ChiSnpRespMessage,
+                    )
+                    self.assertIs(
+                        ChiRespCode.I,
+                        shared_response.response,
+                    )
+
                     response = (
                         ChiCompDBIDRespMessage(
                             self.WRITE_EVICT_TXN_ID,
@@ -467,7 +568,7 @@ class ChiIssueHWriteEvictFullCopyAtHomeParticipantTest(
                     )
                     completed = self.apply(
                         rn,
-                        snooped.state,
+                        shared_after_cancel.state,
                         (
                             ChiRnAcceptCompDBIDResp(
                                 ChiNetworkPacket.response(
@@ -501,6 +602,206 @@ class ChiIssueHWriteEvictFullCopyAtHomeParticipantTest(
                             int(ChiRespCode.I),
                             terminal.response,
                         )
+
+    def test_pre_response_snp_shared_preserves_sc_terminals(
+        self,
+    ) -> None:
+        for copy_at_home, decision in (
+            (False, ChiCopyBackDecision.REQUEST_DATA),
+            (True, ChiCopyBackDecision.REQUEST_DATA),
+            (True, ChiCopyBackDecision.COMPLETE_WITHOUT_DATA),
+        ):
+            with self.subTest(
+                copy_at_home=copy_at_home,
+                decision=decision.value,
+            ):
+                rn = self.build_rn(copy_at_home=copy_at_home)
+                home = self.build_home(decision)
+                rn_initial = rn.initial_state()
+                home_after_read_shared = replace(
+                    home.initial_state(),
+                    directory={
+                        self.ADDRESS: ChiHomeDirectoryEntry(
+                            self.ADDRESS,
+                            sharers=frozenset((self.RN, self.PEER)),
+                        )
+                    },
+                )
+                request = ChiWriteEvictFullMessage(
+                    self.WRITE_EVICT_TXN_ID,
+                    self.ADDRESS,
+                    copy_at_home=copy_at_home,
+                )
+                issued = self.apply(
+                    rn,
+                    rn_initial,
+                    ChiRnIssueWriteEvictFull(request),
+                )
+                snooped = self.apply(
+                    rn,
+                    issued.state,
+                    ChiRnAcceptSnoop(
+                        ChiNetworkPacket.snoop(
+                            ChiSnpSharedMessage(0x300, self.ADDRESS),
+                            source_id=self.HOME,
+                            target_id=self.RN,
+                        )
+                    ),
+                )
+
+                snoop_response = snooped.emissions[0].message
+                self.assertIsInstance(
+                    snoop_response,
+                    ChiSnpRespMessage,
+                )
+                self.assertIs(
+                    ChiRespCode.SC,
+                    snoop_response.response,
+                )
+                line = snooped.state.line_at(self.ADDRESS)
+                self.assertIsNotNone(line)
+                assert line is not None
+                self.assertIs(ChiCacheState.SC, line.state)
+                self.assertEqual(self.DATA, line.data)
+                self.assertFalse(line.copy_at_home)
+                self.assertNotIn(
+                    self.ADDRESS,
+                    snooped.state.copy_at_home_lines,
+                )
+                pending = snooped.state.pending_copybacks[
+                    self.WRITE_EVICT_TXN_ID
+                ]
+                self.assertEqual(request, pending.request)
+                self.assertIs(
+                    copy_at_home,
+                    pending.request.copy_at_home,
+                )
+                self.assertIs(
+                    ChiRnCopyBackOutcome.LIVE_SC,
+                    pending.outcome,
+                )
+
+                accepted = self.apply(
+                    home,
+                    home_after_read_shared,
+                    ChiHomeAcceptWriteEvictFull(
+                        issued.emissions[0],
+                        admission=(
+                            ChiHomeCopyBackAdmission.CURRENT_SHARED_HOLDER
+                        ),
+                    ),
+                )
+                home_response = accepted.emissions[0]
+                if decision is ChiCopyBackDecision.REQUEST_DATA:
+                    self.assertIsInstance(
+                        home_response.message,
+                        ChiCompDBIDRespMessage,
+                    )
+                    completed = self.apply(
+                        rn,
+                        snooped.state,
+                        ChiRnAcceptCompDBIDResp(home_response),
+                    )
+                    terminal_packet = completed.emissions[0]
+                    terminal = terminal_packet.message
+                    self.assertIsInstance(
+                        terminal,
+                        ChiCopyBackWrDataMessage,
+                    )
+                    self.assertIs(ChiRespCode.SC, terminal.response)
+                    self.assertEqual(self.DATA, terminal.data)
+                    self.assertEqual(
+                        (1 << 64) - 1,
+                        terminal.byte_enable,
+                    )
+                    forged_packet = replace(
+                        terminal_packet,
+                        message=replace(
+                            terminal,
+                            response=ChiRespCode.UC,
+                        ),
+                    )
+                    rejected = home.step(
+                        accepted.state,
+                        ChiHomeAcceptCopyBackData(forged_packet),
+                    )
+                    self.assert_atomic_fault(
+                        rejected,
+                        accepted.state,
+                        "write_evict_copyback_profile",
+                    )
+                    committed = self.apply(
+                        home,
+                        accepted.state,
+                        ChiHomeAcceptCopyBackData(terminal_packet),
+                    )
+                else:
+                    self.assertIsInstance(
+                        home_response.message,
+                        ChiCompMessage,
+                    )
+                    completed = self.apply(
+                        rn,
+                        snooped.state,
+                        ChiRnAcceptComp(home_response),
+                    )
+                    terminal_packet = completed.emissions[0]
+                    terminal = terminal_packet.message
+                    self.assertIsInstance(terminal, ChiCompAckMessage)
+                    self.assertEqual(
+                        int(ChiRespCode.SC),
+                        terminal.response,
+                    )
+                    forged_packet = replace(
+                        terminal_packet,
+                        message=replace(
+                            terminal,
+                            response=ChiRespCode.UC,
+                        ),
+                    )
+                    rejected = home.step(
+                        accepted.state,
+                        ChiHomeAcceptCompAck(forged_packet),
+                    )
+                    self.assert_atomic_fault(
+                        rejected,
+                        accepted.state,
+                        "write_evict_completion_ack_state",
+                    )
+                    committed = self.apply(
+                        home,
+                        accepted.state,
+                        ChiHomeAcceptCompAck(terminal_packet),
+                    )
+
+                retired_line = completed.state.line_at(self.ADDRESS)
+                self.assertIsNotNone(retired_line)
+                assert retired_line is not None
+                self.assertIs(ChiCacheState.I, retired_line.state)
+                self.assertIsNone(retired_line.data)
+                self.assertFalse(retired_line.copy_at_home)
+                self.assertFalse(completed.state.pending_copybacks)
+                self.assertTrue(rn.is_quiescent(completed.state))
+
+                entry = committed.state.directory[self.ADDRESS]
+                self.assertIsNone(entry.unique_owner)
+                self.assertEqual(
+                    frozenset((self.PEER,)),
+                    entry.sharers,
+                )
+                self.assertIsNone(entry.shared_dirty_owner)
+                self.assertEqual(
+                    self.DATA,
+                    committed.state.clean_residency.line_at(
+                        self.ADDRESS
+                    ).data,
+                )
+                self.assertIs(
+                    home_after_read_shared.backing,
+                    committed.state.backing,
+                )
+                self.assertFalse(committed.state.pending_copybacks)
+                self.assertTrue(home.is_quiescent(committed.state))
 
     def test_data_outcome_is_typed_and_preserves_clean_authority(
         self,

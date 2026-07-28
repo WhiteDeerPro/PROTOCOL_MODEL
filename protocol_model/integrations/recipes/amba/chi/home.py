@@ -144,9 +144,9 @@ def bind_chi_issue_h_home_vdut(
     ``SystemProtocol`` and connect the selected transport ports.
 
     This is the RN-facing reference-backing profile.  It receives REQ, RSP,
-    and DAT; it transmits RSP, SNP, and DAT.  A future HN-to-SN physical commit
-    path can add its own behavior boundary rather than treating an unsupported
-    transmitted REQ as part of this participant.
+    and DAT; it transmits RSP, SNP, and DAT.  A future topology-visible
+    HN-to-SN downstream transaction can add its own behavior boundary rather
+    than treating an unsupported transmitted REQ as part of this participant.
     """
 
     if not isinstance(virtual_dut, VirtualDut):

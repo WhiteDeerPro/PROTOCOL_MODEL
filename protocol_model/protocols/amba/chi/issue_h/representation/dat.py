@@ -53,12 +53,13 @@ class ChiCopyBackWrDataMessage:
     ``transaction_id`` carries the DBID received in ``CompDBIDResp``, not the
     original REQ TxnID.  Data-bearing ``response`` values describe the
     Requester's cache state and whether dirty responsibility is passed.
-    ``I`` is the dirty-WriteBack cancellation indication, whose cache-state
-    information is imprecise and ignored.  The current participant
-    lifecycles accept full-line ``UD_PD`` for live dirty WriteBack,
-    ``I`` with zero data/byte-enable for its invalidating-Snoop cancellation,
-    full-line ``UC`` for ``WriteEvictFull(CAH=0)``, or full-line ``UC``/``SC``
-    for the data outcome of ``WriteEvictOrEvict(CAH=0)``.
+    ``I`` is the canceled CopyBack indication, whose cache-state information
+    is imprecise and ignored.  The current participant lifecycles accept
+    full-line ``UD_PD`` for live dirty WriteBack, full-line ``UC`` for
+    ``WriteEvictFull(CAH=0)``, or full-line ``UC``/``SC`` for the data
+    outcome of ``WriteEvictOrEvict(CAH=0)``.  Their supported pre-response
+    invalidating-Snoop cancellation paths use ``I`` with zero data and byte
+    enables.
     """
 
     chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.DAT

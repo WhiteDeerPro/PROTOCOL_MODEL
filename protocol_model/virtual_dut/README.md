@@ -38,7 +38,7 @@ coherent Home 使用相同的构造方向，但 payload contract 不与 director
 `attach_chi_issue_h_home()` 从 core 创建第一个 Home VirtualDut，
 `bind_chi_issue_h_home_vdut()` 则把 core/participant facet 绑定到调用方已有的同一个 canonical boundary。
 当前 binder 拒绝带独立 executable backend 的 Vdut，因为通用 backend runtime 与 CHI participant runtime
-尚未共享一个 module state；可观察的 HN→SN physical commit 需要后续显式协议路径。
+尚未共享一个 module state；可观察的 HN→SN downstream transaction/commit 需要后续显式协议路径。
 
 本目录中的 [`recipes/`](recipes/README.md) 是协议无关的构造基础，主要供 integration 开发者使用。某个
 SystemProtocol 中已经构造出的 `VirtualDut` 实例由该 system/scenario/project 持有；test 只验证构造方法，

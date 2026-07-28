@@ -57,6 +57,7 @@ from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_SNOOPEE_SNP_MAKE_INVALID_ACCEPT,
     CHI_SNOOPEE_SNP_MAKE_INVALID_DISCARD_DIRTY,
     CHI_SNOOPEE_WRITE_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
+    CHI_SNOOPEE_WRITE_EVICT_OR_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
     ChiCapabilityKey,
     ChiDirectHomeNode,
     ChiParticipantBinding,
@@ -2121,6 +2122,18 @@ class ChiIssueHWriteEvictOrEvictCapabilityTest(unittest.TestCase):
         )
         self.assertIn(
             CHI_HOME_COMP_ACK_ACCEPT,
+            CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_SNOOPEE_WRITE_EVICT_OR_EVICT_PENDING_INVALIDATING_SNP_ACCEPT,
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_REQUESTER_COPYBACK_CANCEL_PRODUCE,
+            CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
+        )
+        self.assertIn(
+            CHI_HOME_COPYBACK_CANCEL_ACCEPT,
             CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
         )
 

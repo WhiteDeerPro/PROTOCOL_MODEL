@@ -102,8 +102,9 @@ coherence network session
 9. packet channel 受到沿途每条 transport profile 支持，resolved runtime 拒绝越出所选 claim window 的请求。
 
 当前一个 `ResolvedChiSystem` 仍只选择一个 feature address scope 和一个 scalar Home。authority plan 可以
-保存多个互不重叠的 claim，但当前只接受未进入 address-router translation 的 claim；SAM route 的 input
-window/remap 尚未投影成 CHI system-visible authority。同一 runtime 也不按每笔地址动态切换 Home；RN 中的
+保存多个互不重叠的 claim，但当前只接受未进入 address-router translation 的 claim；SAM（System Address
+Map）route 的 input window/remap 尚未投影成 CHI system-visible authority。同一 runtime 也不按每笔地址
+动态切换 Home；RN 中的
 `home_node_id` 是被 resolver 核对的本地配置投影，不是第二份 system authority。
 
 ### 3.1 不可变 route 与 delivery 索引
@@ -388,7 +389,9 @@ copy 可以陈旧，最新数据及其最终写回责任由相应 holder 持有�
   `LikelyShared=0/1` 必须与 resident permission 和 directory holder 一致。显式 Home policy 选择
   `CompDBIDResp→CopyBackWrData_{UC,SC}` data outcome，或 `Comp_I→CompAck` no-data outcome。
   两者都只删除 requester authority、使 RN 进入 `I` 并保持 reference backing 不变；前者安装 clean
-  residency，后者不搬运数据。当前 pending WEOE 遇同址 Snoop 返回 blocked；
+  residency，后者不搬运数据。Home response 前的同址 invalidating Snoop 会把 RN pending outcome
+  改为 `CANCELED_I`；迟到的两类 Home outcome 分别以零 data/BE 的 `CopyBackWrData_I` 或
+  `CompAck_I` 退休，且不覆盖随后取得 authority 的 requester；
 - 启用 `CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER` 时，Home 可以对目录中唯一的
   `shared_dirty_owner` 发同一个 `SnpCleanInvalid(DoNotGoToSD=1, RetToSrc=0)`；该受限 `SD` peer
   以 `SnpRespData_I_PD` 返回最新数据并原子失效。Home 将数据保存在
@@ -400,17 +403,18 @@ copy 可以陈旧，最新数据及其最终写回责任由相应 holder 持有�
   payload 且必须是 directory unique owner，`UD` copy 必须是唯一 owner；受限 `SD` copy 必须与
   directory 的唯一 `shared_dirty_owner` 对应。
 
-这已经覆盖 MESI 中“unique clean 经过写入成为 modified、modified owner 被另一请求者接管，以及
-modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向路径，但还没有形成完整 MESI 状态机。
-尚缺的主要行为是：
+这已经形成一个可独立验收的 no-SD MESI slice，覆盖“unique clean 经过写入成为 modified、modified owner
+被另一请求者接管，以及 modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向路径；它不声称
+完整 MESI 状态机，也不依赖 `SD`/Owned 状态或 forwarding/DCT transaction。当前 slice 之外的相邻行为按职责包括：
 
-- 把 dirty-peer CleanUnique 的 reference memory-update obligation 下沉为独立 Memory VirtualDut 或
-  CHI SN-F physical commit；
-- MakeUnique Retry、DERR/NDERR、MTE Update、partial write、multi-Home 等扩展；当前 MakeUnique
-  executable profile 为 tagless、OK-only；
-- 从 victim policy 自动触发 eviction/writeback、deliberate dirty invalidate，以及
+- 若验证目标需要观察 Home 之外的 downstream commit，把 dirty-peer CleanUnique 的
+  reference memory-update obligation
+  下沉为独立 Memory/SN participant，并构造 topology-visible HN→SN flow 与 system witness；
+- MakeUnique Retry、DERR/NDERR、MTE Update 与 partial write 等 lifecycle/profile 扩展；当前 MakeUnique
+  executable profile 为 tagless、OK-only；multi-Home 另归下方 SystemProtocol authority/runtime；
+- 可选 Cache VirtualDut victim/replacement policy 自动触发 eviction/writeback；另有 deliberate dirty invalidate，以及
   `WriteEvictFull` 的 CAH/post-DBID-Snoop/Retry/error modifier、`WriteEvictOrEvict` 的
-  same-line-Snoop/Retry/error、CAH=1 与容量驱动 outcome policy；显式 clean Evict、
+  post-response/其他 Snoop phase、Retry/error、CAH=1 与容量驱动 outcome policy；显式 clean Evict、
   `WriteEvictFull(CAH=0)`、`WriteEvictOrEvict(CAH=0)` 双 outcome，以及选择一条 `UD` line 后的
   `WriteBackFull → CompDBIDResp → CopyBackWrData_UD_PD`、同址 invalidating-Snoop 后的
   `CopyBackWrData_I` cancel 已经闭合；
@@ -422,14 +426,18 @@ modified 数据回到 Home 后形成两个 clean shared copy”的几条纵向�
   保持 `I`、返回 `SnpResp_I` 并保留 correlation。direct `ChiCoherenceSession` 的双
   Requester witness 证明两笔 CleanUnique 可由 Home line reservation 串行、第二笔最终取得 `UCE`；
   pending WriteBack 接收同址 invalidating Snoop，把 dirty data 交给 Home 后显式变为
-  `CANCELED_I`，再以 `CopyBackWrData_I` 退休。等待者合并、一般 transient phase、Snoop 优先级，以及
+  `CANCELED_I`，再以 `CopyBackWrData_I` 退休；pending WEOE 同样在 response 前转为
+  `CANCELED_I`，并按 Home 已选 data/no-data outcome 以 `CopyBackWrData_I`/`CompAck_I` 退休。
+  等待者合并、一般 transient phase、Snoop 优先级，以及
   超出当前窄 witness 的 Retry/Snoop 到达次序、同一 accepted request 已发出 Snoop 后的 error 与
   Retry cancel 仍未闭合；
-- runtime 按地址动态选择多个 Home、SAM remap 和跨 domain 执行。
+- SystemProtocol runtime 按地址动态选择多个 Home、SAM remap 和跨 domain 执行。
 
-当前 `SD` 只是一条受限 CleanUnique 前置状态及其失效出口，不是完整 MOESI/Owned profile。后者还需要
-产生和维持 shared-dirty 状态的 lifecycle、dirty `SnpShared`、owner handoff、forwarding snoop/DCT，
-以及 owner eviction/recovery。
+当前 `SD` 只是一条受限 CleanUnique 前置状态及其失效出口，不是完整 MOESI/Owned profile。后者是独立
+coherence-state/policy 扩展，还需要产生和维持 shared-dirty 状态的 lifecycle、dirty `SnpShared`、
+owner handoff 与 owner eviction/recovery。DCT（Direct Cache Transfer）则是 peer RN 直接向 requester
+发送数据并与 Home 完成 correlation 的可选 forwarding lifecycle；clean-state path 也可采用，不以前述
+Owned 状态为前置条件。
 
 当前 feature closure 可以分别选择 clean ReadShared、clean ReadUnique、clean-peer CleanUnique、
 MakeUnique、clean Evict、clean Evict Retry、clean `WriteEvictFull(CAH=0)`、
@@ -474,8 +482,9 @@ produce/accept。当前 feature 不依赖 replacement policy；调用方负责�
 它闭合 Requester→Home `write_evict_or_evict_request` REQ、Home→Requester
 `write_evict_or_evict_response` RSP，以及两个互斥终态所需的 Requester→Home
 `write_evict_or_evict_copyback_data` DAT 与 `write_evict_or_evict_completion_ack` RSP。构造期同时要求
-四条 flow，运行时只按 Home-selected outcome 消费 DAT 或 CompAck；该合同不声明 SNP 或 backing commit
-能力。same-line Snoop、Retry/error、CAH=1 与容量驱动 outcome policy 仍在 base 之外。
+四条 flow，运行时只按 Home-selected outcome 消费 DAT 或 CompAck；该 base feature contract 不声明 SNP
+或 backing commit 能力。组合 session 已闭合 Home response 前的 invalidating Snoop cancel；
+post-response/其他 Snoop phase、Retry/error、CAH=1 与容量驱动 outcome policy 仍在 base 之外。
 
 `CHI_FEATURE_MAKE_UNIQUE` 也独立于 CleanUnique，dependency set 为空；它显式要求
 Requester/Home 和可为空的 Snoopee finite-set role 及一项 system lifecycle，并闭合五类 flow：Requester→Home REQ、
@@ -608,20 +617,21 @@ requester 的数据或 owner 覆盖已经完成的同址 transaction。
 `ChiCoherentHomeState.backing` 仍是 reference payload/version authority。Home 接纳 REQ 时冻结
 directory snapshot 与 backing version，精确 `CopyBackWrData_UC` 到达时只安装 clean residency 并清除
 RN holder，保持 backing 对象、payload 与 version 不变。二者是独立状态轴，不把 residency install
-冒充 physical Memory/SN write。Snoop-canceled WEF 改用 `CopyBackWrData_I`；相同 snapshot/version
+冒充 topology-visible Memory/SN transaction。Snoop-canceled WEF 改用 `CopyBackWrData_I`；相同 snapshot/version
 guard 只保护取消期间的当前 authority，合法 DAT 不安装 residency，也不改 backing/directory。
 
 `WriteEvictOrEvict(CAH=0)` 的 data outcome 复用上述 clean-residency install，但允许 resident
 `UC` 或 clean `SC`，并以 `CopyBackWrData` 的 `Resp` 保留该 permission fact；no-data outcome 只通过
 `Comp→CompAck` 删除 requester holder，不访问 clean-residency payload。两种 outcome 都保持
-`ChiCoherentHomeState.backing` 的对象、payload 与 version 不变，不能解释为 physical Memory/SN write。
+`ChiCoherentHomeState.backing` 的对象、payload 与 version 不变，不能解释为 topology-visible
+Memory/SN transaction。
 
 `bind_chi_issue_h_home_vdut(existing_vdut, ...)` 与 cache binder 一样引用同一个 canonical object，不创建
 port 或 topology connection。当前 profile 拒绝已有 executable backend 的 Vdut，因为 backend session 与
 CHI participant session 尚不能共享同一份动态 payload state；把一个 AXI/APB Memory Vdut 直接传入会制造
 双 authority。`ChiAddressHomeNode(AddressTarget)` 仍只是 direct `ReadNoSnp` adapter。若场景要求观察
-physical commit，应显式增加 HN→SN 的 REQ/DAT/RSP、SN participant 和 system witness，不能把本地 reference
-backing commit 冒充该网络事务。
+Home 之外的 downstream commit，应显式增加 HN→SN 的 REQ/DAT/RSP、SN participant 和 system witness，
+不能把本地 reference backing commit 冒充该网络事务。
 
 后续 cache 功能按以下边界加入：
 
@@ -632,7 +642,7 @@ backing commit 冒充该网络事务。
 | victim selection | 可选 replacement policy | eviction 是 cache 的本地决策，LRU 只是其中一种策略 |
 | same-line transient、等待者合并或 block/replay、writeback slot | Cache VirtualDut participant resource | 影响是否能接纳本地请求或 Snoop |
 | `CleanUnique`/`MakeUnique`/`WriteBackFull`/`WriteEvictFull`/`WriteEvictOrEvict` 的字段与单 transaction correlation | CHI representation 与完整逻辑接口合同 | 这些是协议通信形式；当前三个 CopyBack profile 都固定 `CAH=0`，WEOE 另闭合 data/no-data terminal |
-| Home backing payload | protocol-neutral `FullLineBackingCore` / `LineBackingState` | prepared line-local commit 只闭合 reference authority；独立 Memory/SN physical commit 尚未建模 |
+| Home backing payload | protocol-neutral `FullLineBackingCore` / `LineBackingState` | prepared line-local commit 只闭合 reference authority；独立 Memory/SN downstream transaction 尚未建模 |
 | Home Snoop-domain clean residency | protocol-neutral `CacheCore[CacheLinePayload]` | 与 reference backing 分离；当前只有 fixed retain，没有容量、替换或 read-hit policy |
 | Home sharer/owner、shared-dirty owner 与跨 RN invariant | Home participant + CHI SystemProtocol monitor | directory 的局部状态由 Home 持有，跨 participant 一致性由 system 判定 |
 | packet/flit、L-Credit 和 hop backpressure | CHI transport | 不解释 cache permission |
@@ -670,9 +680,12 @@ Home DBID/capacity。正常 outcome 在 `CompDBIDResp` 前保留 `UC` payload，
 matching RN outcome 和当前 directory 派生共用 `SNOOP_CANCELED` admission；Home 只退休 DBID。
 这只闭合 pre-DBID invalidating-Snoop，不声称一般 Snoop ordering 已闭合。
 
-`WriteEvictOrEvict` 使用第三种 operation-specific pending，显式保存 `LIVE_UC/LIVE_SC` 与 Home-selected
-data/no-data decision。当前 RN pending 遇同址 Snoop 返回 blocked；它没有借用 WEF 的 `CANCELED_I`
-规则，也不据共同 CopyBack 字段推断 terminal disposition。
+`WriteEvictOrEvict` 使用第三种 operation-specific pending，保留 immutable REQ/`LikelyShared` 与
+post-Snoop outcome。正常路径保存 `LIVE_UC/LIVE_SC`；Home response 前收到
+`SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid` 后保存 `CANCELED_I`，同时保留 request/TxnID
+correlation。迟到 `CompDBIDResp` 产生零 data/BE 的 `CopyBackWrData_I`，迟到 `Comp` 产生
+`CompAck_I`。system 只从 exact RN pending、无 payload `I` line 与当前 directory 派生
+`SNOOP_CANCELED` admission；Home 退休旧 reservation 而不改新 authority/backing/residency。
 
 WriteBack、WriteEvictFull 和 WEOE data outcome 共用同一 evidence phase：Home 发出并登记 exact
 `CompDBIDResp`，RN 成功消费后才退休该
@@ -833,7 +846,7 @@ RN0 CleanUnique
 
 这条 witness 只证明 Home participant 已接管 dirty 数据、同址事务在旧 backing 不可观察期间被 reservation
 挡住，并在 `CompAck` 后以协议中立 line commit 与 directory transition 更新 reference state。它没有产生
-topology-visible HN→SN write，也不证明独立 Memory VirtualDut 的 physical commit。
+topology-visible HN→SN write，也不证明独立 Memory VirtualDut 的 downstream commit。
 
 participant packet-delivery session 还闭合了第一条 dirty writeback：
 
@@ -906,35 +919,22 @@ Retry cancel 也仍未实现。
 展示产物优先包含一张 topology、一张简化 MSC 和一份最终 directory/cache-state 摘要。Link tick 等内部
 microstep 保存在诊断记录中，无需全部放入主 MSC。
 
-## 11. 延期能力
+## 11. 延期能力按维度
 
-下列能力仍在当前切片之外：
+下列事项仍在当前切片之外，但不合并成一条“CHI 网络完整度”：
 
-- 自动 victim selection/writeback scheduling、deliberate dirty invalidate、`WriteEvictFull` 的
-  CAH/post-DBID-Snoop/Retry/error modifier、`WriteEvictOrEvict` 的 same-line-Snoop/Retry/error、
-  CAH=1 与容量驱动 outcome policy、CMO/DVM、等待者合并和一般 transient phase；
-- MakeUnique Retry、DERR/NDERR、MTE Update、partial write 与 multi-Home 扩展；
-- dirty writeback 与 RetryAck/P-Credit 或错误响应的组合，以及超出已闭合 invalidating-Snoop cancel 的
-  其他 WriteBack/Snoop phase 组合；
-- 让 Home participant 与独立 Memory/SN VirtualDut 通过 topology-visible protocol transaction 共同执行，
-  以及相应 HN→SN physical write lifecycle；
-- 完整 MOESI `SD`/Owned：当前只实现 seedable `SD→I` dirty-peer CleanUnique 出口，尚无 `SD` 生成、
-  dirty `SnpShared`、owner handoff、forwarding snoop/DCT 或 shared-dirty replacement；
-- 一般多 Requester resolved topology、多 Home、按每笔地址动态选择 authority，以及动态/多 scope
-  coherence-domain membership；
-- 一个 component/port 承载多个 NodeID 的运行时选择；
-- 动态 snoop filter、router multicast 和 topology-wide broadcast；
-- 独立 fanout branch admission、fanout continuation 及其额外 storage；
-- message→multi-packet DAT splitter/reassembler、multi-flit response、narrow completion、DERR 与
-  同一 accepted request 已发出 Snoop 后的 error completion；
-- 多个 coherence Retry waiter、cancel、上述 post-Snoop error，以及超出上述窄 witness 的
-  Retry/Snoop 到达次序；
-- 多 waiter 公平性、跨资源 wait-for graph、escape transition 搜索和 deadlock verdict；当前
-  `ChiCoherenceProgress` 只提供 family-local held/wait/wakeup evidence；
-- virtual channel、adaptive route、QoS/fairness property 和 deadlock/livelock proof；
-- raw packed bit codec、phit/lane、FLITPEND、pin waveform 和 cycle-accurate RTL timing；
-- 自动生成 mesh/ring route table；
-- 合并到通用根 `SystemSession` 或提炼“所有 NoC”共同的 runtime API。
+| 维度 | 当前切片之外 | 如何解释 |
+|---|---|---|
+| CHI lifecycle/profile 覆盖 | deliberate dirty invalidate；`WriteEvictFull` CAH/post-DBID-Snoop/Retry/error；`WriteEvictOrEvict` post-response/其他 Snoop phase、Retry/error、CAH=1 与容量驱动 outcome；MakeUnique Retry、DERR/NDERR、MTE Update、partial write；CMO/DVM；dirty-writeback 与 Retry/error/Snoop 的其他 phase 组合；一般 transient、Retry cancel 与到达次序 | 限制可执行 operation/modifier 组合，是继续补 CHI 功能时的直接候选 |
+| representation / packetization | opcode/conditional-field encoding inventory 与 raw packed-bit codec；message→multi-packet DAT、multi-flit response 与 narrow completion | 分片字段与 codec 属于表示；split/reassembly、缺失/重复/乱序检查和 terminal retirement 属于 transaction/session 聚合。可执行 opcode 还需要 lifecycle、capability/flow、状态效应与 witness；这些增量不否定当前 full-line single-packet traffic |
+| participant / VirtualDut policy | 自动 victim/LRU、replacement/writeback scheduling、容量策略、stateful snoop filter | snoop filter 是 Home/ICN 维护的 cache-presence/选靶结构；当前 exact directory holder set 是 reference oracle。容量型 filter 的假阳性只增加 Snoop，若据其抑制 Snoop，假阴性会破坏一致性 |
+| system authority/construction | 一般多 Requester topology；dynamic multi-Home、SAM remap、按地址动态 Home 与多 scope domain；一个 port 的多 NodeID runtime；独立 Memory/SN participant 与 topology-visible HN→SN downstream commit | SAM 是 System Address Map；address→Home/SAM/domain 属于 SystemProtocol authority。HN→SN 是独立下游 participant/flow slice，不是 reference-backing RN↔Home closure 的缺口 |
+| network forwarding/runtime | router multicast/topology-wide broadcast、独立 fanout branch admission/storage、virtual channel、adaptive route、mesh/ring route-table generation | 是可选 network mechanism/profile；当前按显式 per-target packet copy 与 resolved route 的网络仍可执行 |
+| coherence-state/policy 扩展 | 可生成/维持的 `SD`/Owned、dirty `SnpShared`、owner handoff 与 shared-dirty replacement | 属于 MOESI-like 状态扩展；当前 no-SD MESI slice 可独立成立 |
+| forwarding/DCT lifecycle | forwarding Snoop、peer→requester DAT 与 Home correlation | 属于可选 CHI transaction/capability 和性能路径，不要求 `SD`/Owned |
+| verification property | waiter selection/merge、公平性、跨资源 wait-for、escape transition、deadlock/livelock 与 QoS verdict | analyzer/verdict 属于 system/scenario property，不是 opcode 前置条件；被建模 transport 仍须满足适用的 channel-dependency/forward-progress 合同，`ChiCoherenceProgress` 当前只提供 family-local held/wait/wakeup evidence |
+| observation / external integration | physical phit/lane、FLITPEND、pin waveform、cycle-accurate RTL timing/conformance；CDC 与异步采样 | 前一组是 Link/RTL 观察接入，CDC 是跨协议的通用 control-topology/时间观察方法议题；都不计作 CHI lifecycle 功能缺口 |
+| runtime 泛化 | 合并到通用根 `SystemSession`，或提炼“所有 NoC”共同的 runtime API | 是架构复用边界，不否定当前 CHI family session 的可用性 |
 
 这些延期项可以复用本页的 resolved route、原子候选和双状态组合原则。是否上提通用层，应等待第二种
 真实协议或 switching model 提出相同的状态查询和生命周期。
@@ -965,7 +965,9 @@ CleanUnique 失效第二个 requester 的 pending line，第二笔随后经 `Com
 进入 `UD`；另两条 direct 双 Requester witness 分别组合 `CleanUnique + delayed WriteBack` 和
 `CleanUnique + delayed WriteEvictFull`，验证
 `LIVE_UD→CANCELED_I→CopyBackWrData_I`、system-derived stale-owner evidence 与 Home
-snapshot/version guard，以及 clean cancel 不覆盖新 owner/backing/residency。它们不经过 resolved
+snapshot/version guard，以及 clean cancel 不覆盖新 owner/backing/residency。WEOE 再以一条
+`UC/SC × data/no-data` direct 双 Requester 矩阵验证 delayed request 经
+`CopyBackWrData_I`/`CompAck_I` 安全退休、篡改 terminal 被原子拒绝。它们不经过 resolved
 construction，因而不证明一般多 Requester topology。
 前者不是通用 `MeshBuilder`，这些 witness 也尚未替代全部测试夹具。
 下列内容仍需要保留在定向测试中：
@@ -982,8 +984,8 @@ construction，因而不证明一般多 Requester topology。
   forged/replayed RSP/DAT、pre-DBID invalidating-Snoop cancel、clean-residency/backing 分离与
   三 packet topology witness；
 - `WriteEvictOrEvict(CAH=0)` 的 `LikelyShared`/permission 对齐、显式 Home policy、UC/SC 双 outcome、
-  terminal 不可互换、forged/replayed RSP/DAT/CompAck、same-line Snoop blocked 与三 packet topology
-  witness；
+  terminal 不可互换、forged/replayed RSP/DAT/CompAck、response 前 invalidating-Snoop cancel 与
+  三 packet topology witness；
 - MakeUnique 的 expected/permitted requester 初态、任意已表示 peer state→`I`、零 DAT、丢弃 dirty
   payload、store-intent/completion correlation、`CompAck` 提交时点与 backing/version 不变式；
 - clean 与 dirty participant 状态转换的局部诊断；

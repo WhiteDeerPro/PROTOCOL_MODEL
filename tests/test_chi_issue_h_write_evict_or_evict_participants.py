@@ -29,6 +29,9 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiCopyBackWrDataMessage,
     ChiNetworkPacket,
     ChiRespCode,
+    ChiSnpCleanInvalidMessage,
+    ChiSnpMakeInvalidMessage,
+    ChiSnpRespDataMessage,
     ChiSnpUniqueMessage,
     ChiWriteEvictOrEvictMessage,
 )
@@ -466,34 +469,234 @@ class ChiIssueHWriteEvictOrEvictParticipantTest(unittest.TestCase):
             "write_evict_or_evict_terminal",
         )
 
-    def test_same_line_snoop_remains_blocked(self) -> None:
-        rn = self.build_rn(ChiCacheState.UC)
+    def test_pre_response_invalidating_snoop_cancels_both_terminal_flows(
+        self,
+    ) -> None:
+        snoop_types = (
+            ChiSnpUniqueMessage,
+            ChiSnpCleanInvalidMessage,
+            ChiSnpMakeInvalidMessage,
+        )
+        response_types = (
+            ChiCompDBIDRespMessage,
+            ChiCompMessage,
+        )
+        for initial_state in (ChiCacheState.UC, ChiCacheState.SC):
+            for snoop_type in snoop_types:
+                for response_type in response_types:
+                    with self.subTest(
+                        initial_state=initial_state.value,
+                        snoop=snoop_type.__name__,
+                        response=response_type.__name__,
+                    ):
+                        rn = self.build_rn(initial_state)
+                        issued = self.apply(
+                            rn,
+                            rn.initial_state(),
+                            ChiRnIssueWriteEvictOrEvict(
+                                self.request(initial_state)
+                            ),
+                        )
+                        snooped = self.apply(
+                            rn,
+                            issued.state,
+                            ChiRnAcceptSnoop(
+                                ChiNetworkPacket.snoop(
+                                    snoop_type(0x300, self.ADDRESS),
+                                    source_id=self.HOME,
+                                    target_id=self.RN,
+                                )
+                            ),
+                        )
+
+                        line = snooped.state.line_at(self.ADDRESS)
+                        self.assertIsNotNone(line)
+                        assert line is not None
+                        self.assertIs(ChiCacheState.I, line.state)
+                        self.assertIsNone(line.data)
+                        self.assertNotIn(
+                            self.ADDRESS,
+                            snooped.state.cache.lines,
+                        )
+                        pending = snooped.state.pending_copybacks[
+                            self.TXN_ID
+                        ]
+                        self.assertEqual(
+                            issued.state.pending_copybacks[
+                                self.TXN_ID
+                            ].request,
+                            pending.request,
+                        )
+                        self.assertIs(
+                            ChiRnCopyBackOutcome.CANCELED_I,
+                            pending.outcome,
+                        )
+                        self.assertEqual(1, len(snooped.emissions))
+                        self.assertIs(
+                            ChiRespCode.I,
+                            snooped.emissions[0].message.response,
+                        )
+
+                        response = (
+                            ChiCompDBIDRespMessage(
+                                self.TXN_ID,
+                                self.DBID,
+                            )
+                            if response_type
+                            is ChiCompDBIDRespMessage
+                            else ChiCompMessage(
+                                self.TXN_ID,
+                                self.DBID,
+                                response=ChiRespCode.I,
+                            )
+                        )
+                        completed = self.apply(
+                            rn,
+                            snooped.state,
+                            (
+                                ChiRnAcceptCompDBIDResp(
+                                    ChiNetworkPacket.response(
+                                        response,
+                                        source_id=self.HOME,
+                                        target_id=self.RN,
+                                    )
+                                )
+                                if response_type
+                                is ChiCompDBIDRespMessage
+                                else ChiRnAcceptComp(
+                                    ChiNetworkPacket.response(
+                                        response,
+                                        source_id=self.HOME,
+                                        target_id=self.RN,
+                                    )
+                                )
+                            ),
+                        )
+
+                        self.assertFalse(
+                            completed.state.pending_copybacks
+                        )
+                        terminal = completed.emissions[0].message
+                        if isinstance(
+                            terminal,
+                            ChiCopyBackWrDataMessage,
+                        ):
+                            self.assertIs(
+                                ChiRespCode.I,
+                                terminal.response,
+                            )
+                            self.assertEqual(0, terminal.data)
+                            self.assertEqual(0, terminal.byte_enable)
+                        else:
+                            self.assertIsInstance(
+                                terminal,
+                                ChiCompAckMessage,
+                            )
+                            self.assertEqual(
+                                int(ChiRespCode.I),
+                                terminal.response,
+                            )
+
+    def test_pre_response_snp_unique_can_return_clean_payload_then_cancel(
+        self,
+    ) -> None:
+        rn = self.build_rn(ChiCacheState.SC)
         issued = self.apply(
             rn,
             rn.initial_state(),
             ChiRnIssueWriteEvictOrEvict(
-                self.request(ChiCacheState.UC)
+                self.request(ChiCacheState.SC)
             ),
-        )
-        snoop = ChiNetworkPacket.snoop(
-            ChiSnpUniqueMessage(
-                0x300,
-                self.ADDRESS,
-                do_not_go_to_shared_dirty=True,
-            ),
-            source_id=self.HOME,
-            target_id=self.RN,
         )
 
-        transition = rn.step(
+        snooped = self.apply(
+            rn,
             issued.state,
-            ChiRnAcceptSnoop(snoop),
+            ChiRnAcceptSnoop(
+                ChiNetworkPacket.snoop(
+                    ChiSnpUniqueMessage(
+                        0x301,
+                        self.ADDRESS,
+                        return_to_source=True,
+                    ),
+                    source_id=self.HOME,
+                    target_id=self.RN,
+                )
+            ),
         )
 
-        self.assertIsNone(transition.fault)
-        self.assertIsNotNone(transition.blocked)
-        self.assertIs(issued.state, transition.state)
-        self.assertFalse(transition.emissions)
+        response = snooped.emissions[0].message
+        self.assertIsInstance(response, ChiSnpRespDataMessage)
+        self.assertIs(ChiRespCode.I, response.response)
+        self.assertEqual(self.DATA, response.data)
+        self.assertIs(
+            ChiRnCopyBackOutcome.CANCELED_I,
+            snooped.state.pending_copybacks[self.TXN_ID].outcome,
+        )
+
+    def test_multiple_pre_response_snoops_preserve_canceled_terminal(
+        self,
+    ) -> None:
+        rn = self.build_rn(ChiCacheState.SC)
+        issued = self.apply(
+            rn,
+            rn.initial_state(),
+            ChiRnIssueWriteEvictOrEvict(
+                self.request(ChiCacheState.SC)
+            ),
+        )
+
+        state = issued.state
+        for snoop in (
+            ChiSnpUniqueMessage(0x302, self.ADDRESS),
+            ChiSnpCleanInvalidMessage(0x303, self.ADDRESS),
+        ):
+            snooped = self.apply(
+                rn,
+                state,
+                ChiRnAcceptSnoop(
+                    ChiNetworkPacket.snoop(
+                        snoop,
+                        source_id=self.HOME,
+                        target_id=self.RN,
+                    )
+                ),
+            )
+            self.assertEqual(1, len(snooped.emissions))
+            response = snooped.emissions[0].message
+            self.assertIs(ChiRespCode.I, response.response)
+            self.assertEqual(
+                snoop.transaction_id,
+                response.transaction_id,
+            )
+            self.assertIs(
+                ChiRnCopyBackOutcome.CANCELED_I,
+                snooped.state.pending_copybacks[
+                    self.TXN_ID
+                ].outcome,
+            )
+            state = snooped.state
+
+        completed = self.apply(
+            rn,
+            state,
+            ChiRnAcceptCompDBIDResp(
+                ChiNetworkPacket.response(
+                    ChiCompDBIDRespMessage(
+                        self.TXN_ID,
+                        self.DBID,
+                    ),
+                    source_id=self.HOME,
+                    target_id=self.RN,
+                )
+            ),
+        )
+        self.assertFalse(completed.state.pending_copybacks)
+        terminal = completed.emissions[0].message
+        self.assertIsInstance(terminal, ChiCopyBackWrDataMessage)
+        self.assertIs(ChiRespCode.I, terminal.response)
+        self.assertEqual(0, terminal.data)
+        self.assertEqual(0, terminal.byte_enable)
 
 
 if __name__ == "__main__":

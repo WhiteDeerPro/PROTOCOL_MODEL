@@ -1045,6 +1045,16 @@ class ChiCoherenceState:
                     ChiRnWriteEvictOrEvictPending,
                 )
                 or rn_pending.request != home_pending.request
+                or (
+                    (
+                        home_pending.admission
+                        is ChiHomeCopyBackAdmission.SNOOP_CANCELED
+                    )
+                    != (
+                        rn_pending.outcome
+                        is ChiRnCopyBackOutcome.CANCELED_I
+                    )
+                )
             ):
                 raise ValueError(
                     "expected WriteEvictOrEvict response requires one exact "
@@ -1097,7 +1107,11 @@ class ChiCoherenceState:
             canceled = (
                 isinstance(
                     home_pending,
-                    (ChiHomeWriteBackPending, ChiHomeWriteEvictPending),
+                    (
+                        ChiHomeWriteBackPending,
+                        ChiHomeWriteEvictPending,
+                        ChiHomeWriteEvictOrEvictPending,
+                    ),
                 )
                 and home_pending.admission
                 is ChiHomeCopyBackAdmission.SNOOP_CANCELED
@@ -1133,6 +1147,14 @@ class ChiCoherenceState:
                 or home_pending is None
                 or home_pending.requester_id != key[0]
                 or (
+                    isinstance(
+                        home_pending,
+                        ChiHomeWriteEvictOrEvictPending,
+                    )
+                    and home_pending.decision
+                    is not ChiWriteEvictOrEvictDecision.REQUEST_DATA
+                )
+                or (
                     clean_evict
                     and not canceled
                     and (
@@ -1152,14 +1174,6 @@ class ChiCoherenceState:
                         or message.data != clean_backing_line.data
                         or clean_backing_line.version
                         != home_pending.backing_version
-                        or (
-                            isinstance(
-                                home_pending,
-                                ChiHomeWriteEvictOrEvictPending,
-                            )
-                            and home_pending.decision
-                            is not ChiWriteEvictOrEvictDecision.REQUEST_DATA
-                        )
                     )
                 )
                 or (
@@ -1261,9 +1275,14 @@ class ChiCoherenceState:
                 is not ChiWriteEvictOrEvictDecision.COMPLETE_WITHOUT_DATA
                 or ack.response
                 != (
-                    ChiRespCode.SC
-                    if home_pending.request.likely_shared
-                    else ChiRespCode.UC
+                    ChiRespCode.I
+                    if home_pending.admission
+                    is ChiHomeCopyBackAdmission.SNOOP_CANCELED
+                    else (
+                        ChiRespCode.SC
+                        if home_pending.request.likely_shared
+                        else ChiRespCode.UC
+                    )
                 )
                 or requester_pending is not None
                 or line is None
@@ -1272,8 +1291,8 @@ class ChiCoherenceState:
             ):
                 raise ValueError(
                     "expected WriteEvictOrEvict CompAck requires one exact "
-                    "RN-produced UC/SC acknowledgement and matching Home "
-                    "no-data reservation"
+                    "RN-produced post-Snoop acknowledgement and matching "
+                    "Home no-data reservation"
                 )
         object.__setattr__(
             self,
@@ -3235,18 +3254,71 @@ class ChiCoherenceSession(
                         ChiRnWriteEvictOrEvictPending,
                     )
                     or pending_write_evict_or_evict.request != message
-                    or line is None
-                    or line.state is not expected_state
-                    or line.data is None
-                    or not authority_matches
                 ):
                     return self._fault(
                         state,
                         "write_evict_or_evict_admission_evidence",
-                        "WriteEvictOrEvict does not match one canonical RN "
-                        "pending line and its encoded UC/SC Home authority",
+                        "WriteEvictOrEvict does not match one canonical "
+                        "RN-produced request",
                     )
-                action = ChiHomeAcceptWriteEvictOrEvict(packet)
+                admission = ChiHomeCopyBackAdmission.CURRENT_OWNER
+                canceled = (
+                    pending_write_evict_or_evict.outcome
+                    is ChiRnCopyBackOutcome.CANCELED_I
+                )
+                if canceled and not authority_matches:
+                    if (
+                        line is None
+                        or line.state is not ChiCacheState.I
+                        or line.data is not None
+                        or entry is None
+                        or packet.source_id in entry.sharers
+                        or entry.shared_dirty_owner == packet.source_id
+                        or entry.unique_owner == packet.source_id
+                    ):
+                        return self._fault(
+                            state,
+                            "write_evict_or_evict_cancellation_evidence",
+                            "non-holder WriteEvictOrEvict lacks one matching "
+                            "Snoop-canceled RN outcome",
+                        )
+                    admission = ChiHomeCopyBackAdmission.SNOOP_CANCELED
+                elif (
+                    canceled
+                    and not any(
+                        item.request.address == message.address
+                        for item in state.home.pending.values()
+                    )
+                    and not any(
+                        item.request.address == message.address
+                        for item in state.home.pending_copybacks.values()
+                    )
+                ):
+                    return self._fault(
+                        state,
+                        "write_evict_or_evict_admission_evidence",
+                        "Snoop-canceled WriteEvictOrEvict cannot be "
+                        "admitted as a live current-holder request",
+                    )
+                elif (
+                    not canceled
+                    and (
+                        line is None
+                        or line.state is not expected_state
+                        or line.data is None
+                        or not authority_matches
+                    )
+                ):
+                    return self._fault(
+                        state,
+                        "write_evict_or_evict_admission_evidence",
+                        "live WriteEvictOrEvict lacks its encoded UC/SC "
+                        "line and Home authority",
+                    )
+                action = ChiHomeAcceptWriteEvictOrEvict(
+                    packet,
+                    admission,
+                )
             elif isinstance(message, ChiWriteEvictFullMessage):
                 if packet.source_id not in self.requester_node_ids:
                     return self._fault(
@@ -4506,10 +4578,15 @@ class ChiCoherenceSession(
                         or ack.transaction_id != message.data_buffer_id
                         or ack.response
                         != (
-                            ChiRespCode.SC
-                            if write_evict_or_evict_pending
-                            .request.likely_shared
-                            else ChiRespCode.UC
+                            ChiRespCode.I
+                            if write_evict_or_evict_pending.outcome
+                            is ChiRnCopyBackOutcome.CANCELED_I
+                            else (
+                                ChiRespCode.SC
+                                if write_evict_or_evict_pending
+                                .request.likely_shared
+                                else ChiRespCode.UC
+                            )
                         )
                         or ack_key in acks
                     ):
@@ -4517,7 +4594,7 @@ class ChiCoherenceSession(
                             state,
                             "write_evict_or_evict_ack_evidence",
                             "RN CompAck does not select the consumed Home "
-                            "DBID and encoded UC/SC outcome",
+                            "DBID and post-Snoop outcome",
                         )
                     del responses[response_key]
                     acks[ack_key] = ack_packet

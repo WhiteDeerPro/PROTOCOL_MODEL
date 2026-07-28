@@ -11,7 +11,8 @@ CHI 是一个跨越多张工程视图的协议体系。这个目录是 CHI 具�
 chi/
 └── issue_h/
     ├── representation/   typed protocol message、named logical-field record、
-    │                     NetworkPacket 与 ProtocolFlit；packed bit/pin codec 后续扩展
+    │                     NetworkPacket 与 ProtocolFlit；packed bit layout 后续扩展，
+    │                     physical phit/pin lowering 归 observation/external integration
     ├── transport/        单向 TX→RX TransportLink、共享 activation、分 channel L-Credit/FIFO
     ├── interface/        transaction-local TxnID/DBID/Retry/P-Credit lifecycle
     ├── participants/     RN/Home 的本地状态与行为、router forwarding facet
@@ -100,7 +101,10 @@ ReadNotSharedDirty
 ```
 
 这条 no-SD 路径使原 dirty unique holder 与 requester 最终都成为 clean shared holder；它没有引入
-MOESI 的 `SD`/Owned 状态。这里需要同时保留三种投影：typed message 与 transaction correlation 属于
+MOESI 的 `SD`/Owned 状态。该 MESI slice 可以独立验收；未加入 Owned 只限制 shared-dirty 状态范围，
+不撤销这条 lifecycle 的 closure。DCT（Direct Cache Transfer）是另一条可选 forwarding lifecycle：
+peer RN 直接向 requester 返回数据并另行与 Home 完成 correlation，clean-state path 也可采用，不要求
+先有 Owned。这里需要同时保留三种投影：typed message 与 transaction correlation 属于
 协议表示及完整逻辑接口范围，RN cache/Home directory/pending 属于 participant VirtualDut，NodeID/Home
 authority、feature/flow closure 与稳定点 invariant 属于 SystemProtocol。`TransportLink` 只搬运一条
 transmitter→receiver hop 上的 flit，不解释 coherence opcode；`InterfaceProtocol` 则是项目中“完整逻辑
@@ -141,33 +145,50 @@ payload/version 不变。该三包 REQ/RSP/DAT 路径没有 SNP 或显式 CompAc
 evidence 区分原 TxnID 与 Home DBID。pre-DBID invalidating Snoop 已可把 pending outcome 从
 `LIVE_UC` 转为 `CANCELED_I`，保留 correlation 后以零 data/BE 的 `CopyBackWrData_I` 退休；Home 不
 覆盖新 directory owner、backing 或 clean residency。当前 retain policy 是 fixed-resident sparse
-cache，不包含容量、替换或自动 victim；`CAH=1`、post-DBID Snoop、Retry/error 与
-级联 eviction 仍未闭合。
+cache；容量、替换与自动 victim 是可选 Home/Cache VirtualDut policy。`CAH=1`、post-DBID Snoop、
+Retry/error 与级联 eviction 则是独立 CHI lifecycle/profile 扩展。
 `WriteEvictOrEvict(0x42, CAH=0)` 的双 outcome base 也已闭合。Requester 可从 resident `UC` 或
 clean `SC` 发起，并以 `LikelyShared` 区分；Home 的显式 policy 可以选择
 `CompDBIDResp→CopyBackWrData_{UC,SC}` data outcome，或 `Comp_I→CompAck` no-data outcome。两条路径
 都使 requester 进入 `I` 并只移除其 directory authority；前者安装 Snoop-domain clean residency，
 后者不搬运数据。四种 `UC/SC × data/no-data` resolved witness 都保持 reference backing
 payload/version 不变。该能力是受限模型 profile，不代表完整 CHI allocation/replacement policy；
-same-line Snoop、Retry/error、CAH=1 和容量驱动 outcome 尚未闭合。
-当前仍未实现 packed bit/raw pin codec、multi-packet response、完整 CHI Port、通用 router 仲裁、自动 dirty
-victim/writeback scheduling、coherent DERR/同一 accepted request 已发出 Snoop 后的 error、
-MakeUnique Retry/error/MTE Update/partial write、coherent Retry cancel/multi-waiter
-policy、超出当前窄 witness 的一般 same-line transient/hazard，以及一般 MOESI `SD`/Owned。Participant
-facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，尚未并入通用
-`SystemSession` action loop；有界 scheduler budget 耗尽给出 inconclusive，不作为 network deadlock
-证明。
+Home response 到达前的同址 invalidating Snoop 也已闭合：RN 保留原 REQ/`LikelyShared`，把当前
+outcome 从 `LIVE_UC/LIVE_SC` 改为无 payload 的 `CANCELED_I`；迟到 `CompDBIDResp` 产生零
+data/BE 的 `CopyBackWrData_I`，迟到 `Comp` 产生 `CompAck_I`。system-derived stale-holder
+admission 使两条分支都只退休旧 correlation，不覆盖新 owner、backing 或 clean residency。
+direct 双 Requester witness 覆盖 `UC/SC × data/no-data`；当前 scalar-requester resolver 尚不能构造
+同一 resolved scope 内“旧 RN 发 WEOE、新 RN 发 CleanUnique”的取消 witness。post-response/其他
+Snoop phase、Retry/error、CAH=1 和容量驱动 outcome 尚未闭合。
 
-后续扩展继续以可执行 lifecycle 为单位增加，不把此处建议固化成永久顺序。当前相邻候选先闭合
-pending `WriteEvictOrEvict` 的 same-line invalidating-Snoop outcome/correlation；再比较
-`WriteEvictFull` 的 CAH/post-DBID-Snoop/Retry/error modifier、deliberate dirty invalidate 与其他未闭合
-operation。若下一场景首先受
+### 当前边界如何分类
+
+这些边界不合并成一条“CHI 网络完整度”：
+
+| 维度 | 当前边界与影响 |
+|---|---|
+| CHI lifecycle/profile 覆盖 | coherent DERR、post-Snoop error、MakeUnique Retry/error/MTE Update/partial write、Retry cancel/multi-waiter，以及 WEOE response 前 invalidating-Snoop 之外的 same-line transient 尚未闭合；它们限制可执行 transaction 组合 |
+| representation / packetization | opcode/conditional-field encoding inventory 与 packed layout 属于表示；multi-packet DAT 的分片字段属于表示，split/reassembly、缺失/重复/乱序处理及 terminal retirement 属于 transaction/session。可执行 opcode 还需要 lifecycle、capability/flow、状态效应与 witness |
+| observation / external integration | physical phit/lane、raw pin、RTL adapter/conformance 是观察和接入工作，不计作 CHI lifecycle 功能缺口；CDC/异步采样是跨协议的通用时间方法议题 |
+| participant / VirtualDut policy | victim/LRU 与自动 replacement/writeback 是 Cache policy；snoop filter 是 Home/ICN 的 cache-presence/选靶结构，当前 exact directory holder set 是 reference oracle，带容量、更新和误判行为的 filter 才是可选 backend policy |
+| system construction | dynamic multi-Home/SAM（System Address Map）remap 属于 address→Home authority 与 runtime 选择；需要观察独立 memory commit 时，HN→SN 需要另建 SN participant、flow 和 system witness |
+| coherence state/policy | 当前 no-SD MESI slice 独立成立；一般 `SD`/Owned 是可选 shared-dirty 状态扩展 |
+| forwarding/DCT lifecycle | forwarding Snoop、peer→requester DAT 与 Home correlation 是可选 CHI transaction/capability，不要求 `SD`/Owned |
+| verification property | CHI channel-dependency/forward-progress 规则是实现合同；waiter selection、公平性、wait-for 和 deadlock/livelock verdict 则属于 system/scenario property，规范不要求通用 deadlock detector/unlocker。watchdog 可报无进展或触发场景级 recovery，但不是无死锁证明；有界 scheduler budget 耗尽仍只给出 inconclusive |
+
+Participant facet、identity/capability resolver 和 scheduler 仍是 CHI family 实现，尚未并入通用
+`SystemSession` action loop；这是 runtime 泛化边界，也不是当前 CHI network slice 的功能否定。
+
+后续扩展继续以可执行 lifecycle 为单位增加，不把此处建议固化成永久顺序。
+`WriteEvictOrEvict` response 前的 same-line invalidating-Snoop outcome/correlation 已闭合；下一决策点
+比较 `WriteEvictFull(CAH=1)` 所需的 cached-CAH/hidden-copy provenance、
+post-response-Snoop/Retry/error modifier、deliberate dirty invalidate 与其他未闭合 operation。若下一场景首先受
 并发资源阻塞，则先闭合同一 Home/type 下多个 waiter 的具名选择、释放与公平性 witness。
 `PCrdGrant`、`RetryAck` 仍走 Home→Requester 的 RSP 路径；`PCrdReturn` 根据 CHI Issue H B2.5.6 走
 Requester→Home 的 REQ 路径，router 继续只按 `channel + TgtID` 透明转发。NodeID ownership 与首条
-single-scope address/Home/domain authority 已由 system construction 闭合；multi-Home/SAM 选择和
-MOESI shared-dirty authority 继续由 system construction/monitor 扩展，不作为局部 `TransportLink`
-的占位字段。
+single-scope address/Home/domain authority 已由 system construction 闭合；dynamic multi-Home/SAM 选择和
+动态 address remap 继续由 SystemProtocol authority/construction 扩展。MOESI shared-dirty authority
+则由 participant policy 与 system monitor 共同扩展；两者都不作为局部 `TransportLink` 的占位字段。
 
 架构依据与作用域说明见 `docs/architecture/communication-scope-and-transport.md` 和
 `docs/architecture/ace-chi-communication-scopes.md`。

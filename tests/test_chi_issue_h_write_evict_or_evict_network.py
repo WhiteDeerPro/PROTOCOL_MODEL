@@ -6,18 +6,23 @@ import unittest
 from protocol_model.integrations.recipes.amba.chi import (
     bind_chi_issue_h_cache_lines,
     bind_chi_issue_h_home_vdut,
+    build_chi_cache_participant_fixture,
 )
 from protocol_model.protocols.amba.chi.issue_h.participants import (
     CHI_WRITE_EVICT_OR_EVICT_HOME_CAPABILITIES,
     CHI_WRITE_EVICT_OR_EVICT_REQUESTER_CAPABILITIES,
     ChiCacheLine,
     ChiCacheState,
+    ChiCoherentHomeNode,
+    ChiHomeCopyBackAdmission,
     ChiHomeDirectoryEntry,
     ChiParticipantCapability,
+    ChiRnCopyBackOutcome,
     ChiWriteEvictOrEvictDecision,
 )
 from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiChannelKind,
+    ChiCleanUniqueMessage,
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
     ChiCompMessage,
@@ -27,9 +32,12 @@ from protocol_model.protocols.amba.chi.issue_h.representation import (
     ChiIssueHRspProfile,
     ChiNetworkPacket,
     ChiRespCode,
+    ChiSnpCleanInvalidMessage,
+    ChiSnpRespMessage,
     ChiWriteEvictOrEvictMessage,
 )
 from protocol_model.protocols.amba.chi.issue_h.system import (
+    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
     CHI_FEATURE_WRITE_EVICT_OR_EVICT,
     CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE,
     ChiCoherenceAuthorityContract,
@@ -41,6 +49,7 @@ from protocol_model.protocols.amba.chi.issue_h.system import (
     ChiFeatureContract,
     ChiHomeAuthority,
     ChiLineRelease,
+    ChiSubmitCleanUnique,
     ChiSubmitWriteEvictOrEvict,
     resolve_chi_system,
 )
@@ -74,6 +83,7 @@ from protocol_model.virtual_dut.boundary import (
 
 class ChiIssueHWriteEvictOrEvictNetworkTest(unittest.TestCase):
     REQUESTER = 0x07
+    NEW_REQUESTER = 0x08
     HOME = 0x21
     ADDRESS = 0x8000
     DATA = (1 << 400) | 0xE71C7
@@ -347,6 +357,333 @@ class ChiIssueHWriteEvictOrEvictNetworkTest(unittest.TestCase):
             ChiDeliverCoherencePacket(issued.emissions[0]),
         )
         return session, accepted
+
+    def build_cancellation_session(
+        self,
+        decision: ChiWriteEvictOrEvictDecision,
+        initial_state: ChiCacheState,
+    ) -> ChiCoherenceSession:
+        old_owner = build_chi_cache_participant_fixture(
+            "old_clean_owner",
+            self.REQUESTER,
+            self.HOME,
+            initial_lines=(
+                ChiCacheLine(
+                    self.ADDRESS,
+                    initial_state,
+                    self.DATA,
+                ),
+            ),
+        )
+        new_owner = build_chi_cache_participant_fixture(
+            "new_clean_owner",
+            self.NEW_REQUESTER,
+            self.HOME,
+        )
+        home = ChiCoherentHomeNode(
+            "weoe_cancel_home",
+            self.HOME,
+            backing_core=FullLineBackingCore(
+                "weoe_cancel_home.backing",
+                line_bytes=64,
+                initial_lines=(
+                    BackingLine(self.ADDRESS, self.DATA),
+                ),
+            ),
+            initial_directory=(
+                ChiHomeDirectoryEntry(
+                    self.ADDRESS,
+                    unique_owner=(
+                        self.REQUESTER
+                        if initial_state is ChiCacheState.UC
+                        else None
+                    ),
+                    sharers=(
+                        frozenset((self.REQUESTER,))
+                        if initial_state is ChiCacheState.SC
+                        else frozenset()
+                    ),
+                ),
+            ),
+            clean_residency_core=CacheCore(
+                "weoe_cancel_home.clean",
+                CacheLineStore(
+                    "weoe_cancel_home.clean.lines",
+                    line_bytes=64,
+                ),
+            ),
+            initial_data_buffer_id=self.DBID,
+            write_evict_or_evict_policy=(
+                lambda _request, _state: decision
+            ),
+        )
+        return ChiCoherenceSession(
+            "weoe_snoop_cancel",
+            home,
+            {
+                self.REQUESTER: old_owner,
+                self.NEW_REQUESTER: new_owner,
+            },
+            enabled_features=frozenset(
+                (
+                    CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
+                    CHI_FEATURE_WRITE_EVICT_OR_EVICT,
+                )
+            ),
+            requester_node_ids=frozenset(
+                (self.REQUESTER, self.NEW_REQUESTER)
+            ),
+            snoopee_node_ids=frozenset(
+                (self.REQUESTER, self.NEW_REQUESTER)
+            ),
+        )
+
+    def test_delayed_request_retires_both_snoop_canceled_home_outcomes(
+        self,
+    ) -> None:
+        for initial_state in (ChiCacheState.UC, ChiCacheState.SC):
+            for decision in (
+                ChiWriteEvictOrEvictDecision.REQUEST_DATA,
+                ChiWriteEvictOrEvictDecision.COMPLETE_WITHOUT_DATA,
+            ):
+                with self.subTest(
+                    initial_state=initial_state.value,
+                    decision=decision.value,
+                ):
+                    self._assert_delayed_request_cancellation(
+                        initial_state,
+                        decision,
+                    )
+
+    def _assert_delayed_request_cancellation(
+        self,
+        initial_state: ChiCacheState,
+        decision: ChiWriteEvictOrEvictDecision,
+    ) -> None:
+        session = self.build_cancellation_session(
+            decision,
+            initial_state,
+        )
+        initial = session.initial_state()
+        backing_before = initial.home.backing.line_at(self.ADDRESS)
+
+        weoe_issued = self.apply(
+            session,
+            initial,
+            ChiSubmitWriteEvictOrEvict(
+                self.REQUESTER,
+                ChiWriteEvictOrEvictMessage(
+                    self.TXN_ID,
+                    self.ADDRESS,
+                    likely_shared=initial_state is ChiCacheState.SC,
+                ),
+            ),
+        )
+        delayed_weoe = weoe_issued.emissions[0]
+        clean_unique_issued = self.apply(
+            session,
+            weoe_issued.state,
+            ChiSubmitCleanUnique(
+                self.NEW_REQUESTER,
+                ChiCleanUniqueMessage(
+                    self.TXN_ID + 1,
+                    self.ADDRESS,
+                ),
+            ),
+        )
+        clean_unique_at_home = self.apply(
+            session,
+            clean_unique_issued.state,
+            ChiDeliverCoherencePacket(clean_unique_issued.emissions[0]),
+        )
+        snoop_packet = clean_unique_at_home.emissions[0]
+        self.assertIsInstance(
+            snoop_packet.message,
+            ChiSnpCleanInvalidMessage,
+        )
+
+        old_owner_snooped = self.apply(
+            session,
+            clean_unique_at_home.state,
+            ChiDeliverCoherencePacket(snoop_packet),
+        )
+        old_state = old_owner_snooped.state.request_nodes[self.REQUESTER]
+        self.assertIs(
+            ChiRnCopyBackOutcome.CANCELED_I,
+            old_state.pending_copybacks[self.TXN_ID].outcome,
+        )
+        snoop_response = old_owner_snooped.emissions[0]
+        self.assertIsInstance(
+            snoop_response.message,
+            ChiSnpRespMessage,
+        )
+        self.assertIs(
+            ChiRespCode.I,
+            snoop_response.message.response,
+        )
+
+        clean_unique_collected = self.apply(
+            session,
+            old_owner_snooped.state,
+            ChiDeliverCoherencePacket(snoop_response),
+        )
+        new_owner_completed = self.apply(
+            session,
+            clean_unique_collected.state,
+            ChiDeliverCoherencePacket(
+                clean_unique_collected.emissions[0]
+            ),
+        )
+        clean_unique_retired = self.apply(
+            session,
+            new_owner_completed.state,
+            ChiDeliverCoherencePacket(new_owner_completed.emissions[0]),
+        )
+        directory_after_snoop = (
+            clean_unique_retired.state.home.directory[self.ADDRESS]
+        )
+        backing_after_snoop = (
+            clean_unique_retired.state.home.backing.line_at(self.ADDRESS)
+        )
+        clean_after_snoop = (
+            clean_unique_retired.state.home.clean_residency
+        )
+        self.assertEqual(
+            self.NEW_REQUESTER,
+            directory_after_snoop.unique_owner,
+        )
+        self.assertEqual(backing_before, backing_after_snoop)
+
+        canceled_at_home = self.apply(
+            session,
+            clean_unique_retired.state,
+            ChiDeliverCoherencePacket(delayed_weoe),
+        )
+        exact_response = canceled_at_home.emissions[0]
+        home_pending = next(
+            iter(canceled_at_home.state.home.pending_copybacks.values())
+        )
+        self.assertIs(
+            ChiHomeCopyBackAdmission.SNOOP_CANCELED,
+            home_pending.admission,
+        )
+        self.assertEqual(
+            exact_response,
+            canceled_at_home.state
+            .expected_write_evict_or_evict_responses[
+                (self.REQUESTER, self.TXN_ID)
+            ],
+        )
+
+        canceled_at_rn = self.apply(
+            session,
+            canceled_at_home.state,
+            ChiDeliverCoherencePacket(exact_response),
+        )
+        exact_terminal = canceled_at_rn.emissions[0]
+        terminal = exact_terminal.message
+        self.assertIs(ChiRespCode.I, terminal.response)
+        if isinstance(terminal, ChiCopyBackWrDataMessage):
+            self.assertEqual(0, terminal.data)
+            self.assertEqual(0, terminal.byte_enable)
+            expected_terminal = (
+                canceled_at_rn.state.expected_copyback_data[
+                    (self.REQUESTER, terminal.transaction_id)
+                ]
+            )
+            forged_terminal = replace(
+                exact_terminal,
+                message=replace(
+                    terminal,
+                    data=self.DATA,
+                    response=ChiRespCode.UC,
+                    byte_enable=(1 << 64) - 1,
+                ),
+            )
+            forged_rule = "copyback_correlation"
+        else:
+            self.assertIsInstance(terminal, ChiCompAckMessage)
+            expected_terminal = (
+                canceled_at_rn.state.expected_write_evict_or_evict_acks[
+                    (self.REQUESTER, terminal.transaction_id)
+                ]
+            )
+            forged_terminal = replace(
+                exact_terminal,
+                message=replace(
+                    terminal,
+                    response=ChiRespCode.UC,
+                ),
+            )
+            forged_rule = "write_evict_or_evict_ack_correlation"
+            wrong_terminal_class = ChiNetworkPacket.data(
+                ChiCopyBackWrDataMessage(
+                    terminal.transaction_id,
+                    0,
+                    response=ChiRespCode.I,
+                    byte_enable=0,
+                ),
+                source_id=self.REQUESTER,
+                target_id=self.HOME,
+            )
+            with self.assertRaisesRegex(
+                ValueError,
+                "expected CopyBackWrData",
+            ):
+                replace(
+                    canceled_at_rn.state,
+                    expected_write_evict_or_evict_acks={},
+                    expected_copyback_data={
+                        (
+                            self.REQUESTER,
+                            terminal.transaction_id,
+                        ): wrong_terminal_class
+                    },
+                )
+        self.assertEqual(exact_terminal, expected_terminal)
+        rejected_terminal = session.step(
+            canceled_at_rn.state,
+            ChiDeliverCoherencePacket(forged_terminal),
+        )
+        self.assert_atomic_fault(
+            rejected_terminal,
+            canceled_at_rn.state,
+            forged_rule,
+        )
+
+        retired = self.apply(
+            session,
+            canceled_at_rn.state,
+            ChiDeliverCoherencePacket(exact_terminal),
+        )
+        self.assertEqual(
+            directory_after_snoop,
+            retired.state.home.directory[self.ADDRESS],
+        )
+        self.assertEqual(
+            backing_after_snoop,
+            retired.state.home.backing.line_at(self.ADDRESS),
+        )
+        self.assertEqual(
+            clean_after_snoop,
+            retired.state.home.clean_residency,
+        )
+        self.assertFalse(retired.state.home.pending_copybacks)
+        self.assertFalse(retired.state.expected_copyback_data)
+        self.assertFalse(
+            retired.state.expected_write_evict_or_evict_acks
+        )
+        self.assertTrue(session.is_quiescent(retired.state))
+
+        replayed = session.step(
+            retired.state,
+            ChiDeliverCoherencePacket(delayed_weoe),
+        )
+        self.assert_atomic_fault(
+            replayed,
+            retired.state,
+            "write_evict_or_evict_admission_evidence",
+        )
 
     def test_system_rejects_request_replay_after_home_outcome(
         self,

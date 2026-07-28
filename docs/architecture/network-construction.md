@@ -128,11 +128,18 @@ protocol flit ── one directed hop ── protocol flit
 identity；router、route table 和 network lineage 消费这个对象。CHI Issue H 又规定每个 protocol packet
 恰好装入一个 protocol flit，并且每个 flit 由一个 phit 传送。这两个一对一关系不会合并对象：L-Credit、
 activation、backpressure 和 deactivation 是逐 hop flit 生命周期，route identity 与 packet copy 则在跨 hop
-网络中保持。
+网络中保持。当前 executable profile 采用一份 logical message 对应一个 packet；未来 multi-packet DAT
+需要补 fragment/DataID/字段一致性以及 splitter；transaction/session 还要负责 reassembly、缺失/重复/乱序
+检查和 terminal retirement。以 64B line 的 full-width data path 为例，128/256/512-bit DAT payload
+通常分别形成 4/2/1 个 packet。它是表示与 transaction aggregation 的增量，不否定当前 packet/flit
+网络的可运输性。类似地，opcode/conditional-field **encoding inventory** 属于表示；若声称 opcode
+可执行，还必须同时给出 lifecycle、capability/flow、状态效应和 witness。
 
 `LCrdReturn` 一类 link-maintenance flit 不携带 network packet。它只在当前 transmitter 与相邻 receiver
 之间归还 Link resource，不经过 router，也不成为端到端 transaction 的 protocol message。当前模型同样不把
-phit 展开成 raw pins、lane 或 PHY transfer；`AtomicFrame` 观察的是 normalized Link 边界。
+physical phit 展开成 raw pins、lane 或 PHY transfer；`AtomicFrame` 观察的是 normalized Link 边界。
+这些 lowering 属于 observation/external-integration，并不构成 CHI participant lifecycle 或 resolved
+network 的功能完整性条件。
 
 SNP 给出了保留这些层次的直接理由。Snoop request 的协议格式不定义 `TgtID`，Snoopee 由 interconnect 选择。
 因此 system/network construction 为每个选中的 Snoopee 建立一份显式 packet copy，并把选定 NodeID 放入
@@ -142,9 +149,13 @@ activation、L-Credit、
 FIFO/reservation、背压和 capture/drain。受限 coherent Home 会从显式 directory holder 中选择目标，
 生成 per-target packet，并聚合 clean response 或 dirty data。clean Shared/Unique、dirty unique
 responsibility transfer 和 no-SD `ReadNotSharedDirty` 都能由组合 session 经 resolved network 逐份运输。
-coherence-domain 成员已由 authority resolver 派生为有限 Snoopee set；真实 snoop filter、router
-multicast、动态成员变化以及 MOESI shared-dirty/forwarding 仍属于后续 participant/system 行为，不由
-transport 自动补出。
+coherence-domain 成员已由 authority resolver 派生为有限 Snoopee set；stateful snoop filter、router
+multicast、动态成员变化、shared-dirty state 与 forwarding lifecycle 都不由 transport 自动补出。其中 snoop filter
+是 Home/ICN VirtualDut 维护的 cache-presence/选靶结构；当前 exact directory holder set 是 reference
+oracle。容量型 filter 的假阳性只产生额外 Snoop，若依据 filter 抑制必要 Snoop，假阴性会破坏一致性。
+router multicast 是 network forwarding 机制，动态 membership 是 SystemProtocol authority。`SD`/Owned
+属于可选 coherence-state/policy；DCT（Direct Cache Transfer）是可独立增加的 forwarding
+transaction/capability，不依赖 Owned。
 
 ## 2. 五个构建阶段
 
@@ -226,7 +237,8 @@ dirty-to-clean-shared 路径。
 - wait-for graph 与 deadlock witness；
 - boundary hide 后的行为 refinement。
 
-这些是 SystemProtocol 的派生分析，不应要求 InterfaceProtocol 或单个 VirtualDut 预先知道完整网络。
+这些是 SystemProtocol/scenario 的派生验证 property，不应要求 InterfaceProtocol 或单个 VirtualDut 预先
+知道完整网络，也不是某个 CHI opcode 或现有 route 可执行的前置条件。
 
 ## 3. System 对模块边界提出什么要求
 
@@ -237,11 +249,11 @@ coherent participant 需要唯一的 NodeID，两个直连端口也需要兼容�
 
 | 事实类别 | 权威位置 | 典型内容 | 如何作用到模块 |
 |---|---|---|---|
-| 全局 authority | SystemProtocol 的 system intent/plan | address/home 分配、NodeID namespace、coherence/DVM membership、security zone、QoS policy、clock/reset topology | elaboration 为相关 participant、port 或 backend 产生具名 projection |
+| 全局 authority | SystemProtocol 的 system intent/plan | address/home 分配、dynamic multi-Home、SAM（System Address Map）remap、NodeID namespace、coherence/DVM membership、security zone、QoS policy、clock/reset topology | elaboration 为相关 participant、port 或 backend 产生具名 projection |
 | boundary capability / requirement | VirtualDut、ProtocolParticipant 或 InterfacePort 的边界合同 | width、burst、ID、outstanding、ordering、coherent opcode、security/QoS class、domain compatibility | 比较模块的 offer 与网络路径的 requirement；不满足时给出 construction diagnostic |
 | per-transaction field/message | InterfaceProtocol event、typed operation 或 typed protocol message | `AxPROT`、`AxCACHE`、`AxQOS`、`AxDOMAIN/AxSNOOP`、CHI opcode/TxnID/address、interrupt notification | source backend/attachment 发出；接口或表示 contract 检查，bridge stage 显式 preserve、rewrite、default、drop 或 reject |
 | per-packet route identity | CHI network representation 与 resolved route plan | source/target NodeID、packet copy identity；SNP 的选定 Snoopee target | system/network construction 生成 packet，router 按显式 route identity 转发；不回写 protocol message |
-| local executable state | 对应 VirtualDut backend | cache tag/data/permission、真实 directory/SAM、bridge FIFO、owner table、arbiter state | backend 依据输入和本地配置更新；SystemProtocol 不反射或代替这份状态 |
+| local executable state | 对应 VirtualDut backend | cache tag/data/permission、真实 directory、SAM lookup/cache、snoop-filter、bridge FIFO、owner table、arbiter state | backend 依据输入和本地配置更新；SAM/snoop-filter 的本地实现不取代 SystemProtocol 的 address/Home 与 coherence-domain authority |
 | system monitor ledger/property | stateful system monitor | 稀疏 owner/shared/dirty reference ledger、跨 connection transaction owner、response aggregation、PoC/PoS ordering、wait-for/fairness | 从系统可见事件更新，用来核对多个模块共同形成的行为 |
 
 `ProtocolParticipant` 是这里的逻辑协议参与者。CHI Issue H 已先建立 family-specific
@@ -310,11 +322,11 @@ dirty data/responsibility→CompData_SC→CompAck→Home backing/directory commi
 clean `ReadShared` 与任一允许 `UD` 的 feature 组合仍在本 profile 之外。
 `SC→ReadUnique→UC→local write→UD` 与保留本地数据的 `SC→CleanUnique→UC→local write→UD` 已实现；
 clean `ReadUnique` 的单次 Retry 也已经经 resolved XP topology 自动闭合 RetryAck、PCrdGrant、
-credited reissue 与原有 SnpUnique lifecycle；显式 `UD` writeback 已经经同类 topology 闭合。真实 snoop
-filter、router multicast、自动 dirty victim/writeback scheduling、deliberate dirty invalidate、一般
-same-line transient/hazard 和
-一般 MOESI `SD`/Owned 仍属于后续
-participant/system 能力。
+credited reissue 与原有 SnpUnique lifecycle；显式 `UD` writeback 已经经同类 topology 闭合。一般
+same-line transient/hazard 与 deliberate dirty invalidate 是后续 lifecycle/profile；自动 dirty
+victim/writeback scheduling 是可选 Cache VirtualDut policy；stateful snoop filter 是 Home/interconnect
+backend policy；router multicast 是 network forwarding 扩展。一般 `SD`/Owned 是 no-SD MESI 之上的
+coherence-state/policy；forwarding snoop/DCT 则是可独立增加的 CHI lifecycle/capability。
 
 clean `WriteEvictFull(CAH=0)` 也已作为独立 REQ/RSP/DAT feature 闭合：调用方先显式选择一条 resident
 `UC` line，Home 用 `CompDBIDResp` 分配 DBID，RN 发出 full-line `CopyBackWrData_UC` 并进入 `I`；
@@ -324,8 +336,8 @@ coherence domain；membership 继续属于 SystemProtocol。与另一 coherence 
 WEF 已可接纳 pre-DBID `SnpUnique`/`SnpCleanInvalid`/`SnpMakeInvalid`，保留 CopyBack correlation，
 再以零 payload 的 `CopyBackWrData_I` 退休；SNP flow 仍归触发 Snoop 的 feature。Home 对 cancel
 只释放 DBID，不改 directory、backing 或 clean residency。当前固定 sparse retain，不包含自动
-victim/replacement、容量策略、下游 read hit、`CAH=1`、post-DBID Snoop、Retry/error 或
-级联 eviction。
+victim/replacement、容量策略或下游 read hit；这些属于可选 Home/Cache VirtualDut policy。`CAH=1`、
+post-DBID Snoop、Retry/error 与级联 eviction 则属于后续 lifecycle/profile。
 
 `WriteEvictOrEvict(CAH=0)` 也已作为独立 feature 闭合。Requester 从 resident `UC` 或 clean `SC`
 发起，`LikelyShared` 与 participant permission/directory holder 必须一致；显式 Home policy 可选择
@@ -333,7 +345,11 @@ victim/replacement、容量策略、下游 read hit、`CAH=1`、post-DBID Snoop�
 Snoop-domain clean residency，后者不搬运数据；两者都只删除 requester authority、使 RN 进入 `I`，
 并保持 reference backing payload/version 不变。resolver 同时闭合 REQ、Home→Requester RSP、
 Requester→Home DAT 与 CompAck RSP 四条 flow，`UC/SC × data/no-data` resolved witness 各恰好运输三个
-packet。该 base 当前不含 same-line Snoop、Retry/error、CAH=1、容量驱动 outcome policy 或自动 replacement。
+packet。response 前的同址 invalidating Snoop 另由 direct 双 Requester witness 闭合：RN 保存
+`CANCELED_I`，迟到 data/no-data outcome 分别形成零载荷 `CopyBackWrData_I`/`CompAck_I`，Home
+只退休旧 correlation。当前不含 post-response/其他 Snoop phase、Retry/error、CAH=1、容量驱动
+outcome policy 或自动 replacement。前四项限制 WEOE profile，自动 replacement 是可选 VirtualDut
+policy；二者不合并为一个网络可用性判断。
 
 clean `Evict` 已作为独立 REQ/RSP-only feature 闭合：RN 从 `UC/UCE/SC` 先转 `I`，Home 只条件删除
 matching clean holder 并返回 `Comp_I`；stale 或目录明确标记为 shared-dirty responsibility 的 hint
@@ -359,6 +375,11 @@ NodeID、Home/domain authority、feature/flow closure 和跨节点 invariant 属
 `TransportLink` 只表示一条有向 transmitter→receiver hop，不解释 coherence opcode；`InterfaceProtocol`
 是项目中完整逻辑接口的作用域名称，不是 CHI 规范 Link layer 的别名。
 
+当前 Home reference backing 已足以检查上述 coherence slice 的 payload/authority invariant。若验证目标要求
+观察独立 memory protocol commit，应另构造 SN participant、topology-visible HN→SN flow 与 system witness；
+这是下游 system-integration slice，不把 AXI/APB memory backend 暗绑成 Home state，也不作为现有 RN↔Home
+网络 closure 的前置条件。
+
 QoS 也沿相同边界展开：`AxQOS` 是事务字段，仲裁算法和队列状态属于 interconnect VirtualDut，端到端
 fairness、带宽或 latency 目标属于 system/scenario property。Security transaction intent 由 attachment
 解码，endpoint/firewall backend 作实际允许或拒绝决定，SystemProtocol 检查 security-zone reachability。
@@ -367,6 +388,10 @@ clock/reset 通常形成独立的 control topology。`InterfacePort` 可以声�
 要求不兼容路径经过明确 CDC/reset-isolation module；观察层再把 RTL pin 采样 lowering 为模型动作。Interrupt
 若使用专用线，应建成 notification/control interface 并经过 interrupt-controller VirtualDut；MSI 则自然表现为
 地址写操作。两者都不需要向每笔 AMBA address transaction 追加隐式字段。
+
+当前 CDC elaboration 与异步采样仍是跨协议的通用 control-topology/观察方法议题；RTL pin、physical
+phit/lane 和 cycle timing 则是 observation/external-integration。它们不计作 CHI lifecycle 或 logical
+network 的功能完整性缺口。
 
 ### 3.3 当前代码边界
 
@@ -400,14 +425,18 @@ transport projection；其余 property 仍未闭合：
   Requester/Home/Snoopee capability、五类 flow、participant lifecycle 和 dirty-peer topology witness
   也已闭合，且不依赖 CleanUnique。Retry 与 NDERR modifier
   现可联合闭合经 XP 的六 packet 路径；direct 双 Requester witness 另证明等待 P-Credit 时可响应独立
-  同址 Snoop 而保留 correlation。当前不含 coherent cancel、多 waiter policy、DERR 或同一 accepted
+  同址 Snoop 而保留 correlation。当前 CHI lifecycle/profile 不含 coherent cancel、DERR 或同一 accepted
   request 已发出 Snoop 后的 error，
-  或超出该窄 witness 的 Retry/Snoop 到达次序。通用 participant plan、
-  multi-Home/SAM authority、
-  MakeUnique Retry/error/MTE Update/partial-write 扩展、自动 dirty victim/writeback scheduling、
+  或超出该窄 witness 的 Retry/Snoop 到达次序，也未闭合 MakeUnique Retry/error/MTE Update/partial-write、
   deliberate dirty invalidate、`WriteEvictFull` CAH/post-DBID-Snoop/Retry/error modifier、
-  `WriteEvictOrEvict` same-line-Snoop/Retry/error、CAH=1 与容量驱动 outcome policy、
-  一般 same-line transient/hazard、MOESI `SD`/Owned 与 network deadlock analysis 仍待实现；
+  `WriteEvictOrEvict` post-response/其他 Snoop phase、Retry/error、CAH=1、容量驱动 outcome policy 与一般
+  same-line transient/hazard；其 response 前 invalidating-Snoop cancel 已以
+  `CANCELED_I→CopyBackWrData_I/CompAck_I` 闭合。通用 participant plan 和 dynamic multi-Home/SAM 是
+  system construction；自动 dirty victim/writeback 是可选 VirtualDut policy；`SD`/Owned 是
+  coherence-state 扩展，forwarding/DCT 是可选 CHI lifecycle/capability；多 waiter policy/fairness 与
+  network deadlock analyzer/verdict 是验证 property，但被建模网络仍须满足适用的 channel-dependency 与
+  forward-progress 合同。它们仍待各自场景驱动，但不是一组等价的
+  CHI network blocker；
 - 多跳 address/coherence plan、通用 `ProtocolParticipant`，以及 external/opaque VirtualDut projection 核对
   仍待实现；generated address router 的 route projection 和 CHI-family identity plan 已先行接通；
 - translation 内已有 V1 `CapabilitySet/CapabilityRelation` 和 `SemanticEffect`，但尚未与 InterfacePort capability

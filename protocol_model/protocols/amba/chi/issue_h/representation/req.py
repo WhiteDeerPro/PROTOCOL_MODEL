@@ -1,11 +1,12 @@
 """Typed forms for the first executable CHI Issue H REQ-channel slice.
 
 This module deliberately represents fields by meaning rather than packing a
-REQFLIT bit vector.  ``ReadNoSnp``, ``ReadShared``,
+REQFLIT bit vector.  ``ReadNoSnp``, ``WriteNoSnpPtl``,
+``WriteNoSnpFull``, ``ReadShared``,
 ``ReadNotSharedDirty``, ``ReadUnique``, ``CleanUnique``, ``Evict``,
 ``MakeUnique``, ``WriteBackFull``, ``WriteEvictFull``,
-``WriteEvictOrEvict``, and ``PCrdReturn`` are the currently implemented
-protocol messages;
+``WriteEvictOrEvict``, ``AtomicLoadAdd``, ``AtomicSwap``, and ``PCrdReturn``
+are the currently implemented protocol messages;
 ``LCrdReturn`` is the REQ-channel link-maintenance flit.  Routing NodeIDs are
 added by the Network packet.
 """
@@ -32,7 +33,11 @@ class ChiReqOpcode(IntEnum):
     EVICT = 0x0D
     WRITE_EVICT_FULL = 0x15
     WRITE_BACK_FULL = 0x1B
+    WRITE_NO_SNP_PTL = 0x1C
+    WRITE_NO_SNP_FULL = 0x1D
     READ_NOT_SHARED_DIRTY = 0x26
+    ATOMIC_LOAD_ADD = 0x30
+    ATOMIC_SWAP = 0x38
     WRITE_EVICT_OR_EVICT = 0x42
 
 
@@ -73,6 +78,7 @@ class ChiReadNoSnpMessage:
     protocol_credit_type: int = 0
     memory_attributes: int = 0
     snoop_attribute: bool = False
+    logical_processor_id: int = 0
     exclusive: bool = False
     expect_completion_ack: bool = False
     tag_operation: int = 0
@@ -87,6 +93,7 @@ class ChiReadNoSnpMessage:
             ("order", self.order, 2),
             ("protocol_credit_type", self.protocol_credit_type, 4),
             ("memory_attributes", self.memory_attributes, 4),
+            ("logical_processor_id", self.logical_processor_id, 5),
             ("tag_operation", self.tag_operation, 2),
         ):
             _require_uint(name, value, width)
@@ -114,6 +121,236 @@ class ChiReadNoSnpMessage:
         """Return the transaction key within one Requester identity."""
 
         return self.transaction_id
+
+
+@dataclass(frozen=True)
+class ChiWriteNoSnpPtlMessage:
+    """Semantic fields of one partial ``WriteNoSnpPtl`` REQ message.
+
+    The request identifies a power-of-two data window up to one cache line.
+    The REQ carries neither data nor byte enables; those belong to the later
+    ``NonCopyBackWrData`` DAT after the Completer supplies a DBID.
+    """
+
+    chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.REQ
+    chi_item_kind: ClassVar[ChiChannelItemKind] = (
+        ChiChannelItemKind.PROTOCOL_MESSAGE
+    )
+
+    transaction_id: int
+    address: int
+    size: int
+    qos: int = 0
+    pas: int = 0
+    likely_shared: bool = False
+    allow_retry: bool = True
+    order: int = 0
+    protocol_credit_type: int = 0
+    memory_attributes: int = 0b0101
+    snoop_attribute: bool = False
+    logical_processor_id: int = 0
+    exclusive: bool = False
+    expect_completion_ack: bool = False
+    tag_operation: int = 0
+    trace_tag: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value, width in (
+            ("transaction_id", self.transaction_id, 12),
+            ("size", self.size, 3),
+            ("qos", self.qos, 4),
+            ("pas", self.pas, 3),
+            ("order", self.order, 2),
+            ("protocol_credit_type", self.protocol_credit_type, 4),
+            ("memory_attributes", self.memory_attributes, 4),
+            ("logical_processor_id", self.logical_processor_id, 5),
+            ("tag_operation", self.tag_operation, 2),
+        ):
+            _require_uint(name, value, width)
+        if self.size == 7:
+            raise ValueError("WriteNoSnpPtl size encoding 7 is reserved")
+        for name, value in (
+            ("likely_shared", self.likely_shared),
+            ("allow_retry", self.allow_retry),
+            ("snoop_attribute", self.snoop_attribute),
+            ("exclusive", self.exclusive),
+            ("expect_completion_ack", self.expect_completion_ack),
+            ("trace_tag", self.trace_tag),
+        ):
+            _require_bool(name, value)
+        if (
+            not isinstance(self.address, int)
+            or isinstance(self.address, bool)
+            or self.address < 0
+        ):
+            raise ValueError("address must be a non-negative integer")
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.WRITE_NO_SNP_PTL
+
+    @property
+    def semantic_key(self) -> int:
+        """Return the original Requester-owned transaction identifier."""
+
+        return self.transaction_id
+
+
+@dataclass(frozen=True)
+class ChiWriteNoSnpFullMessage:
+    """Semantic fields of one full-line ``WriteNoSnpFull`` REQ message.
+
+    The REQ carries the operation shape and Requester-owned TxnID only.  Write
+    data and byte enables belong to the later ``NonCopyBackWrData`` DAT
+    message after the Completer supplies a DBID.
+    """
+
+    chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.REQ
+    chi_item_kind: ClassVar[ChiChannelItemKind] = (
+        ChiChannelItemKind.PROTOCOL_MESSAGE
+    )
+
+    transaction_id: int
+    address: int
+    size: int = 6
+    qos: int = 0
+    pas: int = 0
+    likely_shared: bool = False
+    allow_retry: bool = True
+    order: int = 0
+    protocol_credit_type: int = 0
+    memory_attributes: int = 0b0101
+    snoop_attribute: bool = False
+    logical_processor_id: int = 0
+    exclusive: bool = False
+    expect_completion_ack: bool = False
+    tag_operation: int = 0
+    trace_tag: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value, width in (
+            ("transaction_id", self.transaction_id, 12),
+            ("size", self.size, 3),
+            ("qos", self.qos, 4),
+            ("pas", self.pas, 3),
+            ("order", self.order, 2),
+            ("protocol_credit_type", self.protocol_credit_type, 4),
+            ("memory_attributes", self.memory_attributes, 4),
+            ("logical_processor_id", self.logical_processor_id, 5),
+            ("tag_operation", self.tag_operation, 2),
+        ):
+            _require_uint(name, value, width)
+        if self.size == 7:
+            raise ValueError("WriteNoSnpFull size encoding 7 is reserved")
+        for name, value in (
+            ("likely_shared", self.likely_shared),
+            ("allow_retry", self.allow_retry),
+            ("snoop_attribute", self.snoop_attribute),
+            ("exclusive", self.exclusive),
+            ("expect_completion_ack", self.expect_completion_ack),
+            ("trace_tag", self.trace_tag),
+        ):
+            _require_bool(name, value)
+        if (
+            not isinstance(self.address, int)
+            or isinstance(self.address, bool)
+            or self.address < 0
+        ):
+            raise ValueError("address must be a non-negative integer")
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.WRITE_NO_SNP_FULL
+
+    @property
+    def semantic_key(self) -> int:
+        """Return the original Requester-owned transaction identifier."""
+
+        return self.transaction_id
+
+
+@dataclass(frozen=True)
+class _ChiAtomicRequestMessage:
+    """Fields shared by the represented returning Atomic REQ messages.
+
+    The operation data is sent later in ``NonCopyBackWrData`` after the Home
+    grants a DBID. ``ReturnNID`` is not represented here because the current
+    forms are Requester-to-Home, where that field is inapplicable and zero;
+    route identities remain on :class:`ChiNetworkPacket`.
+    """
+
+    chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.REQ
+    chi_item_kind: ClassVar[ChiChannelItemKind] = (
+        ChiChannelItemKind.PROTOCOL_MESSAGE
+    )
+
+    transaction_id: int
+    address: int
+    size: int = 3
+    qos: int = 0
+    pas: int = 0
+    allow_retry: bool = True
+    order: int = 0
+    protocol_credit_type: int = 0
+    memory_attributes: int = 0b0001
+    snoop_attribute: bool = False
+    snoop_me: bool = False
+    endian: bool = False
+    expect_completion_ack: bool = False
+    tag_operation: int = 0
+    trace_tag: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value, width in (
+            ("transaction_id", self.transaction_id, 12),
+            ("size", self.size, 3),
+            ("qos", self.qos, 4),
+            ("pas", self.pas, 3),
+            ("order", self.order, 2),
+            ("protocol_credit_type", self.protocol_credit_type, 4),
+            ("memory_attributes", self.memory_attributes, 4),
+            ("tag_operation", self.tag_operation, 2),
+        ):
+            _require_uint(name, value, width)
+        if self.size == 7:
+            raise ValueError("Atomic size encoding 7 is reserved")
+        for name, value in (
+            ("allow_retry", self.allow_retry),
+            ("snoop_attribute", self.snoop_attribute),
+            ("snoop_me", self.snoop_me),
+            ("endian", self.endian),
+            ("expect_completion_ack", self.expect_completion_ack),
+            ("trace_tag", self.trace_tag),
+        ):
+            _require_bool(name, value)
+        if (
+            not isinstance(self.address, int)
+            or isinstance(self.address, bool)
+            or self.address < 0
+        ):
+            raise ValueError("address must be a non-negative integer")
+
+    @property
+    def semantic_key(self) -> int:
+        return self.transaction_id
+
+
+@dataclass(frozen=True)
+class ChiAtomicLoadAddMessage(_ChiAtomicRequestMessage):
+    """Semantic fields of one ``AtomicLoad ADD`` REQ message."""
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.ATOMIC_LOAD_ADD
+
+
+@dataclass(frozen=True)
+class ChiAtomicSwapMessage(_ChiAtomicRequestMessage):
+    """Semantic fields of one ``AtomicSwap`` REQ message."""
+
+    @property
+    def opcode(self) -> ChiReqOpcode:
+        return ChiReqOpcode.ATOMIC_SWAP
 
 
 @dataclass(frozen=True)
@@ -424,6 +661,10 @@ class ChiReqLCrdReturn:
 
 ChiReqProtocolMessage: TypeAlias = (
     ChiReadNoSnpMessage
+    | ChiWriteNoSnpPtlMessage
+    | ChiWriteNoSnpFullMessage
+    | ChiAtomicLoadAddMessage
+    | ChiAtomicSwapMessage
     | ChiReadSharedMessage
     | ChiReadNotSharedDirtyMessage
     | ChiReadUniqueMessage
@@ -470,6 +711,10 @@ class ChiIssueHReqProfile:
             message,
             (
                 ChiReadNoSnpMessage,
+                ChiWriteNoSnpPtlMessage,
+                ChiWriteNoSnpFullMessage,
+                ChiAtomicLoadAddMessage,
+                ChiAtomicSwapMessage,
                 ChiReadSharedMessage,
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
@@ -488,6 +733,10 @@ class ChiIssueHReqProfile:
             message,
             (
                 ChiReadNoSnpMessage,
+                ChiWriteNoSnpPtlMessage,
+                ChiWriteNoSnpFullMessage,
+                ChiAtomicLoadAddMessage,
+                ChiAtomicSwapMessage,
                 ChiReadSharedMessage,
                 ChiReadNotSharedDirtyMessage,
                 ChiReadUniqueMessage,
@@ -509,6 +758,79 @@ class ChiIssueHReqProfile:
                     reasons.append("LikelyShared must be zero for ReadNoSnp")
                 if message.snoop_attribute:
                     reasons.append("SnpAttr must be zero for ReadNoSnp")
+            elif isinstance(message, ChiWriteNoSnpPtlMessage):
+                if message.likely_shared:
+                    reasons.append(
+                        "WriteNoSnpPtl requires LikelyShared=0"
+                    )
+                if message.snoop_attribute:
+                    reasons.append("WriteNoSnpPtl requires SnpAttr=0")
+                if (
+                    not message.exclusive
+                    and message.memory_attributes != 0b0101
+                ):
+                    reasons.append(
+                        "the first WriteNoSnpPtl profile requires "
+                        "Normal-memory MemAttr=0101"
+                    )
+                if message.order != 0:
+                    reasons.append("WriteNoSnpPtl requires Order=0")
+                if message.expect_completion_ack:
+                    reasons.append(
+                        "the first WriteNoSnpPtl profile requires "
+                        "ExpCompAck=0"
+                    )
+                if message.tag_operation != 0:
+                    reasons.append(
+                        "the first WriteNoSnpPtl profile requires TagOp=0"
+                    )
+            elif isinstance(message, ChiWriteNoSnpFullMessage):
+                if message.size != 6:
+                    reasons.append(
+                        "WriteNoSnpFull requires Size=6 (64 bytes)"
+                    )
+                if message.likely_shared:
+                    reasons.append(
+                        "WriteNoSnpFull requires LikelyShared=0"
+                    )
+                if message.snoop_attribute:
+                    reasons.append("WriteNoSnpFull requires SnpAttr=0")
+                if message.memory_attributes != 0b0101:
+                    reasons.append(
+                        "the first WriteNoSnpFull profile requires "
+                        "MemAttr=0101"
+                    )
+                if message.order != 0:
+                    reasons.append("WriteNoSnpFull requires Order=0")
+                if message.exclusive:
+                    reasons.append("WriteNoSnpFull requires Excl=0")
+                if message.expect_completion_ack:
+                    reasons.append(
+                        "the first WriteNoSnpFull profile requires "
+                        "ExpCompAck=0"
+                    )
+                if message.tag_operation != 0:
+                    reasons.append(
+                        "the first WriteNoSnpFull profile requires TagOp=0"
+                    )
+            elif isinstance(
+                message,
+                (ChiAtomicLoadAddMessage, ChiAtomicSwapMessage),
+            ):
+                operation = (
+                    "AtomicLoad ADD"
+                    if isinstance(message, ChiAtomicLoadAddMessage)
+                    else "AtomicSwap"
+                )
+                if message.size > 3:
+                    reasons.append(
+                        f"{operation} representation supports Size=0..3"
+                    )
+                elif message.address % (1 << message.size):
+                    reasons.append(
+                        f"{operation} address must be aligned to "
+                        f"{1 << message.size} bytes for Size={message.size}"
+                    )
             elif isinstance(message, ChiEvictMessage):
                 if message.size != 6:
                     reasons.append("Evict requires Size=6 (64 bytes)")
@@ -672,6 +994,8 @@ class ChiIssueHReqProfile:
 
 
 __all__ = [
+    "ChiAtomicLoadAddMessage",
+    "ChiAtomicSwapMessage",
     "ChiCleanUniqueMessage",
     "ChiEvictMessage",
     "ChiIssueHReqProfile",
@@ -684,6 +1008,8 @@ __all__ = [
     "ChiWriteBackFullMessage",
     "ChiWriteEvictFullMessage",
     "ChiWriteEvictOrEvictMessage",
+    "ChiWriteNoSnpPtlMessage",
+    "ChiWriteNoSnpFullMessage",
     "ChiReqChannelItem",
     "ChiReqLCrdReturn",
     "ChiReqOpcode",

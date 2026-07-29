@@ -9,5 +9,6 @@
 
 历史说明中的旧术语会保留，以便与相应 tag 的源码对应。只有事实性勘误才回写历史文件。
 
+- [0.4.1 — CHI lifecycle expansion and documentation consolidation](0.4.1.md)
 - [0.4.0 — interface scopes, executable fabrics, and CHI network slices](0.4.0.md)
 - [0.3.0 — bottom-up protocol architecture and public showcase](0.3.0.md)

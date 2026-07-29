@@ -1,18 +1,58 @@
 # Topology
 
-本包负责 VirtualDut、端口、连接和 system boundary 的弱结构图，以及 ownership/连接查询。
-一个 canonical topology 同时可容纳两种边：
+## 定位
 
-- `InterfaceConnection` 将一份完整 `InterfaceProtocol` 的 roles 绑定到 `InterfacePort`；
-- `DirectedTransportConnection` 将一个 `TransportPort` transmitter 指向一个 receiver，其 profile 由具体 transport family 解释。
+`topology` 保存 `VirtualDut`、端口、connection 和 system boundary 组成的弱结构图。
+`SystemProtocol.connections` 是两类连接共同使用的 canonical 注册表：
 
-transport resolution 只从这份 topology 派生只读 hop plan，不创建第二份连接权威。
+- `InterfaceConnection` 把一份完整 `InterfaceProtocol` 的 roles 绑定到 `InterfacePort`；
+- `DirectedTransportConnection` 把一个 `TransportPort` transmitter 指向一个 receiver，具体 transport
+  family 解释其 profile。
 
-Topology 只回答“谁连接到谁”。它不根据星形、树形或 N×M 外观推断中央 VirtualDut 会执行 decode、
-arbitrate、broadcast 或 response return；这些行为来自该 VirtualDut backend，跨节点正确性由 system
-contracts 和 monitors 判断。
+拓扑形状表达“谁连接到谁”。decode、arbitrate、broadcast、route 和 response return 等行为由中央
+`VirtualDut` backend 与 system contract 声明。
 
-`VirtualDutPortRef` 和 `InterfaceConnection` 位于 `model.py`，`DirectedTransportConnection` 位于
-`transport.py`，typed `PortOwnerRef` 位于 `ownership.py`；`protocol.py` 与 `protocol_model.system`
-继续重导出公共名称。端口解析、方向/family 校验、ownership 和连接完整性检查由根
-`elaboration.py` 编排。
+## 输入
+
+- 具名 `VirtualDut` 及其 `InterfacePort`、`TransportPort`；
+- caller 提供的 connection 名称、端口引用、协议或 transport family；
+- 需要暴露给外层系统的 boundary 名称和端口引用。
+
+## 输出与状态归属
+
+| 对象 | 持有的事实 |
+|---|---|
+| `VirtualDutPortRef` | 一个具名 VirtualDut port 的稳定引用 |
+| `InterfaceConnection` | 完整逻辑接口的 role→port 绑定与接口参数 |
+| `DirectedTransportConnection` | 单向 transmitter→receiver hop、family 和 profile |
+| `PortOwnerRef` | elaboration 后 connection 或 boundary 对端口的 typed ownership |
+
+[`elaboration.py`](../elaboration.py) 校验端口存在性、role/protocol、direction/family、唯一 ownership 和连接
+完整性。transport resolution 从同一注册表派生只读 hop plan。
+
+## 公共入口
+
+对象可从子包或根 facade 导入：
+
+```python
+from protocol_model.system.topology import (
+    DirectedTransportConnection,
+    InterfaceConnection,
+    PortOwnerRef,
+    VirtualDutPortRef,
+)
+```
+
+实现文件：
+
+- [`model.py`](model.py)：`VirtualDutPortRef`、`InterfaceConnection`；
+- [`transport.py`](transport.py)：`DirectedTransportConnection`；
+- [`ownership.py`](ownership.py)：`PortOwnerKind`、`PortOwnerRef`。
+
+## 相邻链接
+
+- [SystemProtocol 源码导航](../README.md)
+- [Construction](../construction/README.md)
+- [Contracts](../contracts/README.md)
+- [Resolution](../resolution/README.md)
+- [SystemProtocol 组网架构](../../../docs/architecture/network-construction.md)

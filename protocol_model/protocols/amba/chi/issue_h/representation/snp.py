@@ -6,12 +6,13 @@ have no ordinary ``TgtID``.  The interconnect chooses one or more Snoopees and
 the Network-layer packet carries each per-copy destination.  Consequently the
 protocol message below owns neither route endpoint.
 
-``SnpShared``, ``SnpNotSharedDirty``, ``SnpUnique``, and
-``SnpCleanInvalid``/``SnpMakeInvalid`` are represented alongside the hop-local
-``SnpLCrdReturn`` form.  This module establishes the channel/transport
-boundary; cache transitions, target selection, and response matching are
-participant/system behavior, not fields silently inferred by this local form.
-A packed SNPFLIT codec remains outside the current slice.
+``SnpShared``, the first clean ``SnpSharedFwd`` Direct Cache Transfer form,
+``SnpNotSharedDirty``, ``SnpUnique``, and
+``SnpCleanInvalid``/``SnpMakeInvalid`` are represented alongside the
+hop-local ``SnpLCrdReturn`` form.  This module establishes the
+channel/transport boundary; cache transitions, target selection, and response
+matching are participant/system behavior, not fields silently inferred by
+this local form.  A packed SNPFLIT codec remains outside the current slice.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ class ChiSnpOpcode(IntEnum):
     SNP_UNIQUE = 0x07
     SNP_CLEAN_INVALID = 0x09
     SNP_MAKE_INVALID = 0x0A
+    SNP_SHARED_FWD = 0x11
 
 
 def _require_uint(name: str, value: int, width: int) -> None:
@@ -101,6 +103,39 @@ class ChiSnpSharedMessage(_ChiCleanSnoopMessage):
     @property
     def opcode(self) -> ChiSnpOpcode:
         return ChiSnpOpcode.SNP_SHARED
+
+
+@dataclass(frozen=True)
+class ChiSnpSharedFwdMessage(_ChiCleanSnoopMessage):
+    """Forward a clean Shared copy directly to the original Requester.
+
+    ``forward_node_id`` names the Requester that receives peer ``CompData``.
+    ``forward_transaction_id`` is that Requester's original REQ TxnID and
+    therefore becomes the TxnID of the forwarded ``CompData``.  In contrast,
+    this message's own ``transaction_id`` is allocated by Home and correlates
+    the response returned to Home and the Requester's later ``CompAck``.
+
+    The current executable profile deliberately covers only the
+    ``RetToSrc=0`` clean DCT flow.  The fields remain explicit here rather
+    than being inferred from Network routing identities.
+    """
+
+    forward_node_id: int = 0
+    forward_transaction_id: int = 0
+    return_to_source: bool = False
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        _require_uint("forward_node_id", self.forward_node_id, 16)
+        _require_uint(
+            "forward_transaction_id",
+            self.forward_transaction_id,
+            12,
+        )
+
+    @property
+    def opcode(self) -> ChiSnpOpcode:
+        return ChiSnpOpcode.SNP_SHARED_FWD
 
 
 @dataclass(frozen=True)
@@ -174,6 +209,7 @@ class ChiSnpLCrdReturn:
 
 ChiSnpProtocolMessage: TypeAlias = (
     ChiSnpSharedMessage
+    | ChiSnpSharedFwdMessage
     | ChiSnpNotSharedDirtyMessage
     | ChiSnpUniqueMessage
     | ChiSnpCleanInvalidMessage
@@ -214,6 +250,7 @@ class ChiIssueHSnpProfile:
             message,
             (
                 ChiSnpSharedMessage,
+                ChiSnpSharedFwdMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
                 ChiSnpCleanInvalidMessage,
@@ -234,6 +271,17 @@ class ChiIssueHSnpProfile:
             )
         if message.pas >= 6:
             reasons.append("PAS encodings 6 and 7 are reserved")
+        if isinstance(message, ChiSnpSharedFwdMessage):
+            if message.forward_node_id >= (1 << self.node_id_width):
+                reasons.append(
+                    f"FwdNID {message.forward_node_id:#x} exceeds "
+                    f"{self.node_id_width}-bit NodeID"
+                )
+            if message.return_to_source:
+                reasons.append(
+                    "the current clean DCT profile requires "
+                    "SnpSharedFwd RetToSrc=0"
+                )
         if (
             isinstance(
                 message,
@@ -280,6 +328,7 @@ __all__ = [
     "ChiSnpNotSharedDirtyMessage",
     "ChiSnpOpcode",
     "ChiSnpProtocolMessage",
+    "ChiSnpSharedFwdMessage",
     "ChiSnpSharedMessage",
     "ChiSnpUniqueMessage",
 ]

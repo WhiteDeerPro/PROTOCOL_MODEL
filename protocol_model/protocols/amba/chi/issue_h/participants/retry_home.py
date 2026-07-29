@@ -430,7 +430,11 @@ class ChiRetryHomeNode(ChiDirectHomeNode):
         )
 
     def _request_reason(self, request: ChiReadNoSnpMessage) -> str | None:
-        if request.order != 0 or request.expect_completion_ack:
+        if (
+            request.order != 0
+            or request.expect_completion_ack
+            or request.exclusive
+        ):
             return "request is outside the direct-Home read profile"
         requested_bytes = 1 << request.size
         if (

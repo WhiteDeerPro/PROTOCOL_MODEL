@@ -8,13 +8,13 @@
    16 router 的 4×4 双向 mesh；四个 endpoint 位于四角，采用确定性 X-then-Y exact route。
 
 两案复用 `protocol_model` 中的 CHI participant、finite store-and-forward router、transport connection、
-Link Credit 和 transaction session。`model.py` 只保存用户可读的参考装配；它不是 CHI package 的内建
-ring/mesh recipe。
+Link Credit 和 transaction session。`model.py` 保存调用方可读的参考装配，CHI package 继续提供通用
+participant、transport 与 system construction 对象。
 
 图中将 `ChiStoreForwardRouterNode` 简写为 **XP abstraction**。这是对 CHI
 路由边界的简单拓扑表达：节点显式具有 ingress queue、exact NodeID route、
-egress 与逐 hop Link Credit；它不等同于完整 XP 微架构，也不提供 pipeline
-周期或物理延迟模型。
+egress 与逐 hop Link Credit。完整 XP 微架构、pipeline 周期和物理延迟由更具体的实现与 timing
+profile 提供。
 
 ## 运行
 
@@ -34,8 +34,8 @@ egress 与逐 hop Link Credit；它不等同于完整 XP 微架构，也不提�
 ```
 
 发布脚本先在目标目录旁完成执行、渲染、manifest 和 provenance，然后只替换
-`chi-issue-h-heterogeneous-ring-star/` 与 `chi-issue-h-four-by-four-mesh/` 叶级目录。也可以只重建
-其中一案：
+`chi-issue-h-heterogeneous-ring-star/` 与 `chi-issue-h-four-by-four-mesh/` 叶级目录；发布结束时还会清理
+旧版合并目录 `chi-issue-h-topology-shapes/`。也可以只重建其中一案：
 
 ```bash
 .venv/bin/python \
@@ -52,13 +52,16 @@ egress 与逐 hop Link Credit；它不等同于完整 XP 微架构，也不提�
 - `manifest.json`：该 leaf 实际拥有的文件、case 和结果。
 
 图中的固定位置属于示例级 presentation metadata；节点、连接、exact route 和执行路径均从同一次实际装配读取。
-灰色连接表示已声明但本次 read 未经过的 topology，不表示已经覆盖相应 traffic 组合。
+灰色线是全部 declared physical edges 的背景层；执行路径在其上叠加彩色线，只有未叠加彩色的 edge 才表示本次
+read 未经过。traffic 组合覆盖以实际 path witness 为准。
 
 ## 能力边界
 
-这里的 ring 和 star 描述点到点 topology 外观，不表示 shared bus、broadcast 或共享介质仲裁。本示例也不宣称
-完整 CHI、RSP/SNP coherence、adaptive routing、QoS/fairness、性能结论或 deadlock freedom。图中的路径是
-模型级 transport/correlation 证据，不是 raw pin waveform，也不约束 RTL 周期距离。
+| 本例提供 | 仍需独立 profile 或证据 |
+|---|---|
+| 点到点 ring/star/mesh topology | shared bus、broadcast 或共享介质仲裁 |
+| exact route 与模型级 transport/correlation | raw pin waveform 与 RTL cycle distance |
+| direct read、Link Credit 与最终静止 witness | 完整 CHI、RSP/SNP coherence、adaptive routing、QoS/fairness、性能与 deadlock freedom |
 
 ## 文件职责
 

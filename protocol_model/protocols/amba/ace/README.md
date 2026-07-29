@@ -1,19 +1,27 @@
-# ACE interface family
+# ACE family 源码导航
 
-本目录收纳 ACE/ACE-Lite 中可由一条接口观察和判定的语义。当前可执行实现是
-`ace_lite_data`：它保留 AXI4 的五个 channel、burst、ID、outstanding 和 response ordering，并在
-AR/AW 上加入 ACE-Lite 的 `domain`、`snoop`、`bar` 字段。
+本目录保存 ACE/ACE-Lite 的 interface-local 合同。当前可执行 profile 在 AXI4 五个 channel、burst、ID、
+outstanding 和 response ordering 上加入 AR/AW 的 `domain`、`snoop` 与 `bar` 字段。
 
-这个 profile 只接收普通数据事务：
+## 当前入口
 
-- ARSNOOP=0，根据 ARDOMAIN 表示 ReadNoSnoop 或 ReadOnce；
-- AWSNOOP=0/1，根据 AWDOMAIN 表示 WriteNoSnoop、WriteUnique 或 WriteLineUnique；
-- AxBAR[0] 必须为 0，因此当前不接收 barrier transaction；
-- cacheable transaction 不使用 System domain。
+[`ace_lite/`](ace_lite/) 公开 `AceLiteDataConfig`、`AceLiteDataObservationSession` 和
+`build_ace_lite_data_interface()`。API 名称中的 `data` 表示 ordinary-data profile。
 
-公开 API 特意命名为 `build_ace_lite_data_interface()`，其中的 `data` 明示当前 profile 的边界。完整 ACE-Lite 还需要
-AW-without-W barrier completion、AR/AW barrier pair 和 cache-maintenance operation；直接复用现有
-AXI4 write monitor 无法表达这些行为。
+## Profile 范围
 
-完整 ACE 的 AC/CR/CD、RACK/WACK 属于后续 interface contract 实现范围。snoop fanout、cache-line owner、多个
-response 的聚合以及跨 interface barrier visibility 属于 SystemProtocol/coherence 组合语义。
+| 字段 | 当前接纳范围 |
+|---|---|
+| ARSNOOP / ARDOMAIN | `ARSNOOP=0`；Non-shareable/System domain 表示 ReadNoSnoop，Inner/Outer Shareable domain 表示 ReadOnce |
+| AWSNOOP / AWDOMAIN | `AWSNOOP=0` 表示 WriteNoSnoop 或 WriteUnique；`AWSNOOP=1` 在 shareable domain 表示 WriteLineUnique |
+| AxBAR | `AxBAR[0]=0` |
+| AxCACHE / AxDOMAIN | cacheable encoding 使用 `AxDOMAIN∈{00,01,10}`；System domain `11` 与 non-cacheable encoding 配对 |
+
+AxBAR 与 cacheable-domain 两项是当前 admission 的真实协议限制。Barrier transaction、cache-maintenance
+operation、AC/CR/CD 和 RACK/WACK 在相应 executable profile 建立后进入公开接口。
+
+## 相邻 owner
+
+AW-without-W barrier completion、AR/AW barrier pair 与完整 ACE channel correlation 属于 interface
+contract。Snoop fanout、cache-line ownership、response aggregation 和跨 interface barrier visibility
+由 SystemProtocol/coherence composition 闭合。

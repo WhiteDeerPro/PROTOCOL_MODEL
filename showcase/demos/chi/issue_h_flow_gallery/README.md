@@ -16,7 +16,7 @@ resolved authority/capability/transport runtime 取得消息与状态证据，�
 | `writeback-snoop-cancel` | 冻结 `WriteBackFull` XP capture、同址失效 Snoop、零字节取消 DAT | resolved XP star + selected scheduler moves |
 
 前三案在 `coherence_cases.py`，progress/干涉两案在 `progress_cases.py`。
-`model.py` 只组合执行结果与 typed view；`presentation.py` 只生成阅读说明；
+`model.py` 组合执行结果与 typed view；`presentation.py` 生成阅读说明；
 `run.py` 是拥有发布子树的唯一入口。
 
 ## 重建
@@ -36,13 +36,14 @@ transport route。拓扑投影把该 binding 显示为
 
 WriteBackFull 案需要确定的同址干涉顺序：场景先把 WBF REQ 放到 RN→XP link，
 再通过公开的具名 scheduler candidate 暂停该 REQ 的 router capture；其余 REQ、
-SNP、RSP 和 DAT channel 继续运行，CleanUnique 退休后再释放 WBF。这个选择控制
-模型提交顺序，不引入周期、物理时延或 XP 微架构声明。
+SNP、RSP 和 DAT channel 继续运行，CleanUnique 退休后再释放 WBF。这个选择确定
+模型提交顺序；物理周期、延迟和 XP 微架构属于另一类观察 profile。
 
-flow 时空图过滤不改变 coherence state 的逐 hop transport `MOVE` 事件，只保留
-endpoint acceptance 与所选状态提交。原 `model_step` 标签可能出现间隔，但该间隔
-不是周期、物理时延或可比较的 XP latency。独立 ring/star 与 4×4 mesh witness
-继续用于更长 route 和更大结构的观察，不扩大本 gallery 的 opcode 覆盖。
+flow 时空图过滤保持 coherence state 不变的逐 hop transport `MOVE` 事件，显示
+endpoint acceptance 与所选状态提交。`model_step` 数值保留过滤前的原始发射索引并确定逻辑顺序；
+renderer 将保留下来的步骤压缩为等距槽，索引差值不表示物理距离、周期或 latency。
+独立 ring/star 与 4×4 mesh witness 扩展 route 长度和结构规模；本 gallery 的 opcode 覆盖保持为表中
+五个 lifecycle。
 
-这些例子是选定 lifecycle 的 executable witness，不是完整 CHI opcode catalog、
-规范条款覆盖、CDC/deadlock 证明或芯片实现。
+这些例子为选定 lifecycle 提供 executable witness。完整 CHI opcode catalog、规范条款覆盖、
+CDC/deadlock 证明和芯片实现需要对应的独立证据。

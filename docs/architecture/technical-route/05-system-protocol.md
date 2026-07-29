@@ -15,8 +15,7 @@ VirtualDut A ── one InterfaceConnection ── VirtualDut B
 ```
 
 它没有额外全局约束，但已经包含具体模块身份、具体端口和一份 connection 实例状态。把它也提升为
-SystemProtocol，可让点到点、`A → bridge → B` 和星形 fabric 使用同一个执行入口，不需要先建一套“简单
-场景 API”，以后再迁移成网络 API。
+SystemProtocol，可让点到点、`A → bridge → B` 和星形 fabric 共用同一个执行入口和 topology model。
 
 `SystemProtocol.from_interface()` 提供这种退化形式。
 
@@ -64,9 +63,9 @@ ring、mesh 是调用方 recipe/fixture，不固化在 session 类中。
 - 显式 address router route 与 direct-neighbor endpoint claim 唯一闭合；
 - generated address router 的实际 route boundary projection 与 construction contract 一致。
 
-当前尚未实现 profile 协商、clock/reset compatibility、capability negotiation、多跳 address resolution 和
-external/opaque DUT projection 核对。因此
-“InterfacePort 有 capability 字段”不等于系统已能自动判断所有能力组合。
+当前这组检查形成 structure 与 direct-neighbor address closure。profile 协商、clock/reset compatibility、
+capability negotiation、多跳 address resolution 和 external/opaque DUT projection 核对属于后续 resolution
+passes；覆盖范围集中记录在[实现状态](../implementation-status.md)。
 
 实现见 [`system/elaboration.py`](../../../protocol_model/system/elaboration.py)。
 
@@ -83,13 +82,13 @@ external/opaque DUT projection 核对。因此
 6. 将 backend 的立即 emissions 放回队列；
 7. 重复到队列为空或超过 `max_internal_steps`。
 
-这里的 fixed point 表示“当前立即反应队列已空”，不是一个 RTL cycle，也不是 deadlock 证明。实现了
-`ExplicitlyAdvanceableBackend` 的 backend 可以由 `DutAdvanceAction` 获得显式 service opportunity；queued
-responder 和 scheduled crossbar 已使用这条路径。自主 wakeup、定时队列、多时钟调度和延后 emission 的
-完整跨 connection lineage 尚未实现。
+这里的 fixed point 定义为“当前立即反应队列已空”。RTL cycle 由 time/clock profile 定义，deadlock verdict
+由 progress analysis 产生。实现了 `ExplicitlyAdvanceableBackend` 的 backend 可以由 `DutAdvanceAction`
+获得显式 service opportunity；queued responder 和 scheduled crossbar 已使用这条路径。自主 wakeup、定时队列、
+多时钟调度和延后 emission 的跨 connection lineage 随统一 scheduler 扩展。
 
-如果传播中后续出现 fault，当前实现保留此前已经通过的逐跳状态与事件；整个 cascade 还不是全局事务式
-回滚。
+传播采用逐跳提交：后续 fault 保留此前已经接受的状态与事件。需要全局事务式回滚的场景应声明独立的
+system transaction contract。
 
 实现见 [`system/session.py`](../../../protocol_model/system/session.py)。
 
@@ -144,9 +143,9 @@ Typed operation、stage、plan 和 executor 的内部构造见
 module → subsystem → SoC → chiplet/package → board
 ```
 
-因此跨片系统仍由 InterfaceProtocol、VirtualDut、SystemProtocol 递归组合，不必为每个物理尺度增加固定顶层
-类；具体协议还可以叠加 RepresentationCodec、TransportLink 和物理边界合同。当前封装完成结构与语义投影，
-外层 runtime 尚不会自动执行嵌套 subsystem 的内部 session。
+因此各物理尺度直接复用 InterfaceProtocol、VirtualDut、SystemProtocol 的递归组合；具体协议还可以叠加
+RepresentationCodec、TransportLink 和物理边界合同。当前封装完成结构与语义投影；
+嵌套 subsystem 的 runtime composition 由后续 hierarchical session 扩展。
 
 更完整的系统架构见 [SystemProtocol 文档](../system-protocol.md)。下一步阅读：
 [组网构建阶段](../network-construction.md) 或 [观察、执行与证据](06-observation-execution-evidence.md)。

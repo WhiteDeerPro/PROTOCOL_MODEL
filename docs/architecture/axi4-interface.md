@@ -2,8 +2,8 @@
 
 当前实现覆盖 AXI4 canonical-event 层的五个 channel。AR/R 使用 keyed cardinality；AW/W/B 使用
 burst assembler、FIFO join 和 completion ledger。五个 ready-valid lane 已能从同一个 `AtomicFrame`
-进入 InterfaceSession；raw RTL 字段采集和具体组网仍是后续边界，也不表示 AXI4 的全部可选信号与
-系统规则已经建模。
+进入 InterfaceSession。raw RTL 字段采集、具体组网、可选信号与系统规则的覆盖范围由
+[实现状态](implementation-status.md)集中维护。
 
 代码位于 `protocol_model/protocols/amba/axi/axi4/`：AXI4 是 `InterfaceProtocol` 库成员；
 `protocol_model/interface/` 保存 InterfaceProtocol 抽象和 session。
@@ -36,7 +36,7 @@ Axi4ObservationSession lowering phases
 InterfaceSession.step_batch (all-or-nothing commit)
 ```
 
-`EventOffer` 是部分赋值，不是已经发生的协议事件。例如 pending read token 会给出：
+`EventOffer` 是当前 monitor state 允许生成的事件候选及部分字段赋值。例如 pending read token 会给出：
 
 ```text
 kind=R, key=<ARID>, payload.last=<由 remaining 推导>
@@ -63,8 +63,8 @@ kind=R, key=<ARID>, payload.last=<由 remaining 推导>
 - exclusive burst 的长度、总字节数和对齐限制；
 - exclusive read response consistency、read-before-write、属性匹配，以及 `EXOKAY` success eligibility；
 - 五通道 stall stability 和共享 normalized reset epoch；
-- 同帧 interface event 统一提交或回滚；响应先读取帧前状态，避免 R/B 消费本帧刚创建的义务；
-- 可限制生成时最大 burst beats 的 policy，该 policy 只收窄生成空间，不改变协议可接受空间；
+- 同帧 interface event 统一提交或回滚；响应读取帧前状态，使 R/B 只消费此前已经建立的义务；
+- 可限制生成时最大 burst beats 的 policy，该 policy 收窄生成空间，同时保留协议接纳合同；
 - `InterfaceProtocol.forbid_events()` 可构造保留五通道形状的 read-only 等 interface profile；
 - `Axi4ObservationPolicy.tied_inactive_channels` 可进一步要求对应 pin observation 的 VALID 保持低电平。
 
@@ -93,17 +93,16 @@ CompletionLedger(BID)
 | AW/W/B 组合顺序、AR/R 与字段映射 | `protocols.amba.axi.axi4` | 是 AXI channel 关系，保留为本地组合策略 |
 | FIXED/INCR/WRAP、4KB、WSTRB lane | `protocols.amba.axi.axi4.burst` | 当前是 AXI 规则；等第二种协议出现同形需求后再判断是否提取 |
 
-因此 AXI4 本地方法不等于无法复用：其中多数是“通用机制 + AXI 参数/字段关系”的派生组合。
-只有机制本身不依赖 AXI vocabulary、并且存在独立状态契约时才进入 `patterns`。这样 TileLink 等后续
-协议可以检验抽象是否成立，不需要为了目录整齐预先制造一个过宽的 pattern。
+AXI4 本地方法通常由“通用机制 + AXI 参数/字段关系”组合而成。机制具备协议中立词汇、独立状态合同和第二个
+真实消费者后进入 `patterns`；TileLink 等后续协议可用自己的生命周期验证这项抽象。
 
 当前同帧 lowering 使用 `B, R → W → AW, AR`：B/R 只能消费采样边沿之前已存在的义务；W 与 AW
 仍可在同帧完成 FIFO correlation。这是 AXI 本地 phase policy，不宣称是任意 InterfaceProtocol 的默认顺序。
 后续可在此基础上补 raw RTL pin adapter、更多 ordering/profile sideband，以及具体 VirtualDut 行为。
 
-“quiet”在当前架构中不是一个同时驱动验证与显示的开关：禁止 canonical event 属于 InterfaceProtocol
-profile；VALID tied-low 或 sideband tied/stable 属于 observation policy；`LaneDisplayPolicy` 只决定投影
-中是否隐藏 lane。隐藏 inactive lane 可以改善阅读，但不单独构成 quiet 的验证结论。
+“quiet”由三个作用域分别拥有：禁止 canonical event 属于 InterfaceProtocol profile；VALID tied-low 或
+sideband tied/stable 属于 observation policy；`LaneDisplayPolicy` 决定投影中是否隐藏 lane。隐藏 inactive
+lane 改善阅读，协议结论继续来自前两类验证证据。
 
 ## Exclusive 当前边界
 
@@ -143,10 +142,10 @@ pending B completion 和 exclusive reservation。基础定义中这些 resource 
 | 多端口共享 buffer、路由占用和 wait-for cycle | SystemProtocol |
 | 为场景主动限制同时请求数 | generation policy |
 
-因此 VirtualDut 的协议入口后续适合使用 AXI 本地 typed port configuration，而不是继续扩展无类型
-`capabilities` 字典。manager 至少区分 read/write issue depth；subordinate 至少区分 read acceptance、
+因此 VirtualDut 的协议入口适合使用 AXI 本地 typed port configuration，为不同资源保留独立字段。
+manager 至少区分 read/write issue depth；subordinate 至少区分 read acceptance、
 write acceptance、write-data buffering 和 exclusive-monitor capacity。bridge 还需要内部 correlation/
-translation entries，这些不应压缩成一个笼统的 `queue_depth`。
+translation entries；各字段保持自己的资源生命周期和诊断含义。
 
 当前 canonical InterfaceSession 用 fault 表达容量超限。若某个 VirtualDut 把容量可用性投影为 READY，才会
 在 pin observation 上表现为 backpressure。deadlock 判断还需要 SystemProtocol 中的 wait-for edge；

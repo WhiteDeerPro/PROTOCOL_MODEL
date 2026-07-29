@@ -1,11 +1,14 @@
-"""Typed forms for the first executable CHI Issue H DAT-channel slice.
+"""Typed forms for the executable CHI Issue H DAT-channel slices.
 
 The classes in this module carry fields by protocol meaning.  They are not a
 bit codec for ``DATFLIT`` and do not try to materialize every physical field
 that is inapplicable to the supported ``CompData``, ``SnpRespData``, and
 ``CopyBackWrData`` forms.  Packet-to-packet consistency and
 transaction-lifecycle rules remain contracts above this local representation
-profile.
+profile.  The current non-CopyBack form is a single-packet 512-bit
+``NonCopyBackWrData`` representation shared by Write and Atomic lifecycle
+profiles; only the retained parent REQ determines the legal byte-enable
+window and CCID.
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ class ChiDatOpcode(IntEnum):
     LINK_CREDIT_RETURN = 0x0
     SNP_RESP_DATA = 0x1
     COPY_BACK_WRITE_DATA = 0x2
+    NON_COPY_BACK_WRITE_DATA = 0x3
     COMP_DATA = 0x4
 
 
@@ -140,6 +144,86 @@ class ChiCopyBackWrDataMessage:
         """Whether the Requester passes memory-update responsibility."""
 
         return bool(int(self.response) & 0b100)
+
+
+@dataclass(frozen=True)
+class ChiNonCopyBackWrDataMessage:
+    """Write data or an operand sent after a Completer grants a DBID.
+
+    ``transaction_id`` carries the Home-owned DBID rather than the original
+    REQ TxnID.  The represented base is one 512-bit
+    ``NonCopyBackWrData`` packet.  Write/Atomic byte-enable, CCID, and parent
+    window rules require the retained parent REQ and are checked by their
+    transaction lifecycle.  Non-CopyBack WriteData reports cache state ``I``
+    and never transfers dirty responsibility.
+    """
+
+    chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.DAT
+    chi_item_kind: ClassVar[ChiChannelItemKind] = (
+        ChiChannelItemKind.PROTOCOL_MESSAGE
+    )
+
+    transaction_id: int
+    data: int
+    response: ChiRespCode | int = ChiRespCode.I
+    data_id: int = 0
+    qos: int = 0
+    response_error: ChiRespErr | int = ChiRespErr.OK
+    data_source: int = 0
+    completer_busy: int = 0
+    byte_enable: int = (1 << 64) - 1
+    critical_chunk_id: int = 0
+    trace_tag: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value, width in (
+            ("transaction_id", self.transaction_id, 12),
+            ("response", self.response, 3),
+            ("data_id", self.data_id, 2),
+            ("qos", self.qos, 4),
+            ("response_error", self.response_error, 2),
+            ("data_source", self.data_source, 8),
+            ("completer_busy", self.completer_busy, 3),
+            ("byte_enable", self.byte_enable, 64),
+            ("critical_chunk_id", self.critical_chunk_id, 2),
+        ):
+            _require_uint(name, value, width)
+        _require_non_negative("data", self.data)
+        _require_bool("trace_tag", self.trace_tag)
+        object.__setattr__(
+            self,
+            "response_error",
+            ChiRespErr(self.response_error),
+        )
+        try:
+            response = ChiRespCode(self.response)
+        except ValueError as error:
+            raise ValueError(
+                "NonCopyBackWrData contains a reserved Resp encoding"
+            ) from error
+        if response is not ChiRespCode.I:
+            raise ValueError("NonCopyBackWrData Resp must be I")
+        if self.data_source != 0:
+            raise ValueError("NonCopyBackWrData DataSource must be zero")
+        if self.completer_busy != 0:
+            raise ValueError("NonCopyBackWrData CBusy must be zero")
+        object.__setattr__(self, "response", response)
+
+    @property
+    def opcode(self) -> ChiDatOpcode:
+        return ChiDatOpcode.NON_COPY_BACK_WRITE_DATA
+
+    @property
+    def semantic_key(self) -> int:
+        """Return the Completer-owned DBID carried in the DAT TxnID."""
+
+        return self.transaction_id
+
+    @property
+    def passes_dirty(self) -> bool:
+        """Non-CopyBack WriteData never transfers dirty responsibility."""
+
+        return False
 
 
 @dataclass(frozen=True)
@@ -313,6 +397,7 @@ class ChiDatLCrdReturn:
 ChiDatProtocolMessage: TypeAlias = (
     ChiCompDataMessage
     | ChiCopyBackWrDataMessage
+    | ChiNonCopyBackWrDataMessage
     | ChiSnpRespDataMessage
 )
 ChiDatChannelItem: TypeAlias = ChiDatProtocolMessage | ChiDatLCrdReturn
@@ -355,6 +440,7 @@ class ChiIssueHDatProfile:
             (
                 ChiCompDataMessage,
                 ChiCopyBackWrDataMessage,
+                ChiNonCopyBackWrDataMessage,
                 ChiSnpRespDataMessage,
             ),
         ):
@@ -381,6 +467,21 @@ class ChiIssueHDatProfile:
                 f"DataID {encoded} is reserved for a {self.data_width}-bit "
                 "DAT channel"
             )
+        if isinstance(message, ChiNonCopyBackWrDataMessage):
+            if self.data_width != 512:
+                reasons.append(
+                    "the single-packet NonCopyBackWrData profile requires a "
+                    "512-bit DAT payload"
+                )
+            disabled_data = any(
+                not message.byte_enable & (1 << lane)
+                and message.data & (0xFF << (lane * 8))
+                for lane in range(64)
+            )
+            if disabled_data:
+                reasons.append(
+                    "NonCopyBackWrData bytes with BE=0 must carry zero data"
+                )
         return tuple(reasons)
 
     def contains(self, message: ChiDatProtocolMessage) -> bool:
@@ -395,5 +496,6 @@ __all__ = [
     "ChiDatOpcode",
     "ChiDatProtocolMessage",
     "ChiIssueHDatProfile",
+    "ChiNonCopyBackWrDataMessage",
     "ChiSnpRespDataMessage",
 ]

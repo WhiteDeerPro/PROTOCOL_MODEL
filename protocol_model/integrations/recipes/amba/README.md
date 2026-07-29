@@ -1,167 +1,82 @@
 # AMBA-bound VirtualDut recipes
 
-Recipes are composition roots.  They select concrete AMBA attachments, bind
-them to `InterfacePort` objects, choose a backend, and return a concrete
-`VirtualDut`.
+AMBA recipe 是 integration composition root：选择具体 AMBA `InterfaceProtocol` 与 attachment，将它们绑定到
+`InterfacePort`，组合适用的 backend，并返回具名 `VirtualDut`。AMBA 描述 module 的端口协议，module 本身继续
+以边界、operation 和 backend 行为定义身份。
 
-- `endpoints/` constructs boundary modules, including passive address/stream
-  endpoints, an initiating memory-copy fixture, and AMBA roles for
-  protocol-neutral idle/blackhole modules;
-- `fabrics/` constructs same-family multi-port routing modules;
-- `bridges/` constructs two-boundary translation/correlation modules.  The
-  generic serial builder also permits supported same-family or variant
-  translations; "bridge" therefore describes the relational behavior rather
-  than requiring two different family names;
-- `chi/` assembles a concrete transport-bound VirtualDut together with the
-  wider CHI participant facet consumed by family construction and runtime.
+## 分组与公共入口
 
-The grouped inventory and selection guidance live one level above in the
-[`VirtualDut construction catalog`](../README.md).
+| 分组 | 构造角色 | 代表性公共入口 |
+|---|---|---|
+| [`endpoints/`](endpoints/) | 单边界 address/stream endpoint、主动 initiator 与 fixture | `build_axi4_address_space_vdut()`、`build_axi4_stream_capture_vdut()`、`build_amba_serialized_memory_copy_vdut()` |
+| [`fabrics/`](fabrics/) | 同 family 的单入口 route/mux、scheduled N×M crossbar 和 AXI channel slice | `build_apb_address_fabric_vdut()`、`build_axi4_lite_address_crossbar_vdut()`、`build_axi4_read_crossbar_vdut()` |
+| [`bridges/`](bridges/README.md) | 双边界 translation、correlation 与 completion return | `build_amba_serial_bridge_vdut()` 及收紧协议对的 convenience presets |
+| [`chi/`](chi/) | transport-bound VirtualDut 与 CHI participant facet 装配 | `build_chi_issue_h_cache_vdut()`、cache/Home bind 与 attach 入口 |
 
-The AMBA qualifier describes the resulting port bindings.  It does not create
-an AMBA-specific VirtualDut superclass or make protocol family the module's
-primary identity.
+完整公共名称以 [`protocol_model.integrations.recipes.amba` facade](__init__.py) 为准；按 module role、layer 和
+tier 查询时使用 [`recipe catalog`](../catalog/README.md)。
 
-## AXI4 response stepping
+## Core → integration 装配
 
-`build_axi4_address_space_vdut()` normally returns its canonical R/B
-completion batch in the same abstract action.  Callers that need a paced
-event witness can pass a `SteppedEmissionProfile`.  The resulting backend
-reserves finite output-event capacity and releases at most one R or B event
-per explicit `DutAdvanceAction`; its wait policy may leave empty service
-opportunities between R beats.
-
-This profile schedules already-computed response events.  It does not assign
-an ACLK period or drive RVALID/RREADY pins.  FIFO scheduling remains the
-default.  Selecting round-robin scheduling lets different RID batches
-alternate one R beat at a time, while the AXI recipe prevents a later batch
-with the same RID from passing its predecessor.  This is local endpoint
-scheduling, not a multi-subordinate AXI crossbar.  A pin/cycle adapter can
-later map one service opportunity to one cycle and must still hold R payload
-while the manager deasserts RREADY.
-
-The backend now exposes a non-destructive `prepare_offer()` /
-`current_offer()` / `accept_offer()` seam.  A selected beat remains in the
-finite FIFO until explicit acceptance, so a future R-channel driver can keep
-RID/RDATA/RRESP/RLAST stable without making RVALID depend on RREADY.  The
-driver and reset behavior are still separate protocol-observation work;
-ordinary `advance()` preserves the event-level shortcut by preparing and
-immediately accepting as though the destination were always ready.
-
-## Fabric profiles
-
-The single-ingress fabric recipes bind APB, AHB, or AXI4-Lite attachments to
-the protocol-independent decoder/response-mux backend.  They forward a
-complete address operation immediately and retain one completion owner.
-
-The first executable N-ingress/M-egress profile is separate:
-
-```python
-build_axi4_lite_address_crossbar_vdut(
-    name,
-    protocol,
-    ingress_ports=("m0", "m1"),
-    egress_ports=("s0", "s1"),
-    routes=(...),
-    ingress_queue_capacity=2,
-)
+```text
+protocols/amba ───────────────┐
+attachments/amba ─────────────┤
+protocol-bound translations ──┼──> AMBA integration recipe ──> constructed VirtualDut
+protocol-bound backends ───────┤
+virtual_dut/recipes ───────────┘
 ```
 
-This recipe creates an independent AXI4-Lite completer attachment for every
-ingress and an independent requester attachment for every egress, then calls
-the protocol-neutral `build_scheduled_address_crossbar_vdut()` composition
-root.  The backend owns complete-operation FIFOs, one round-robin cursor per
-egress, active request ownership, and completion return.  Requests are issued
-only when a caller supplies an explicit service opportunity; that operation
-does not imply an RTL clock cycle.
+[`virtual_dut/recipes`](../../../virtual_dut/recipes/README.md) 接收已经准备好的 bindings、protocol-neutral
+operation domain 和 backend，负责 core 装配。本目录补齐具体协议选择、attachment、profile、route 和
+capability，并调用相应 core recipe。
 
-All ports in this initial recipe use the same AXI4-Lite profile and data width.
-It models single address accesses, static route/remap, ordered route misses,
-and at most one active request per ingress and per egress.  It does not model a
-full AXI crossbar, burst routing, AXI ID remapping, QoS, or cycle-accurate
-READY/backpressure.
+单端口 event↔operation 状态来自 [`attachments/amba`](../../attachments/amba/README.md)。AXI ID/channel
+直接塑造跨端口 controller 时，本目录选择
+[`protocol-bound backend`](../../backends/README.md)；可复用的保护属性等 typed stages 来自
+[`translations`](../../translations/README.md)。Recipe 在 construction 阶段完成选择和参数校验。
 
-AXI4 burst reads use a protocol-specific N×M recipe because RID ordering and
-return ownership must remain visible instead of being lowered to one
-`AddressAccess`.  The recipe requires `build_axi4_read_only_profile()` (or an
-equivalent profile that forbids AW/W/B), so its five-channel interface shape
-cannot silently accept a write event that the backend does not route:
+## 关键 recipe 与 profile
 
-```python
-protocol = build_axi4_read_only_profile(...)
-build_axi4_read_crossbar_vdut(
-    name,
-    protocol,
-    ingress_ports=("manager0", "manager1"),
-    egress_ports=("memory", "control"),
-    routes=(...),
-    table_profile=Axi4ReadRouteTableProfile(
-        active_id_capacity=8,
-        outstanding_bursts_per_id=8,
-    ),
-)
-```
+| recipe | 输入 profile | 构造出的行为与准入条件 |
+|---|---|---|
+| `build_axi4_address_space_vdut()` | 完整 AXI4；可选 `SteppedEmissionProfile` | address endpoint；stepped profile 用有限 event FIFO 和显式 `DutAdvanceAction` 调度已计算的 R/B events |
+| `build_apb_address_fabric_vdut()`、`build_ahb_address_fabric_vdut()`、`build_axi4_lite_address_fabric_vdut()` | 单入口、同 family address interface | decoder/response-mux，持有一个 completion owner |
+| `build_axi4_lite_address_crossbar_vdut()` | 同一 AXI4-Lite profile 与 data width | scheduled N×M `AddressAccess` route、per-egress round-robin 与 completion return |
+| `build_axi4_read_crossbar_vdut()` / `build_axi4_read_demux_vdut()` | `build_axi4_read_only_profile()` 或等价 AW/W/B prohibition profile | AR/R N×M slice；`Axi4ReadRouteTableProfile` 限制 RID domain 与每 RID pending bursts |
+| `build_axi4_write_crossbar_vdut()` | `build_axi4_write_only_profile()` 或等价 AR/R prohibition profile | AW/W/B store-and-forward slice；`Axi4BurstAssemblyProfile` 与 `Axi4WriteRouteTableProfile` 限制 assembly/BID state |
+| `build_amba_serial_bridge_vdut()` | 支持的 AMBA ingress/egress 与显式 routes | 按 ingress shape 选择 single-access 或 AXI4 burst→access strict-serial profile |
+| CHI cache/Home recipes | Issue H participant declaration、transport ports 与 behavior facet | 将 VirtualDut assembly 交给 CHI family construction/runtime 继续组合 |
 
-The backend retains AR/R events and owns one sparse pending-burst ledger.  Two
-views are derived from those entries: `(ingress, RID) -> egress` is the
-manager-local destination lock, while `(egress, downstream RID) -> FIFO of
-ingress owners` restores each R burst to the manager whose AR reached that
-downstream ordering stream first.  The capacity profile is applied
-independently to every ingress.
+这些 profiles 运行在 canonical-event/service-opportunity 时间域。ACLK、READY/VALID 与 payload-hold 由
+observation/driver adapter 投影。AXI read/write 当前使用 `raw-ID-serialized` policy；多 ingress exclusive read
+需要 source-qualified identity 或 ID-remap profile。Serial bridge 的 width、shape 与 attribute 准入条件见
+[`bridges/README.md`](bridges/README.md)。
 
-Canonical AR events already denote accepted transfers.  Their submission
-order is the grant order of that execution witness; this profile therefore
-does not add a pin-level request queue, simultaneous-AR arbiter, or ACLK
-timing.  The current `raw-ID-serialized` policy preserves ARID downstream.
-Managers that reuse one RID at the same subordinate share a legal downstream
-ordering stream, which can serialize otherwise independent reads without
-losing ordinary response ownership.  Multi-ingress exclusive reads are
-rejected until a source-qualified identity or ID-remap profile is selected.
+## 状态 owner
 
-`build_axi4_read_demux_vdut()` is the one-ingress convenience specialization
-of the same backend and state model.  The generic recipe accepts arbitrary
-non-empty ingress and egress tuples; the public 2×4 witness demonstrates that
-N and M are independent.  Neither read recipe routes AW/W/B, so they are
-AXI4 AR/R fabric slices rather than complete five-channel AXI crossbars.
+| 事实 | owner |
+|---|---|
+| 单 port codec、phase、AW/W assembly 与 optional fields | attachment |
+| protocol-neutral address route、queue、arbiter cursor 与 completion owner | core backend |
+| AXI RID/BID destination lock、downstream owner FIFO 与 channel lifecycle | AXI protocol-bound backend |
+| stepped output FIFO、prepared offer 与接纳状态 | stepped-emission backend |
+| immutable profile、route 和 capability 选择 | recipe 输入与 compiled plan |
+| module 名称、ports、bindings 和 backend 引用 | constructed `VirtualDut` |
+| interface legality 与 ordering verdict | 各连接的 `InterfaceSession` monitor |
 
-The corresponding write slice uses `build_axi4_write_only_profile()` and
-`build_axi4_write_crossbar_vdut()`.  It retains port-local AW/W FIFO
-correlation, including W-before-AW, and forwards a joined burst as one
-store-and-forward `AW, W...WLAST` batch.  AW admission reserves the
-manager-local BID destination/order domain; an `Axi4BurstAssemblyProfile`
-bounds partial input storage, while `Axi4WriteRouteTableProfile` bounds active
-BID domains and accepted bursts per BID.  Returned B events use an
-`(egress, downstream BID)` owner FIFO.  A decode miss first consumes the
-matching complete W burst and then returns local DECERR.
+该归属让 backend 执行账本与协议 monitor 账本分别服务 execution 和 verdict，并通过 canonical events 对接。
 
-This write profile uses canonical submission order as the accepted grant
-order.  It does not yet supply cut-through W routing, a per-beat W arbiter, or
-AWREADY/WREADY pin timing.  Combining this slice with AR/R under one full
-five-channel backend remains a separate composition step.
+## System construction 交接
 
-`CanonicalEventRelayAttachment` is the small reusable boundary piece: it
-reuses the supplied `InterfaceProtocol` direction and schema checks while
-preserving the canonical event.  RID interpretation, route locks, and owner
-state stay in the AXI fabric backend.  Interface monitors retain their own
-ordering ledger, so the executable table and protocol oracle do not share one
-mutable FIFO instance.
+`SystemProtocolBuilder.construct_address_router()` 将 `AddressRouterContract` 交给注入的 AMBA factory。Recipe 使用
+`contract.routes` 构造 fabric，backend 随后投影实际 ingress、egress 和 route 配置；builder 在注册前核对投影
+与合同，并在 elaboration 中闭合每个 route window 到直接相邻 egress endpoint 的唯一 address claim。
 
-## System construction boundary
+System construction 持有 module identity、`InterfaceConnection`、全局 address claim 和 router contract；
+VirtualDut backend 持有 queue、grant、owner 及 AXI read/write ledger。Crossbar 通过显式 fabric VirtualDut
+进入 topology，runtime 执行 resolution 后固定的连接与 backend 行为。
 
-An address network may keep one route authority in an
-`AddressRouterContract`.  `SystemProtocolBuilder.construct_address_router()`
-passes that contract to an injected factory; the AXI4-Lite and AXI4 read/write
-factories can pass `contract.routes` directly to their recipes.  The
-constructed backend projects its actual ingress, egress, and route
-configuration, and the builder compares that projection with the contract
-before registration.  System elaboration then checks
-that every translated route window has one covering claim on the directly
-connected egress endpoint.
-
-This direct-neighbor address closure does not infer crossbar behavior from a
-star-shaped topology and does not execute arbitration.  Queue, cursor, and
-owner state, including the AXI read/write ledgers, remain private to the
-constructed VirtualDut backend.  Multi-hop
-address search and boundary comparison against an arbitrary external RTL
-crossbar remain later work.  An external/opaque crossbar still needs a future
-adapter before its asserted route contract can be checked against the implementation.
+逐项覆盖、容量边界和后续 profile 统一见
+[`implementation-status.md`](../../../../docs/architecture/implementation-status.md)。系统地址构造的设计理由见
+[`address-fabric.md`](../../../../docs/architecture/address-fabric.md)，SystemProtocol 入口见
+[`system/README.md`](../../../system/README.md)。

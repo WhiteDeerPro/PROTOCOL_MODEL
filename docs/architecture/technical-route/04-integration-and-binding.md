@@ -2,9 +2,9 @@
 
 [返回架构地图](README.md) · [VirtualDut](03-virtual-dut.md) · [端到端 APB 示例](07-apb-read-walkthrough.md)
 
-这一源码接缝专门收纳“既必须理解某个协议，又必须理解某类模块操作”的代码。它不是新增的协议语义层；
-关键是把单端口翻译、可复用 typed translation、协议约束下的模块执行和完整模块装配分开，并避免耦合扩散到
-InterfaceProtocol、VirtualDut 核心或 SystemProtocol。
+这一源码接缝收纳“同时理解具体协议与模块操作”的代码，并分成单端口翻译、可复用 typed translation、
+协议约束下的模块执行和完整模块装配。InterfaceProtocol、VirtualDut 核心与 SystemProtocol 通过这些具名
+构件协作，同时保持各自的事实所有权。
 
 <a id="integration"></a>
 ## 1. Integration：协议与模块操作的依赖边界
@@ -13,9 +13,9 @@ Integration 是协议定义与 VirtualDut operation SPI 的依赖汇合区。接
 核心只定义模块边界和行为接口；具体 attachment、protocol-bound translation/backend 和 recipe 可以同时认识
 二者。
 
-这个依赖方向使新增协议不要求 VirtualDut 核心维护协议名单，也使 InterfaceProtocol 不必认识 AddressSpace、
-backend 或 bridge 等模块构造对象。把 `attach(vdut)` 直接放进 APB 定义会反转这条依赖，因此不作为公共
-构造入口。
+这个依赖方向让 VirtualDut 核心保持协议中立，让 InterfaceProtocol 聚焦线上合同。具体协议包向 integration
+提供 family asset，recipe 再把 attachment、AddressSpace、backend 或 bridge 组合为 module。公共构造入口
+沿这一方向放在 integration recipe。
 
 本工程把依赖收口为：
 
@@ -32,18 +32,18 @@ InterfaceProtocol definition + VirtualDut contracts
 
 具体 attachment 可以同时依赖协议定义和 VirtualDut SPI；被多个 plan 复用的 typed lower/lift 进入
 `integrations/translations`；当跨端口 controller 直接受协议 channel、ID 或 ordering 约束时，它进入
-integration-owned backend；recipe 再选择这些构件。两侧核心不反向导入集成实现。当前 APB 翻译位于
+integration-owned backend；recipe 再选择这些构件。依赖从 integration 指向两侧核心。当前 APB 翻译位于
 [`integrations/attachments/amba/apb/`](../../../protocol_model/integrations/attachments/amba/apb/)，
 构造入口位于
 [`integrations/recipes/amba/endpoints/apb.py`](../../../protocol_model/integrations/recipes/amba/endpoints/apb.py)。
 
 ## 2. 静态对象与运行状态
 
-| 对象 | 回答的问题 | 是否保存动态状态 |
+| 对象 | 回答的问题 | 状态归属 |
 |---|---|---|
-| `InterfacePort` | module 对外是哪种协议、哪种 role？ | 否 |
-| `InterfaceAttachment` | event 如何转换成 operation，反向怎样编码？ | 声明初态；实际状态由 backend state 持有 |
-| `InterfaceAttachmentBinding` | 这个具体 port 装了哪个 attachment？ | 否，静态不可变 |
+| `InterfacePort` | module 对外是哪种协议、哪种 role？ | 静态 boundary |
+| `InterfaceAttachment` | event 如何转换成 operation，反向怎样编码？ | 声明初态；运行快照进入 backend state |
+| `InterfaceAttachmentBinding` | 这个具体 port 装了哪个 attachment？ | 静态、不可变 |
 | `InterfaceConnection` | 这个 port 在系统里连接到谁？ | 静态 topology；运行状态在 InterfaceSession |
 
 相应的动作也不同：
@@ -53,20 +53,19 @@ bind_port()  在一个 VirtualDut 内装配端口实现
 connect      在 SystemProtocol 中用 InterfaceConnection 连接不同模块
 ```
 
-使用同一个 `attach` 动词表示两者，会把局部实现和全局 topology 混在一起。
+这两个具名动作分别表达局部实现装配和全局 topology 连接。
 
 CHI participant recipe 中的 `attach_chi_issue_h_{coherence,home}` 是一个具名 composition helper：
-输入是协议中立 `CacheCore` 或 `FullLineBackingCore`，输出是第一个新的 VirtualDut assembly；调用前不存在
-“待修改的 bare VirtualDut”。如果调用方已经构造了最终 boundary，则使用 `bind_chi_issue_h_*_vdut()`，
-返回的 facet 引用同一个 canonical object。当前不提供 CHI 私有的
-`bare VirtualDut → copied/refined VirtualDut` 变换；这种不可变 boundary refinement 若出现，应先由通用
-VirtualDut construction 定义 lineage 与加入 topology 前的 replacement 语义。
+输入是协议中立 `CacheCore` 或 `FullLineBackingCore`，输出是第一个新的 VirtualDut assembly。如果调用方
+已经构造最终 boundary，则使用 `bind_chi_issue_h_*_vdut()`，返回的 facet 引用同一个 canonical object。
+未来的 immutable boundary refinement 由通用 VirtualDut construction 先定义 lineage 与 topology 注册前的
+replacement 语义。
 
 <a id="attachment"></a>
 ## 3. Attachment：单端口翻译器
 
-通用 SPI 只要求 attachment 声明所支持的 InterfaceProtocol、role、初始接口侧状态和 quiescent 条件。它没有
-强行规定一个万能 `decode()`，因为 address、stream、interrupt 的 operation 类型并不相同。
+通用 SPI 要求 attachment 声明所支持的 InterfaceProtocol、role、初始接口侧状态和 quiescent 条件。
+address、stream、interrupt 等 operation family 分别提供适合自身数据形状的 typed 转换接口。
 
 Address operation family 再派生两面接口：
 
@@ -95,8 +94,8 @@ APB requester 保存唯一 pending request ID；APB completer 保存足够的 re
 - event、字段、方向和参数构成相同 interface shape；
 - role 相同。
 
-Transport shape 不比较 monitor 内 lambda 的对象身份，因此独立构造但配置相同的 AXI 协议仍可兼容；
-它也不宣称两份语义 profile 完全相等，额外语义继续由实际 InterfaceSession 检查。
+Transport shape 比较 event、字段、方向和关键参数。独立构造但配置相同的 AXI 协议因此可以兼容；
+monitor lambda 的对象身份与额外语义继续由实际 InterfaceSession 处理。
 
 Attachment-aware backend 会投影自己真正使用的 bindings。VirtualDut 构造时要求公开 binding 与 backend
 使用的是同一对象，防止出现：
@@ -125,7 +124,7 @@ VirtualDutBuilder
 VirtualDut "registers"
 ```
 
-Recipe 是 composition root：它有权依赖端口、attachment 和 backend，但不重新定义它们的运行语义。APB
+Recipe 是 composition root：它依赖端口、attachment 和 backend，并沿用各构件已经声明的运行语义。APB
 recipe 见
 [`integrations/recipes/amba/endpoints/apb.py`](../../../protocol_model/integrations/recipes/amba/endpoints/apb.py)。
 
@@ -140,19 +139,18 @@ recipe 见
 | interface transaction monitor | InterfaceSession |
 | 多模块运行快照 | SystemSession |
 
-Binding 只保存静态关系。若它也保存运行状态，就会与 backend snapshot 形成两个真相，破坏回滚和重放。
+Binding 保存静态关系；backend snapshot 唯一保存 attachment/backend 运行状态，从而支持一致的回滚和重放。
 
 ## 7. Integration 与系统构造的边界
 
-SystemProtocol 只消费 VirtualDut 的 InterfacePort 和边界投影：它连接 role、拥有 topology，SystemSession
-再把 canonical event 送入目标 backend。SystemProtocol 不识别 `ApbCompleterAttachment` 类，也不查看
-pending interface state。
+SystemProtocol 消费 VirtualDut 的 InterfacePort 和边界投影：它连接 role、拥有 topology，SystemSession
+再把 canonical event 送入目标 backend。具体 attachment 类型与 pending interface state 由 VirtualDut
+realization 持有。
 
-未来 capability/address closure 也应消费 VirtualDut 的边界投影，而不是反射 attachment/backend 私有对象。
-当前使用显式 bridge recipe；目标 construction lowering（V1/T8 后）再允许经用户授权的
-`SystemProtocolBuilder` 选择 plan，并生成 bridge VirtualDut 与两条 interface connections。core SystemProtocol elaboration
-只检查生成后的 topology。若没有被授权的 plan，构造阶段报告 operation/capability mismatch，不在运行期
-静默插入 adapter。
+capability/address closure 同样消费 VirtualDut 的边界投影。当前 bridge 由显式 recipe 构造；后续
+construction lowering 可由经用户授权的 `SystemProtocolBuilder` 选择 plan，并生成 bridge VirtualDut 与两条
+interface connections。core elaboration 检查生成后的 topology。缺少授权 plan 时，构造阶段返回
+operation/capability mismatch；runtime 始终执行已经固定的 topology。
 
 ## 8. AMBA operation families 的具体化
 
@@ -166,48 +164,47 @@ AHB 与 AXI memory-mapped 已有功能性 integration。它们优先复用 Addre
   context，产出 `AddressBurst`；`BurstToAccessStage` 再将 INCR/FIXED/WRAP burst 展开为逐 beat
   AddressAccess，由公共 executor 严格串行发行并折回对应 R 或聚合 B。通用 requester attachment 当前仍是
   serialized single-access transport profile；
-- AXI4-Stream：使用独立 StreamTransfer contract，保留 keep/strobe、packet end、ID/destination，不进入
-  AddressAccess。
+- AXI4-Stream：使用独立 StreamTransfer contract，保留 keep/strobe、packet end、ID/destination。
 
-通用 AHB AddressSpace backend 当前显式拒绝配置了 Exclusive signaling 的 AHB5 interface。原因不是 InterfaceProtocol
-不能携带 HEXCL/HEXOKAY，而是普通 AddressSpace 没有可观察其他写入者的 Exclusive Access Monitor。
-little-endian mapping 已实现；其他 AHB endian mapping 需要独立 profile。
+通用 AHB AddressSpace backend 的当前准入 profile 采用 ordinary access，并要求 Exclusive signaling
+关闭。HEXCL/HEXOKAY 属于 InterfaceProtocol 合同；启用它们的 endpoint 需要可观察其他写入者的 Exclusive
+Access Monitor。little-endian mapping 已实现；其他 AHB endian mapping 需要独立 profile。
 
-AXI4 AddressSpace endpoint 当前处理 normal access，并明确拒绝 exclusive descriptor；reservation 与跨入口
-冲突仍需 exclusive-aware backend。AXI4-Stream capture 已有，accept 触发之外的自主 source emission 仍等待
+AXI4 AddressSpace endpoint 当前处理 normal access；exclusive descriptor 的准入要求 exclusive-aware
+backend 持有 reservation 与跨入口冲突状态。AXI4-Stream capture 已有，自主 source emission 随 boundary
 runtime 扩展。
 
-跨端口的 serialize、ID remap、burst split 和 owner return 属于 bridge VirtualDut 的 translation plan/
-executor，不拆到互相看不到的两个单端口 attachment 中。完整设计见
+跨端口的 serialize、ID remap、burst split 和 owner return 由 bridge VirtualDut 的 translation
+plan/executor 统一拥有。完整设计见
 [Bridge 与类型化事务转译](../typed-transaction-translation.md)。
 
 ## 9. 多端口 integration 产物
 
-调用 AMBA recipe 得到的仍是普通 `VirtualDut`。更准确的说法是：一个 constructed backend 通过具体 AMBA
-attachments 实例化为 **AMBA-bound module realization**。AMBA 描述其端口边界，不成为 VirtualDut 的父类
-或永久设备身份；若同类行为改用 TileLink attachment，应构造另一个模块实例，而不是把既有对象变形。
+调用 AMBA recipe 得到普通 `VirtualDut`：一个 constructed backend 通过具体 AMBA attachments 实例化为
+**AMBA-bound module realization**。AMBA 描述端口边界，module 身份由系统角色决定。同类行为改用 TileLink
+attachment 时，recipe 构造具有相应端口合同的另一个模块实例。
 
 Endpoint 的主要语义通常是“请求进入本地状态并形成结果”。Bridge 和 crossbar 更特殊：它们的主要语义
 就是多个端口之间的关系，包括 transform、route、arbitrate、owner/correlation、capacity、ordering 和
-completion return。因此逐个 attachment 正确，并不足以推出整个互连模块正确；这些跨端口事实必须由同一
-backend 或 boundary contract 统一拥有。
+completion return。这些跨端口事实由同一 backend 或 boundary contract 统一拥有，互连验证同时检查各
+attachment 与整体生命周期。
 
 Bridge/crossbar 仍作为普通 VirtualDut 放进 SystemProtocol：
 
 - bridge 常见形态是 1→1，突出协议或传输形状转换；
 - crossbar 常见形态是 N→M，突出路由、仲裁、并发和 owner/ID 表；
-- 当验证目标需要观察其内部 module/interface 时，才把同一逻辑展开为内部 SystemProtocol。
+- 验证目标覆盖内部 module/interface 时，将同一逻辑展开为内部 SystemProtocol。
 
-互连的结构化边界投影应从 plan/executor 的唯一配置派生 ingress/egress、route、transfer policy、capacity
-和 completion policy，不另建一份可独立修改的重复 route contract。它也不要求建立
-`BridgeDut`/`CrossbarDut` 继承树。
+互连的结构化边界投影从 plan/executor 的唯一配置派生 ingress/egress、route、transfer policy、capacity
+和 completion policy。bridge 与 crossbar 以具名 VirtualDut recipe 表达各自组合，类型体系保持统一的
+VirtualDut module 边界。
 
 ## 10. 当前实现状态的归属
 
 本页的稳定合同是：operation family 各自提供小型 attachment SPI，binding 保证静态一致性；protocol-bound
 translation 保存可复用的 typed lower/lift 合同，backend 拥有无法放入通用 VirtualDut core 的执行生命周期；
-recipe 完成最终装配。运行状态由 backend/attachment snapshot 唯一拥有。它不需要随着每个协议 profile 的
-覆盖进度反复改写。
+recipe 完成最终装配。运行状态由 backend/attachment snapshot 唯一拥有。协议 profile 的覆盖进度集中记录在
+状态页。
 
 易变化内容由以下页面维护：
 

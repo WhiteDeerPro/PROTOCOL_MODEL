@@ -1,10 +1,11 @@
 # 架构文档索引
 
-架构文档用于建立可独立阅读的概念体系，而不是保存讨论时间线。每个核心概念由一篇 canonical 文档负责
-完整定义；技术路线负责导读，协议专题负责具体化，状态页负责说明当前实现。
+架构文档建立一套可独立阅读的概念体系。每个核心概念由一篇 canonical 文档负责完整定义；canonical owner
+可以位于本目录根部或 `technical-route/`，以下所有权表给出准确入口。未在表中承担 canonical 职责的技术路线页
+提供阅读路径。协议专题说明具体标准如何落入架构，状态页与近期 Roadmap 分别记录实现覆盖和工作顺序。
 
 若当前问题是“这段实现应放在哪个源码包”，先看
-[`protocol_model` 源码导航](../../protocol_model/README.md)；本目录继续负责概念、机制与设计理由，不复制文件清单。
+[`protocol_model` 源码导航](../../protocol_model/README.md)。本目录聚焦概念、机制、设计理由及职责交接。
 
 ## 1. 概念依赖关系
 
@@ -21,13 +22,14 @@ packet/flit forms + resolved hops + family runtime ──────► transpo
 Observation / Session / Trace / Artifact 横向服务上述对象
 ```
 
-箭头只表示构造或解释依赖，不表示协议栈层级或运行时必经顺序。InterfaceProtocol 与 VirtualDut 行为分别
-构造，在 attachment/binding 处汇合；SystemProtocol 扩大判定范围，但不读取 attachment 私有状态。完整的
-三视图定义见[通信建模的三张视图](communication-scope-and-transport.md)。
+箭头标注构造或解释依赖。协议栈层级和运行时顺序由各协议及执行路径分别定义。InterfaceProtocol 与
+VirtualDut 行为独立构造，在 attachment/binding 处汇合；SystemProtocol 将判定范围扩展到多条连接，
+attachment 定义端口侧转换和状态 fragment，backend runtime state 保存并更新绑定后的实例。完整的三视图定义见
+[通信建模的三张视图](communication-scope-and-transport.md)。
 
 ## 2. Canonical 文档所有权
 
-| 概念 | Canonical 文档 | 相邻导读或实例 |
+| 概念 | Canonical owner | 相邻导读或实例 |
 |---|---|---|
 | 工程术语、亲缘关系与命名后缀 | [术语体系与词典](terminology.md) | 本索引、各专题首次定义 |
 | 基础语义 | [基础语义](technical-route/01-semantic-foundation.md) | [术语表](terminology.md) |
@@ -47,8 +49,8 @@ Observation / Session / Trace / Artifact 横向服务上述对象
 | artifact 存储、manifest 与发布 | [运行产物管理](run-output-management.md) | [可视化视图与 Artifact 管理](visualization-and-artifacts.md)、[执行与证据](technical-route/06-observation-execution-evidence.md) |
 | transaction time-space view | [事务时空图](../visualization/transaction-time-space-view.md) | [运行产物管理](run-output-management.md) |
 
-若一个相邻页面需要使用这些概念，应给出本页所需的最小解释并链接 canonical 文档，避免复制完整定义、
-状态表和实施计划。
+相邻页面给出当前论述所需的最小解释，并链接 canonical owner。完整定义、实现状态和实施计划分别回到
+对应的权威页面维护。
 
 ## 3. 页面内部的解释顺序
 
@@ -57,22 +59,36 @@ Observation / Session / Trace / Artifact 横向服务上述对象
 1. 定位与术语：对象是什么、观察范围在哪里；
 2. 构造或运行机制：对象怎样组成、状态怎样流动；
 3. 设计理由：协议要求、架构边界、复用收益或复杂度取舍；
-4. 相邻边界：哪些事实属于其他层，哪些选择需要显式 policy；
+4. 职责交接：相邻事实由谁持有，哪些选择需要显式 policy；
 5. 示例：用具体协议或场景验证抽象；
 6. 当前实现与后续：单独放在末尾或链接状态/roadmap 页面；
-7. 常见误解：只作辅助，不作为整篇目录主骨架。
+7. 误解索引：按需补充，供读者快速定位易混概念。
 
-理由需要说明性质。例如“APB attachment 不放进 InterfaceProtocol”是依赖方向和职责边界；“V1 child 严格串行”
-是阶段性复杂度选择；“APB 一次只有一个 active transfer”来自所选协议/profile。三者不应写成同一种
-“不允许”。
+设计理由同时标注来源和适用范围。例如，APB attachment 归 integration 所有，来源是依赖方向与职责边界；
+V1 child 严格串行，来源是当前阶段的复杂度选择；APB 一次只有一个 active transfer，来源是所选
+协议/profile。这样的分类让架构约束、阶段选择和协议要求保持各自的证据强度。
 
-## 4. 三种文档角色
+## 4. 四种文档角色
 
 | 文档角色 | 主要内容 | 时间敏感度 |
 |---|---|---|
 | canonical 架构 | 概念、机制、理由、边界和稳定示例 | 较低 |
-| 技术路线/教程 | 推荐阅读顺序和端到端直觉 | 中等，只摘要 canonical 内容 |
-| 状态/实施计划 | 已实现、未完成、实施顺序和验收条件 | 较高 |
+| 技术路线/教程 | 除表中具名 canonical owner 外的推荐阅读顺序、端到端直觉和摘要 | 中等 |
+| 实现状态 | 已实现能力、明确缺口、证据与 profile 边界 | 较高 |
+| 近期 Roadmap | 当前工作顺序、依赖与验收条件 | 较高 |
 
-协议专题位于 canonical 架构与状态之间：它应解释规范事实如何落入通用层级，同时清楚标记当前 profile
-覆盖范围。
+协议专题连接 canonical 架构与状态页：正文解释规范事实如何落入通用层级，profile 标记给出当前覆盖范围。
+
+## 5. 写作约定
+
+页面先建立读者需要保留的正向模型：说明主题、权威事实、输入、输出和相邻交接。源码 README 通常按
+“用途与公共入口 → 输入/输出与状态 owner → 构造或执行流 → 相邻包与 canonical 链接 → 必要护栏”组织。
+
+职责表优先使用“owned facts、inputs、outputs、handoff”等列；正文使用有明确主语的动作，例如
+“resolution 冻结计划”“runtime 执行已解析 topology”。对比句用于澄清真实歧义，禁止项用于协议要求、
+安全条件或可执行架构 invariant，并同时说明适用范围。
+
+实现阶段使用“当前”“本 profile”“尚未实现”等状态语言，并链接
+[实现状态](implementation-status.md)；近期顺序和验收条件链接
+[Roadmap](technical-route/08-roadmap.md)。一个段落尽量承载一项 claim，平行事实进入表格，历史流水账回到
+其权威状态页。

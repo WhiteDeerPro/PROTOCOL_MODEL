@@ -6,8 +6,8 @@ Protocol Model 的目标是：用可执行语义和受约束的状态空间探�
 及协议网络的有限行为。
 
 它可以采用形式语言、自动机、偏序、Petri 网、时序逻辑和 assume/guarantee 等方法，但
-边界应始终围绕**协议可观察行为**。它不是通用 RTL model checker、定理证明器、RTL 生成器，
-也不负责建立每一种 DUT 的完整功能模型。
+边界始终围绕**协议可观察行为**。RTL model checking、通用定理证明、RTL 生成和完整 DUT 功能模型由相应
+工具或外部 backend 提供。
 
 ```text
 协议要求 → shared semantics ─┬─→ InterfaceProtocol ─┐
@@ -31,7 +31,7 @@ topology/runtime 表达协议定义、绑定与执行。
 2. 协议规范、endpoint 能力、实现策略和测试假设必须分别记录；
 3. 每项能力用合法 witness、单点负例和可解释图表闭环，不以测试数量代替语义覆盖。
 
-本文维护长期能力方向和依赖关系，不承担当前实现清单。近期工作的实际顺序见
+本文维护长期能力方向和依赖关系。近期工作的实际顺序见
 [技术路线实施阶段](docs/architecture/technical-route/08-roadmap.md)，已实现与尚未实现的边界见
 [实现状态](docs/architecture/implementation-status.md)。Bridge 的概念和首版施工边界分别由
 [Bridge 与类型化事务转译](docs/architecture/typed-transaction-translation.md)和
@@ -63,7 +63,7 @@ reason”为目标。当前已经有首条 single-scope coherence authority 与 
 
 ### R1：提升语义引擎与协议派生能力
 
-目标是让新协议主要通过复用元组件和组合器得到，而不是为每个协议重新编写一个大型状态机。
+目标是让新协议通过复用元组件和组合器形成，使协议专用代码聚焦字段关系与标准规则。
 
 优先建设：
 
@@ -72,7 +72,7 @@ reason”为目标。当前已经有首条 single-scope coherence authority 与 
 - **资源语义扩展**：在已有 capacity、lease 与 `ResourceDemand` 上增加 held-resource、waiting demand、
   recoverable wakeup 和 release provenance；
 - **关系语义**：显式 precedence、independence、conflict 与 ordering domain；
-- **时间语义**：逻辑时钟、区间 deadline、跨域不可比时间，而不是默认使用单一 cycle；
+- **时间语义**：逻辑时钟、区间 deadline 与带 relation 的多 clock-domain 时间；
 - **派生器**：对 channel、event domain、transaction model、capability 和 requirement 进行
   可追溯替换或收窄；
 - **转译与构造闭合**：在已有 operation form、typed stage/plan、fan-out ledger、completion fold、
@@ -83,14 +83,14 @@ reason”为目标。当前已经有首条 single-scope coherence authority 与 
 - **最小诊断相关集**：从失败状态反向提取最小相关事件、资源和规则集合。
 
 设计上优先增加可组合的 `SemanticComponent` 构造器和稳定的语义 IR。只有出现新的、长期稳定的
-状态迁移形状时才增加基类；避免形成大量彼此不兼容的协议专用子类。
+状态迁移形状时才增加基类；协议专用差异优先由参数、fragment 与 typed relation 表达。
 
 完成标准：至少能用公共组件派生 UART frame、I²C transaction 和一个 credit/FIFO 网络，而
 不修改 core 的 step 契约。
 
 ### R2：协议网络、环与 deadlock 诊断
 
-网络分析不能只对现有因果 DAG 增加一次“找环”。需要明确区分三类图：
+网络分析明确区分三类图：
 
 | 图 | 节点/边 | 环的含义 |
 |---|---|---|
@@ -116,8 +116,7 @@ wait-for 环不一定导致失效。例如下面的机制可能提供 escape：
 - routing/virtual-channel 规则保留了无环 escape class；
 - 某个 transition 已经 enabled，只需要公平调度即可前进。
 
-注意：fairness 可以防止 enabled transition 长期得不到执行，但不能挽救“没有任何 transition
-enabled”的真实 deadlock。
+fairness 处理 enabled transition 的长期调度；“没有任何 transition enabled”的状态由 deadlock 判定处理。
 
 网络主线分为：
 
@@ -130,8 +129,8 @@ enabled”的真实 deadlock。
 7. 支持协议/profile 声明“此环为何安全”的约束及可验证 invariant。
 
 第一个端到端验证场景可使用 ready-valid ring：同一拓扑生成三组结果——零缓冲 lock、带一个
-初始 token 的可前进环、带 escape FIFO 的安全环。这样可以证明“拓扑有环”和“系统死锁”不是
-同一件事。
+初始 token 的可前进环、带 escape FIFO 的安全环。三组结果分别展示 topology cycle 与 system deadlock
+verdict 的关系。
 
 deadlock 之后仍需覆盖以下网络问题：
 
@@ -146,7 +145,7 @@ deadlock 之后仍需覆盖以下网络问题：
 ### R3：VirtualDut backend 与构造算子
 
 VirtualDut 是外部 module 边界。复杂算法、FPU 计算或软件模型可以通过 RTL/Python/C/RPC/trace
-backend 提供；内部状态可以不透明，引擎不需要证明或枚举 backend 内部实现。
+backend 提供；内部状态可以保持 opaque，引擎验证其边界通信合同。
 
 需要在工程内部构造 traffic、reference endpoint、bridge 或 crossbar 时，按
 [VirtualDut 方法论](docs/architecture/virtual-dut.md) 使用 bottom-up 算子，不按外设名称建立继承树：
@@ -163,7 +162,7 @@ form、stage、执行资源和 completion 回收的边界以
 
 #### QoS 与仲裁的归属
 
-QoS 和仲裁不是只能放在一个层次，正确划分如下：
+QoS 和仲裁按事实 owner 分布在多个层次：
 
 | 内容 | 归属 |
 |---|---|
@@ -174,12 +173,12 @@ QoS 和仲裁不是只能放在一个层次，正确划分如下：
 | 搜索 starvation、检查 invariant、生成反例 | engine/network analyzer |
 
 也就是说，总线协议规定“如何表达并合法传输”，VirtualDut 决定“如何调度”，验证场景声明
-“这次必须保证什么”，引擎负责验证。不要把某个 arbiter 的策略写成所有 AXI4 实例都必须满足
-的规则。
+“这次必须保证什么”，引擎负责验证。具体 arbiter policy 绑定到对应 VirtualDut 或 scenario property；
+AXI4 合同保存标准规定的字段合法性。
 
 ### R4：派生新的实用协议
 
-新增协议的意义不是扩大协议名单，而是用不同协议压力测试公共抽象。
+新增协议用于以新的字段关系和生命周期压力测试公共抽象。
 
 #### UART：时间抽象的首个压力场景
 
@@ -213,7 +212,7 @@ R2 的多参与者网络运行时之上。
 - transaction 层的 address/data/ACK/repeated-start obligation。
 
 I²C 网络中的物理连接天然类似“多端共享环/总线”，但诊断仍应基于 drive、ownership 和
-wait-for 关系，而不是仅按拓扑判断。
+wait-for 关系；topology 提供结构输入。
 
 后续可用 SPI 检验同步串行与 chip-select ownership，用 TileLink/AXI-stream 检验更丰富的
 channel/credit 组合；在 UART/I²C 把公共缺口暴露清楚前，不追求协议数量。
@@ -223,8 +222,8 @@ channel/credit 组合；在 UART/I²C 把公共缺口暴露清楚前，不追求
 
 ### R5：多时钟域与 CDC
 
-CDC 不能通过给所有事件增加一个全局 cycle 解决。不同 clock domain 的本地时间默认不可直接
-比较，只有同步事件、已知 clock relation 或 bridge contract 才能建立跨域因果边。
+CDC 使用各 clock domain 的本地时间。同步事件、已知 clock relation 或 bridge contract 提供跨域比较依据和
+因果边。
 
 计划分层：
 
@@ -244,7 +243,7 @@ CDC lint，也不模拟模拟意义上的 metastability。metastability 只建�
 
 ### R6：外部观测、诊断与工程化
 
-这是让模型进入真实 UVM/RTL 工作流的关键方向，应与 R1 同步设计 schema，而不是最后再做。
+这是让模型进入真实 UVM/RTL 工作流的关键方向，应与 R1 同步设计 schema。
 
 - canonical event/trace JSON schema 与版本迁移；
 - VCD adapter 优先，FSDB 通过可选外部转换器或插件接入，UVM transaction adapter 后续加入；
@@ -305,4 +304,5 @@ time domains ──► UART ──► CDC
 施工入口。
 
 每条路径都必须保留未覆盖规则和环境假设，并用合法 witness、单点负例及可解释的
-state/resource/causal projection 收束；一次有限 witness 的 `PASS` 不代表完整协议或 RTL 已被证明。
+state/resource/causal projection 收束。有限 witness 的 `PASS` 证明该输入与建模边界内的运行结果；完整协议
+或 RTL claim 需要更强的 coverage/conformance 证据。

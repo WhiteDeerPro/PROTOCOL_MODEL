@@ -14,6 +14,7 @@ from .backing import (
     BackingMutation,
     FullLineBackingCore,
     LineBackingState,
+    PreparedBackingPatch,
     PreparedBackingWrite,
 )
 from .cache import (
@@ -73,6 +74,7 @@ __all__ = [
     "NoOpBackend",
     "PortEmission",
     "PortInput",
+    "PreparedBackingPatch",
     "PreparedBackingWrite",
     "SteppedEmissionBackend",
     "SteppedEmissionProfile",

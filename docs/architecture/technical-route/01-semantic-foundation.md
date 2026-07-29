@@ -2,14 +2,14 @@
 
 [返回架构地图](README.md) · [查看总览图](overview.svg) · [术语表](../terminology.md)
 
-这一层解决的不是“AXI 有哪些信号”，而是更基础的问题：不同协议的通信事实怎样用同一种结构表达，
-规则怎样说明适用范围，有限 trace 怎样区分“已经违规”和“还没完成”。
+基础语义层定义各协议共享的通信事实、规则作用域和有限 trace 证据。具体协议的 pin、message 和设备行为
+通过相邻层映射到这些对象。
 
 <a id="canonical-event"></a>
 ## 1. CanonicalEvent：统一的通信事件值
 
-原始波形会说 `PSEL=1`、`PENABLE=1`、`PREADY=1`；UVM monitor 可能给出一个 APB transaction。基础语义
-不直接依赖这些来源，而把它们归一化为：
+原始波形可以给出 `PSEL=1`、`PENABLE=1`、`PREADY=1`，UVM monitor 也可以给出一个 APB transaction。
+observation adapter 或调用方把这些来源归一化为：
 
 ```python
 CanonicalEvent(
@@ -24,8 +24,9 @@ CanonicalEvent(
 - `payload` 保存这类动作的字段；
 - source、clock、timestamp、trace index 等元数据用于追踪来源和执行位置。
 
-CanonicalEvent 不是 pin，也不是完整设备行为。observation、generator 或调用方可以先构造一个候选值；
-只有 session 接受并赋予 trace index 后，它才成为该次运行中已提交的通信事实。实现见
+CanonicalEvent 是 pin-neutral 的通信事件值。observation、generator 或调用方先构造 event candidate；
+session 接受候选值、同步提交 monitor 状态并赋予 trace index 后，得到该次运行中的 committed event。
+设备执行结果继续由 VirtualDut backend 持有。实现见
 [`semantics/event.py`](../../../protocol_model/semantics/event.py)。
 
 <a id="schema"></a>
@@ -40,13 +41,14 @@ READ
 └── prot: 3-bit bit vector
 ```
 
-Schema 有两个方向的用途：
+Schema 支持两个方向：
 
 - 验证：解释缺字段、额外字段或非法值；
 - 生成：把 EventOffer 给出的部分条件补成一个具体合法事件。
 
-`EventOffer` 只是“当前允许生成哪类事件、哪些字段已经固定”的部分赋值，不是已经发生的事件，也不是
-完整状态空间探索。当前生成属于 state-aware sampling。实现见
+`EventOffer` 表示“当前允许生成哪类事件、哪些字段已经固定”的部分赋值。它经过 schema 补全后形成
+event candidate，再由 session 决定是否接受。当前证据级别是 state-aware sampling；完整状态空间覆盖需要
+独立的穷举或形式化过程。实现见
 [`interface/protocol.py`](../../../protocol_model/interface/protocol.py) 和
 [`semantics/generation.py`](../../../protocol_model/semantics/generation.py)。
 
@@ -57,45 +59,47 @@ Schema 有两个方向的用途：
 
 | 对象 | 白话解释 | 例子 |
 |---|---|---|
-| `SemanticConstraint` | 哪些行为不允许 | AXI burst 不跨越 4KB；response ID 必须有效 |
+| `SemanticConstraint` | 合法行为集合受到什么限制 | AXI burst 禁止跨越 4KB；response ID 必须有效 |
 | `ResourceDecl` | 什么东西会被占用并释放 | 一个未完成 APB transfer；AXI pending read slot |
 | `ObligationDecl` | 发生 A 后仍欠着什么 B | READ 已接受，因此之后需要 READ_RESPONSE |
 
-它们都带 scope：event、transport、interface、virtual_dut 或 system。Scope 表示“至少要看到哪类边界才能
-判断”，用于避免把设备功能、接口局部规则和全局网络约束混在一起。Transport-hop 与 Interface 是两个
-观察面：一个检查相邻 TX→RX 的 flow control，另一个检查完整逻辑接口内的事件和事务关系，二者不是简单
-的上下级替代关系。
+它们都带 scope：event、transport、interface、virtual_dut 或 system。Scope 表示一条规则的最小判定边界，
+让设备功能、接口局部规则和全局网络约束各自回到对应 owner。Transport-hop 与 Interface 是两个并列
+观察面：前者检查相邻 TX→RX 的 flow control，后者检查完整逻辑接口内的事件和事务关系。
 
-有限 trace 中：
+有限 trace 的 verdict 条件为：
 
-- 观察到直接违规，可以判为 `FAIL`；
-- 没有违规且所有状态都已静止，可以判为 `PASS`；
-- 没有违规，但仍有 pending 或 obligation，结果是 `INCONCLUSIVE`。
+- `FAIL`：已观察到直接违规；
+- `PASS`：全部检查接受，且相关状态已经 quiescent；
+- `INCONCLUSIVE`：当前前缀保持合法，同时仍有 pending 或 obligation。
 
-因此“没有报错”不总等于“已经完成”。实现见
+pending 状态因而把“当前未观察到违规”与“已经完成”区分开。实现见
 [`semantics/model.py`](../../../protocol_model/semantics/model.py)。
 
 <a id="fragment"></a>
 ## 4. SemanticFragment：可以组合和追踪的规则包
 
 SemanticFragment 把 constraints、resources、obligations、dependencies 和来源组织成具名片段。协议定义
-可以组合多个 fragment，并在实例化时加 namespace，避免不同 interface instance 的规则和资源混名。
+可以组合多个 fragment，并在实例化时加 namespace，为每个 interface instance 分配独立的规则与资源名称。
 
-需要注意：声明进入 fragment，不代表当前有一个通用求解器自动执行了所有文字规则。当前真正的执行
-来源主要是：
+fragment 负责 requirement catalog、组合结构和诊断 provenance。当前执行判定由以下实现承担：
 
 - EventSchema 的字段与事件局部约束；
 - monitor 的状态迁移；
 - InterfaceSession 对有界资源的用量检查。
 
-Fragment 同时承担 requirement catalog、诊断来源和未来分析 IR 的作用。实现见
-[`semantics/fragment.py`](../../../protocol_model/semantics/fragment.py)。
+声明进入 fragment 后即可供报告和未来分析 IR 使用；对应规则获得上述执行实现时，才产生可执行 verdict。
+实现见 [`semantics/fragment.py`](../../../protocol_model/semantics/fragment.py)。
+
+合同 refinement 保持单调收窄：增加 constraint、降低 capacity 或禁止 event 后，合法行为集合满足
+`L(refined) ⊆ L(base)`。profile 可以给这个结果命名，也可以描述一组基础配置。实现见
+[`interface/protocol.py`](../../../protocol_model/interface/protocol.py)。
 
 <a id="component"></a>
 ## 5. SemanticComponent：会记住历史的审核员
 
-只检查一个事件的字段不够。例如收到 READ_RESPONSE 时，必须知道之前是否真的有 READ。可执行组件使用
-统一转移形式：
+事件局部字段检查由 EventSchema 完成；跨事件关系由 SemanticComponent 保存历史。例如，READ_RESPONSE
+的判定需要查找此前已接受的 READ。可执行组件使用统一转移形式：
 
 ```text
 (old state, action)
@@ -104,23 +108,27 @@ Fragment 同时承担 requirement catalog、诊断来源和未来分析 IR 的�
 ```
 
 Monitor 是最常见的 SemanticComponent：它保存 pending token、beat count、FIFO descriptor 等最小历史。
-InterfaceSession 将多个 monitor 同步运行，只有所有检查都接受时才提交状态。
+InterfaceSession 将多个 monitor 同步运行，并在所有检查接受后一次提交状态。
 
 实现见 [`semantics/component.py`](../../../protocol_model/semantics/component.py)。
 
-## 6. CausalGraph：记录语义依赖，不只是文件顺序
+## 6. CausalGraph：happens-before 与记录顺序
 
-trace 保存事件的线性记录位置，但 causality 只在“后一个事件在语义上依赖前一个事件”时增加边。例如
-response 依赖 request；两个不同 AXI ID 的 response 可能没有相互因果边。
+trace index 保存事件的线性记录位置。CausalGraph 在“后一个事件在语义上依赖前一个事件”时增加
+happens-before 边。例如 response 依赖 request；两个不同 AXI ID 的 response 可以保持并发或不可比较。
 
-因此“没有边”表示未建立 happens-before，可能是并发或不可比较，不应擅自解释为记录顺序。实现见
+缺少 causal edge 表示当前证据尚未建立 happens-before；trace index 继续独立记录文件或执行位置。实现见
 [`semantics/causal.py`](../../../protocol_model/semantics/causal.py)。
 
-## 这一层不负责什么
+## 7. 与相邻层的责任交接
 
-- 不识别具体 APB/AXI pin；那属于 Observation；
-- 不决定地址读取返回什么；那属于 VirtualDut backend；
-- 不连接多个模块；那属于 SystemProtocol；
-- 不自动证明无限时间上的 progress；当前主要处理有限行为与显式状态。
+| 事实 | Owner |
+|---|---|
+| APB/AXI pin 到 event candidate 的解释 | Observation |
+| 地址读取的设备执行结果 | VirtualDut backend |
+| 多个 module 与 connection 的系统关系 | SystemProtocol |
+| 无限时间上的 progress 证明 | 显式 system/scenario property 与相应形式化过程 |
+
+基础语义层为这些 owner 提供有限行为、显式状态和可追踪声明。
 
 下一步阅读：[通用模式与 InterfaceProtocol](02-patterns-and-interface-protocol.md)。

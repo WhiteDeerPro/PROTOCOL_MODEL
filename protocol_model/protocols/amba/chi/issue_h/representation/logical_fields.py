@@ -29,6 +29,7 @@ from .dat import (
     ChiCompDataMessage,
     ChiCopyBackWrDataMessage,
     ChiDatOpcode,
+    ChiNonCopyBackWrDataMessage,
     ChiSnpRespDataMessage,
 )
 from .domain import (
@@ -38,6 +39,8 @@ from .domain import (
     ChiProtocolMessage,
 )
 from .req import (
+    ChiAtomicLoadAddMessage,
+    ChiAtomicSwapMessage,
     ChiCleanUniqueMessage,
     ChiEvictMessage,
     ChiMakeUniqueMessage,
@@ -50,14 +53,18 @@ from .req import (
     ChiWriteBackFullMessage,
     ChiWriteEvictFullMessage,
     ChiWriteEvictOrEvictMessage,
+    ChiWriteNoSnpFullMessage,
+    ChiWriteNoSnpPtlMessage,
 )
 from .rsp import (
     ChiCompAckMessage,
     ChiCompMessage,
     ChiCompDBIDRespMessage,
+    ChiDBIDRespMessage,
     ChiPCrdGrantMessage,
     ChiRetryAckMessage,
     ChiRspOpcode,
+    ChiSnpRespFwdedMessage,
     ChiSnpRespMessage,
 )
 from .snp import (
@@ -65,6 +72,7 @@ from .snp import (
     ChiSnpMakeInvalidMessage,
     ChiSnpOpcode,
     ChiSnpNotSharedDirtyMessage,
+    ChiSnpSharedFwdMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
 )
@@ -356,9 +364,37 @@ _READ_FIELDS = (
     _boolean("TraceTag", "trace_tag"),
 )
 
+_NO_SNP_FIELDS = (
+    *_READ_FIELDS[:11],
+    _integer("LPID", "logical_processor_id", 5),
+    *_READ_FIELDS[11:],
+)
+
 _COPYBACK_FIELDS = (
     *_READ_FIELDS,
     _boolean("CAH", "copy_at_home"),
+)
+
+_ATOMIC_FIELDS = (
+    _integer("TxnID", "transaction_id", 12),
+    _integer(
+        "Addr",
+        "address",
+        profile_width="request_address_width",
+    ),
+    _integer("Size", "size", 3),
+    _integer("QoS", "qos", 4),
+    _integer("PAS", "pas", 3),
+    _boolean("AllowRetry", "allow_retry"),
+    _integer("Order", "order", 2),
+    _integer("PCrdType", "protocol_credit_type", 4),
+    _integer("MemAttr", "memory_attributes", 4),
+    _boolean("SnpAttr", "snoop_attribute"),
+    _boolean("SnoopMe", "snoop_me"),
+    _boolean("Endian", "endian"),
+    _boolean("ExpCompAck", "expect_completion_ack"),
+    _integer("TagOp", "tag_operation", 2),
+    _boolean("TraceTag", "trace_tag"),
 )
 
 _SNOOP_FIELDS = (
@@ -373,6 +409,17 @@ _SNOOP_FIELDS = (
     _boolean("DoNotGoToSD", "do_not_go_to_shared_dirty"),
     _boolean("RetToSrc", "return_to_source"),
     _boolean("TraceTag", "trace_tag"),
+)
+
+_FORWARDING_SNOOP_FIELDS = (
+    *_SNOOP_FIELDS[:4],
+    _integer(
+        "FwdNID",
+        "forward_node_id",
+        profile_width="node_id_width",
+    ),
+    _integer("FwdTxnID", "forward_transaction_id", 12),
+    *_SNOOP_FIELDS[4:],
 )
 
 
@@ -400,7 +447,35 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
         ChiReqOpcode.READ_NO_SNP,
         7,
         ChiReadNoSnpMessage,
-        _READ_FIELDS,
+        _NO_SNP_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
+        ChiReqOpcode.WRITE_NO_SNP_PTL,
+        7,
+        ChiWriteNoSnpPtlMessage,
+        _NO_SNP_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
+        ChiReqOpcode.WRITE_NO_SNP_FULL,
+        7,
+        ChiWriteNoSnpFullMessage,
+        _NO_SNP_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
+        ChiReqOpcode.ATOMIC_LOAD_ADD,
+        7,
+        ChiAtomicLoadAddMessage,
+        _ATOMIC_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.REQ,
+        ChiReqOpcode.ATOMIC_SWAP,
+        7,
+        ChiAtomicSwapMessage,
+        _ATOMIC_FIELDS,
     ),
     _schema(
         ChiChannelKind.REQ,
@@ -490,6 +565,21 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
     ),
     _schema(
         ChiChannelKind.RSP,
+        ChiRspOpcode.SNP_RESP_FWDED,
+        5,
+        ChiSnpRespFwdedMessage,
+        (
+            _integer("TxnID", "transaction_id", 12),
+            _integer("Resp", "response", 3),
+            _integer("QoS", "qos", 4),
+            _integer("RespErr", "response_error", 2),
+            _integer("CBusy", "completer_busy", 3),
+            _integer("FwdState", "forward_state", 3),
+            _boolean("TraceTag", "trace_tag"),
+        ),
+    ),
+    _schema(
+        ChiChannelKind.RSP,
         ChiRspOpcode.COMP_ACK,
         5,
         ChiCompAckMessage,
@@ -533,6 +623,21 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
     ),
     _schema(
         ChiChannelKind.RSP,
+        ChiRspOpcode.DBID_RESP,
+        5,
+        ChiDBIDRespMessage,
+        (
+            _integer("TxnID", "transaction_id", 12),
+            _integer("DBID", "data_buffer_id", 12),
+            _integer("QoS", "qos", 4),
+            _constant("RespErr", 0, 2),
+            _constant("Resp", 0, 3),
+            _integer("CBusy", "completer_busy", 3),
+            _boolean("TraceTag", "trace_tag"),
+        ),
+    ),
+    _schema(
+        ChiChannelKind.RSP,
         ChiRspOpcode.RETRY_ACK,
         5,
         ChiRetryAckMessage,
@@ -561,6 +666,13 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
         5,
         ChiSnpSharedMessage,
         _SNOOP_FIELDS,
+    ),
+    _schema(
+        ChiChannelKind.SNP,
+        ChiSnpOpcode.SNP_SHARED_FWD,
+        5,
+        ChiSnpSharedFwdMessage,
+        _FORWARDING_SNOOP_FIELDS,
     ),
     _schema(
         ChiChannelKind.SNP,
@@ -660,6 +772,29 @@ _CHI_ISSUE_H_LOGICAL_SCHEMAS = (
             _integer("Resp", "response", 3),
             _integer("DataSource", "data_source", 8),
             _integer("CBusy", "completer_busy", 3),
+            _integer("BE", "byte_enable", 64),
+            _integer("CCID", "critical_chunk_id", 2),
+            _boolean("TraceTag", "trace_tag"),
+        ),
+    ),
+    _schema(
+        ChiChannelKind.DAT,
+        ChiDatOpcode.NON_COPY_BACK_WRITE_DATA,
+        4,
+        ChiNonCopyBackWrDataMessage,
+        (
+            _integer("TxnID", "transaction_id", 12),
+            _integer(
+                "Data",
+                "data",
+                profile_width="data_width",
+            ),
+            _integer("DataID", "data_id", 2),
+            _integer("QoS", "qos", 4),
+            _integer("RespErr", "response_error", 2),
+            _integer("Resp", "response", 3),
+            _constant("DataSource", 0, 8),
+            _constant("CBusy", 0, 3),
             _integer("BE", "byte_enable", 64),
             _integer("CCID", "critical_chunk_id", 2),
             _boolean("TraceTag", "trace_tag"),

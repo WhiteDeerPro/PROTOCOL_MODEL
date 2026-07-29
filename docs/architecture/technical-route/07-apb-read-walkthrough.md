@@ -2,8 +2,8 @@
 
 [返回架构地图](README.md) · [查看总览图](overview.svg) · [术语表](../terminology.md)
 
-这份示例不要求读者预先了解 APB 信号时序。只需要把一次读取理解为：“请求方给出地址，目标方返回
-数据或错误”。
+读者可以先把一次读取理解为：“请求方给出地址，目标方返回数据或错误”。后文再把这条关系映射到 APB
+接口合同和 VirtualDut operation。
 
 ## 场景
 
@@ -23,7 +23,7 @@ APB 接口上的请求是：
 CanonicalEvent("READ", None, {"addr": 0x1000, "prot": 0})
 ```
 
-它不是原始 pin 波形，而是 APB observation 或 transaction adapter 已经提炼出的协议事件。
+这是 APB observation 或 transaction adapter 从 pin/transaction 输入提炼出的 canonical 协议事件。
 
 ## 事件经过的对象
 
@@ -38,12 +38,13 @@ CanonicalEvent("READ", None, {"addr": 0x1000, "prot": 0})
 
 InterfaceSession 检查：
 
-- 事件名是不是 APB 的 `READ`；
+- 事件名是否为 APB `READ`；
 - payload 是否包含合法宽度的 `addr` 和 `prot`；
 - requester 是否有权发送它；
 - 当前是否已经存在一个尚未完成的 APB transfer。
 
-这些判断只需要观察一条 APB interface connection，因此属于 InterfaceProtocol，而不是寄存器模块或整个网络。
+这些判断以一条 APB interface connection 为完整观察范围，因此由 InterfaceProtocol 拥有。寄存器模块负责
+访问结果，SystemProtocol 负责跨 module 连接。
 
 ### 3. 事件到达 completer InterfacePort
 
@@ -56,8 +57,8 @@ APB READ(addr=0x1000, prot=0)
 AddressRead(address=0x1000, size=4, attributes={prot: 0})
 ```
 
-为什么不让 AddressSpace 直接认识 APB？因为同一个 AddressSpace 以后也可以挂到 AHB、AXI4-Lite 或
-外部 RPC 接口上。地址访问语义可以复用，协议运输差异留给各自 integration。
+AddressSpace 保持协议中立，因此同一地址访问语义可以复用于 AHB、AXI4-Lite 或外部 RPC 接口。各
+integration attachment 分别处理协议运输差异。
 
 ### 4. backend 执行 AddressRead
 
@@ -69,7 +70,7 @@ AccessResult(status=OK, data=0x11223344)
 ```
 
 若地址没有命中，结果是 `DECODE_ERROR`；写只读寄存器则可能是 `ACCESS_ERROR`。这些是设备的正常访问
-结果，不默认当作模型基础设施故障。
+结果，由 attachment 映射为协议响应。模型基础设施故障另用 fault 表达。
 
 ### 5. attachment 编码 completion
 
@@ -83,8 +84,7 @@ CanonicalEvent(
 )
 ```
 
-它在提交自身接口侧状态前检查输出事件的方向和 schema，避免“已经认为完成，但生成了非法响应”的状态
-分叉。
+它在提交自身接口侧状态前检查输出事件的方向和 schema，使 completion state 与合法响应原子提交。
 
 ### 6. 响应沿同一 InterfaceConnection 返回
 
@@ -105,12 +105,11 @@ pending read，并建立 request → response 的因果边；随后响应送到 
 
 ## Blackhole sink 的执行结果
 
-blackhole sink 接收 `READ` 后不返回 `READ_RESPONSE`。这一步本身不一定立即产生 safety fault，但 APB
-pending resource 不会释放，系统也不会 quiescent。它表达“请求被环境吞掉”的挂起场景，而不是一个
-功能完整的 APB target。
+blackhole sink 接收 `READ` 后保留 pending resource，并持续处于非 quiescent 状态。有限运行通常把这个
+挂起场景判为 `INCONCLUSIVE`；正常 APB target 则通过 `READ_RESPONSE` 解除 obligation。
 
 ## 当前实现与目标实现的区别
 
 当前示例通常用 `SystemAction` 显式注入最初的 READ。未来增加自主/deferred emission 后，manager backend
 可以先产生协议无关 `AddressRequest`，再由 `ApbRequesterAttachment` 编码 READ。后续的 InterfaceProtocol、
-SystemProtocol 和 completer 路径不需要因此改变。
+SystemProtocol 和 completer 路径保持同一合同。

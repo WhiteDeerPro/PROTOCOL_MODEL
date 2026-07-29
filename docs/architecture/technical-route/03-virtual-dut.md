@@ -2,14 +2,13 @@
 
 [返回架构地图](README.md) · [协议集成与绑定](04-integration-and-binding.md) · [术语表](../terminology.md)
 
-VirtualDut 首先表示系统图中的一个具体、具名 module。它是“虚拟”的，因为行为可以来自 Python 模型、
-外部 RTL、RPC、trace 或嵌套系统；并不意味着它只是一个轻量 agent，也不要求内部状态有限或可枚举。
+VirtualDut 首先表示系统图中的一个具体、具名 module。“虚拟”表示行为来源可以是 Python 模型、外部 RTL、
+RPC、trace 或嵌套系统；内部状态可以保持不透明，也可以具有无限或不可枚举的状态空间。
 
 <a id="operations"></a>
 ## 1. 协议无关操作：模块真正关心的事情
 
-CPU 或总线看到的是地址、数据和 completion，而不是“某个外设类”。因此构造可执行参考模块时，先抽取
-协议无关操作：
+CPU 或总线通过地址、数据和 completion 与 module 交互。构造可执行参考模块时，先抽取这些协议无关操作：
 
 - `AddressRead` / `AddressWrite`：访问 byte range；
 - `AccessResult`：OK、decode error、access error；
@@ -17,8 +16,8 @@ CPU 或总线看到的是地址、数据和 completion，而不是“某个外�
 - Source、Sink、Transform、Store、Route、Correlate 等行为意图。
 
 当前代码已经完整实现 AddressAccess、AddressSpace、RegisterRegion、MemoryRegion，以及一套范围有限但
-可执行的 AddressFabric 实现。通用 Source/Store/Arbitrate 算子仍主要是目标方法，不应在图中画成已经
-齐备的库。
+可执行的 AddressFabric 实现。通用 Source/Store/Arbitrate 算子仍主要是目标方法；架构图应把它们标记为
+构造词汇或后续能力。
 
 相关实现见 [`virtual_dut/address/`](../../../protocol_model/virtual_dut/address/)。
 
@@ -98,7 +97,7 @@ VirtualDut "peripheral_fabric"
 
 ## 5. 互连 module 的行为形态
 
-它们是多端口 VirtualDut 的行为形态，而不是新的协议层：
+这些多端口行为都由 VirtualDut backend 与端口合同表达：
 
 | 形态 | 主要行为 |
 |---|---|
@@ -120,8 +119,8 @@ Bridge 内部 operation form、typed stage 和 executor 的完整构造见
 - `idle source`：本地 backend 不自主产生 canonical event；显式 SystemAction 仍可注入测试流量；
 - `blackhole sink`：接收后不产生 completion，留下 pending，用于 hang/deadlock 场景。
 
-它们描述 canonical-event 层行为，不表示 raw pin 上已经把 VALID tied-low 或 READY 固定。正常错误 responder
-仍需要协议专用 attachment 按规则返回完整 completion。
+它们描述 canonical-event 层行为。raw pin 的 VALID/READY policy 由后续 pin adapter 声明；正常错误
+responder 由协议专用 attachment 按规则返回完整 completion。
 
 ## 当前实现信息
 

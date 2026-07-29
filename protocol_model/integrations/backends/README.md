@@ -1,40 +1,57 @@
 # Protocol-bound execution backends
 
-本目录保存同时依赖具体 `InterfaceProtocol` 和 `VirtualDutBackend` 合同的执行实现。它们属于一个
-constructed VirtualDut 的内部行为，但不够协议中立，因而不进入 `protocol_model.virtual_dut.backend`。
+本目录保存同时依赖具体 `InterfaceProtocol` 和 `VirtualDutBackend` 合同的跨端口执行实现。它们构成
+constructed VirtualDut 的内部 realization，并由 integration recipe 完成最终装配。
 
-允许的依赖方向为：
+## 准入条件
+
+protocol-bound backend 负责具体协议直接塑造的 module 生命周期：
+
+| 事实 | 典型例子 | 状态 owner |
+|---|---|---|
+| channel correlation | AXI AW/W join | backend controller |
+| identity ordering | RID/BID destination lock、same-ID ordering | route/owner ledger |
+| 跨端口返回 | downstream completion → ingress owner | owner FIFO/table |
+| 协议保持型容量 | outstanding burst、partial transaction | immutable profile + backend state |
+
+单端口 phase context 由 attachment 持有；协议无关的 route、store、address operation 与 typed executor 继续由
+`virtual_dut/` 提供。
+
+## 依赖与装配
 
 ```text
 attachments / translations  ←  backends  ←  recipes
 attachments / translations  ←──────────── recipes
 ```
 
-- attachment 只解释一个 port 的 event/operation 边界及接口侧状态；
-- translation 声明 typed operation 之间的可复用 lower/lift 与 effect；
-- backend 保存跨端口 FIFO、route lock、owner、partial transaction 等 module 私有状态；
-- recipe 选择 port、binding、profile 和 backend，最终构造 `VirtualDut`。
+| 构件 | 向 backend 提供的事实 |
+|---|---|
+| attachment | 单个 port 的 event/operation 边界及接口侧状态 |
+| translation | typed operation 之间的 lower/lift、effect 与 plan fragment |
+| backend | 跨端口 FIFO、route lock、owner 和 partial transaction |
+| recipe | port、binding、profile 选择及最终 `VirtualDut` 构造 |
 
-Backend 不导入 recipe，也不在运行中搜索或隐式插入 bridge。面向一般使用者的构造入口仍由 recipe facade
-公开；本目录的叶模块主要供 recipe、定向验证和高级 inspection 使用。
+依赖方向固定为 attachment/translation → backend → recipe。运行时执行 recipe 已选择的构件；bridge 和
+backend 的创建发生在 construction 阶段。一般使用者从 recipe facade 构造 module，本目录的叶模块服务 recipe、
+定向验证和高级 inspection。
 
-当前 AXI4 纵向切片位于 `amba/axi/axi4/`：
+## 当前纵向切片
+
+AXI4 实现位于 `amba/axi/axi4/`：
 
 - `address_space.py`：burst-aware AXI4 endpoint 执行；
 - `read.py`：AR/R N×M route、RID destination lock 与 return-owner 生命周期；
 - `write.py`：AW/W assembly、BID destination lock 与 B return-owner 生命周期。
 
-每个文件暂时共置其 profile、immutable state records 和 controller，以便完整阅读同一生命周期。只有两个
-切片确认 key、取得、释放和错误语义一致后，才提取 common helper；read/write 都使用映射或 ID 并不足以建立
-通用 owner-table 基类。
+每个 vertical slice 共置 profile、immutable state records 与 controller，使 acquire、forward、return 和
+retire 生命周期可以连续阅读。公共提取以第二个真实消费者为前提，并要求 key、取得、释放、reset 和故障语义
+一致。
 
-`amba/` 当前只有 AXI4 不是 APB/AHB 的实现缺口，也不要求按协议名称补齐目录。APB 的 SETUP/ACCESS context
-和 AHB 的 address/data phase context 都属于单端口 attachment state；其 endpoint、单入口 fabric 和 serial
-bridge 目前分别可复用协议中立的 address、fabric 或 translation backend。AXI4 则有 burst、多 outstanding
-ID、AW/W join、same-ID ordering 与跨端口 return owner，这些协议规则直接塑造 controller 生命周期，才达到
-本目录的准入条件。
+APB 的 SETUP/ACCESS context 和 AHB 的 address/data phase context 属于单端口 attachment state；对应
+endpoint、单入口 fabric 与 serial bridge 复用协议中立的 address、fabric 或 translation backend。AXI4 的 burst、
+多 outstanding ID、AW/W join、same-ID ordering 与跨端口 return owner 满足本目录的准入条件。
 
-如果后续 AHB exclusive/atomic、协议保持型 burst/lock 或多端口仲裁形成不能由 attachment 与通用 operation
-表达的跨事务状态，再建立 `amba/ahb/` backend。APB 当前没有同等级需求。CHI coherent Home 的
-directory/transaction behavior 仍是 family participant/facet；它注入的 full-line backing prepare/commit
-core 是协议中立状态，因此也不为目录对称建立 `backends/amba/chi/`。
+新增 family backend 以一项由具体协议塑造的跨端口或跨事务生命周期为准入证据。例如 AHB
+exclusive/atomic、协议保持型 burst/lock 或多端口仲裁形成独立生命周期后，可以建立 `amba/ahb/` vertical
+slice。CHI coherent Home 的 directory/transaction behavior 由 family participant/facet 持有；其 full-line
+backing prepare/commit core 保持为协议中立状态。

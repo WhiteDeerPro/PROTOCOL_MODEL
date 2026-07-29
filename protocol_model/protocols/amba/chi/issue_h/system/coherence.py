@@ -10,6 +10,8 @@ The profile is intentionally narrow.  It closes clean ``ReadShared`` and
 ``CleanUnique`` permission upgrades, the ``UD`` owner-transfer path for
 ``ReadUnique``, the MESI no-SharedDirty ``ReadNotSharedDirty`` downgrade path,
 clean ``Evict``, explicit ``UD`` ``WriteBackFull``, a
+clean ``ReadShared`` direct-cache-transfer path from one resolved ``UC``
+forwarding peer,
 ``WriteEvictFull(CAH=0)`` transfer into Snoop-domain clean residency and its
 pre-DBID invalidating-Snoop cancellation, the two Home-selected
 ``WriteEvictFull(CAH=1)`` data/no-data branches under a cached-provenance
@@ -21,7 +23,8 @@ narrow composition with an independent same-line Snoop while the Requester
 waits for P-Credit.  The ``SD`` state exists only for the CleanUnique
 memory-update slice; general shared-dirty behavior, post-snoop errors,
 automatic victim selection, post-DBID CopyBack/Snoop composition, forwarding
-snoops, and packed pin observations remain separate extensions.
+snoops beyond the first clean DCT slice, and packed pin observations remain
+separate extensions.
 """
 
 from __future__ import annotations
@@ -66,6 +69,7 @@ from ..participants.coherence import (
     ChiRnAcceptComp,
     ChiRnAcceptCompDBIDResp,
     ChiRnAcceptCompData,
+    ChiRnAcceptDctCompData,
     ChiRnAcceptPCrdGrant,
     ChiRnAcceptRetryAck,
     ChiRnAcceptSnoop,
@@ -109,12 +113,14 @@ from ..representation.rsp import (
     ChiCompMessage,
     ChiPCrdGrantMessage,
     ChiRetryAckMessage,
+    ChiSnpRespFwdedMessage,
     ChiSnpRespMessage,
 )
 from ..representation.snp import (
     ChiSnpCleanInvalidMessage,
     ChiSnpMakeInvalidMessage,
     ChiSnpNotSharedDirtyMessage,
+    ChiSnpSharedFwdMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
 )
@@ -122,6 +128,7 @@ from .capability import (
     CHI_FEATURE_CLEAN_EVICT,
     CHI_FEATURE_CLEAN_EVICT_RETRY,
     CHI_FEATURE_CLEAN_READ_SHARED,
+    CHI_FEATURE_CLEAN_READ_SHARED_DCT,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR,
     CHI_FEATURE_CLEAN_READ_UNIQUE_RETRY,
@@ -147,6 +154,7 @@ _CLEAN_READ_FEATURES = frozenset(
 _COHERENCE_FEATURES = frozenset(
     (
         *_CLEAN_READ_FEATURES,
+        CHI_FEATURE_CLEAN_READ_SHARED_DCT,
         CHI_FEATURE_CLEAN_EVICT,
         CHI_FEATURE_CLEAN_EVICT_RETRY,
         CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
@@ -172,12 +180,14 @@ _COHERENCE_SNOOP_TYPES = (
     ChiSnpCleanInvalidMessage,
     ChiSnpMakeInvalidMessage,
     ChiSnpNotSharedDirtyMessage,
+    ChiSnpSharedFwdMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
 )
 _COHERENCE_SNOOP_RESPONSE_TYPES = (
     ChiSnpRespMessage,
     ChiSnpRespDataMessage,
+    ChiSnpRespFwdedMessage,
 )
 _COHERENT_READ_TYPES = (
     ChiReadSharedMessage,
@@ -1195,6 +1205,10 @@ class ChiCoherenceState:
     copyback_phase_ledger: ChiCopyBackPhaseLedger = field(
         default_factory=ChiCopyBackPhaseLedger
     )
+    expected_dct_comp_data: Mapping[
+        tuple[int, int],
+        ChiNetworkPacket,
+    ] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         request_nodes = dict(self.request_nodes)
@@ -1613,6 +1627,159 @@ class ChiCoherenceState:
             raise ValueError(
                 "Home-completed coherent read with a matching RN pending "
                 "request requires exactly one expected CompData"
+            )
+
+        dct_expected = dict(self.expected_dct_comp_data)
+        for key, completion_packet in dct_expected.items():
+            completion = (
+                completion_packet.message
+                if isinstance(completion_packet, ChiNetworkPacket)
+                else None
+            )
+            valid_key = (
+                isinstance(key, tuple)
+                and len(key) == 2
+                and all(
+                    isinstance(value, int)
+                    and not isinstance(value, bool)
+                    and value >= 0
+                    for value in key
+                )
+                and key[1] < (1 << 12)
+                and key[0] in request_nodes
+            )
+            pending_request = (
+                request_nodes[key[0]].pending_transactions.get(key[1])
+                if valid_key
+                else None
+            )
+            matching_home_pending = (
+                tuple(
+                    pending
+                    for pending in self.home.pending.values()
+                    if (
+                        pending.requester_id == key[0]
+                        and pending.request == pending_request
+                        and isinstance(
+                            pending.request,
+                            ChiReadSharedMessage,
+                        )
+                        and pending.request.transaction_id == key[1]
+                        and pending.forwarding_peer_id
+                        == completion_packet.source_id
+                        and pending.snoop_transaction_id
+                        == completion.data_buffer_id
+                        and pending.data_buffer_id
+                        == completion.data_buffer_id
+                        and not pending.completion_sent
+                    )
+                )
+                if (
+                    valid_key
+                    and isinstance(completion, ChiCompDataMessage)
+                )
+                else ()
+            )
+            matching_pending = (
+                matching_home_pending[0]
+                if len(matching_home_pending) == 1
+                else None
+            )
+            peer_line = (
+                request_nodes[completion_packet.source_id].line_at(
+                    matching_pending.request.address
+                )
+                if (
+                    matching_pending is not None
+                    and completion_packet.source_id in request_nodes
+                )
+                else None
+            )
+            backing_line = (
+                self.home.backing.line_at(
+                    matching_pending.request.address
+                )
+                if matching_pending is not None
+                else None
+            )
+            if (
+                not valid_key
+                or not isinstance(completion, ChiCompDataMessage)
+                or completion_packet.source_id
+                not in request_nodes
+                or completion_packet.source_id == key[0]
+                or completion_packet.target_id != key[0]
+                or completion_packet.packet_index != 0
+                or completion_packet.packet_count != 1
+                or completion.transaction_id != key[1]
+                or completion.response is not ChiRespCode.SC
+                or completion.response_error is not ChiRespErr.OK
+                or completion.data_id != 0
+                or completion.data_source != 0
+                or completion.completer_busy != 0
+                or completion.critical_chunk_id != 0
+                or completion.trace_tag
+                or completion.copy_at_home
+                or not isinstance(
+                    pending_request,
+                    ChiReadSharedMessage,
+                )
+                or len(matching_home_pending) != 1
+                or peer_line is None
+                or peer_line.state is not ChiCacheState.SC
+                or peer_line.data != completion.data
+                or backing_line is None
+                or backing_line.data != completion.data
+                or completion.qos != pending_request.qos
+            ):
+                raise ValueError(
+                    "expected clean-DCT CompData requires one exact "
+                    "(requester, original TxnID)->forwarding-peer DAT "
+                    "packet and matching Home/RN reservations"
+                )
+        object.__setattr__(
+            self,
+            "expected_dct_comp_data",
+            MappingProxyType(dct_expected),
+        )
+        dct_snoops_awaiting_delivery = set(
+            self.expected_snoop_deliveries
+        )
+        required_dct_comp_data = {
+            (
+                pending.requester_id,
+                pending.request.transaction_id,
+            )
+            for pending in self.home.pending.values()
+            if (
+                pending.forwarding_peer_id is not None
+                and isinstance(
+                    pending.request,
+                    ChiReadSharedMessage,
+                )
+                and pending.requester_id in request_nodes
+                and request_nodes[
+                    pending.requester_id
+                ].pending_transactions.get(
+                    pending.request.transaction_id
+                )
+                == pending.request
+                and (
+                    pending.forwarding_peer_id,
+                    pending.snoop_transaction_id,
+                )
+                not in dct_snoops_awaiting_delivery
+            )
+        }
+        if set(dct_expected) != required_dct_comp_data:
+            raise ValueError(
+                "a delivered clean-DCT forwarding Snoop with a pending "
+                "Requester requires exactly one expected peer CompData"
+            )
+        if set(dct_expected) & set(coherent_read_expected):
+            raise ValueError(
+                "one coherent read cannot await Home and forwarding-peer "
+                "CompData simultaneously"
             )
 
         writeback_dbid_responses = dict(
@@ -2455,6 +2622,7 @@ class ChiCoherenceSession(
         enabled_features: frozenset[ChiFeatureKey] | None = None,
         requester_node_ids: frozenset[int] | None = None,
         snoopee_node_ids: frozenset[int] | None = None,
+        forwarding_snoopee_node_id: int | None = None,
         authority_window: AddressWindow | None = None,
     ) -> None:
         if not isinstance(name, str) or not name:
@@ -2503,6 +2671,14 @@ class ChiCoherenceSession(
         ):
             raise ValueError(
                 "dirty Unique transfer requires the ReadUnique base feature"
+            )
+        if (
+            CHI_FEATURE_CLEAN_READ_SHARED_DCT in features
+            and CHI_FEATURE_CLEAN_READ_SHARED not in features
+        ):
+            raise ValueError(
+                "clean ReadShared DCT requires the clean ReadShared base "
+                "feature"
             )
         if (
             CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR in features
@@ -2761,6 +2937,31 @@ class ChiCoherenceSession(
                 "CHI requester and Snoopee authority must belong to the "
                 "RN registry"
             )
+        if forwarding_snoopee_node_id is not None and (
+            not isinstance(forwarding_snoopee_node_id, int)
+            or isinstance(forwarding_snoopee_node_id, bool)
+            or forwarding_snoopee_node_id < 0
+        ):
+            raise ValueError(
+                "CHI forwarding Snoopee authority requires a non-negative "
+                "NodeID"
+            )
+        if CHI_FEATURE_CLEAN_READ_SHARED_DCT in features:
+            if (
+                forwarding_snoopee_node_id is None
+                or forwarding_snoopee_node_id not in snoopees
+                or forwarding_snoopee_node_id in requesters
+            ):
+                raise ValueError(
+                    "clean ReadShared DCT requires one scalar forwarding "
+                    "Snoopee in the Snoopee authority and outside every "
+                    "Requester role"
+                )
+        elif forwarding_snoopee_node_id is not None:
+            raise ValueError(
+                "a forwarding Snoopee can be bound only when clean "
+                "ReadShared DCT is enabled"
+            )
         if authority_window is not None and not isinstance(
             authority_window, AddressWindow
         ):
@@ -2774,6 +2975,7 @@ class ChiCoherenceSession(
         self.enabled_features = features
         self.requester_node_ids = requesters
         self.snoopee_node_ids = snoopees
+        self.forwarding_snoopee_node_id = forwarding_snoopee_node_id
         self.authority_window = authority_window
 
         initial = self._make_initial_state()
@@ -2800,7 +3002,8 @@ class ChiCoherenceSession(
         through this construction.  ``snoopee`` is the union of RNs that can
         be selected as a peer for at least one Requester.  A multi-Requester
         member can therefore have both authorities; the Home directory still
-        chooses the actual targets for each operation.
+        chooses the actual targets for each operation.  The clean-DCT
+        modifier additionally binds its scalar ``forwarding_snoopee`` role.
         """
 
         from .resolved import ResolvedChiSystem
@@ -2834,6 +3037,11 @@ class ChiCoherenceSession(
             )
         for feature in features:
             resolved.capabilities.require(feature)
+        forwarding_binding = (
+            resolved.role_binding("forwarding_snoopee")
+            if CHI_FEATURE_CLEAN_READ_SHARED_DCT in features
+            else None
+        )
 
         requester_bindings = resolved.role_bindings("requester")
         authority = resolved.feature_authority
@@ -2949,6 +3157,11 @@ class ChiCoherenceSession(
                 binding.component.node_id
                 for binding in snoopee_bindings
             ),
+            forwarding_snoopee_node_id=(
+                forwarding_binding.component.node_id
+                if forwarding_binding is not None
+                else None
+            ),
             authority_window=authority.address_claim.window,
         )
 
@@ -2977,6 +3190,7 @@ class ChiCoherenceSession(
             and not state.expected_clean_unique_completions
             and not state.expected_make_unique_completions
             and not state.expected_coherent_read_completions
+            and not state.expected_dct_comp_data
             and not state.copyback_phase_ledger.entries
             and not state.expected_retry_acks
             and not state.expected_pcredit_grants
@@ -3048,6 +3262,20 @@ class ChiCoherenceSession(
                 f"{self.name}.completion_endpoint",
                 "expected completion has another Home or Requester "
                 "endpoint",
+                ConstraintScope.SYSTEM,
+                self.name,
+            )
+        if any(
+            packet.source_id != self.forwarding_snoopee_node_id
+            or packet.target_id not in self.requester_node_ids
+            or not isinstance(packet.message, ChiCompDataMessage)
+            or packet.message.home_node_id != self.home.node_id
+            for packet in state.expected_dct_comp_data.values()
+        ):
+            return SemanticFault(
+                f"{self.name}.dct_completion_endpoint",
+                "expected clean-DCT CompData has another forwarding "
+                "Snoopee, Requester, or HomeNID endpoint",
                 ConstraintScope.SYSTEM,
                 self.name,
             )
@@ -3220,6 +3448,7 @@ class ChiCoherenceSession(
             expected_coherent_read_completions=(
                 state.expected_coherent_read_completions
             ),
+            expected_dct_comp_data=state.expected_dct_comp_data,
             copyback_phase_ledger=state.copyback_phase_ledger,
             expected_retry_acks=state.expected_retry_acks,
             expected_pcredit_grants=expected_pcredit_grants,
@@ -3927,7 +4156,16 @@ class ChiCoherenceSession(
                     )
                     if retry_fault is not None:
                         return SemanticStep(state, fault=retry_fault)
-                action = ChiHomeAcceptCoherentRead(packet)
+                action = ChiHomeAcceptCoherentRead(
+                    packet,
+                    forwarding_peer_id=(
+                        self._clean_dct_forwarding_peer(
+                            state,
+                            packet.source_id,
+                            message,
+                        )
+                    ),
+                )
             elif isinstance(message, ChiWriteEvictOrEvictMessage):
                 if packet.source_id not in self.requester_node_ids:
                     return self._fault(
@@ -4310,7 +4548,11 @@ class ChiCoherenceSession(
                 )
             elif isinstance(
                 message,
-                (ChiSnpRespMessage, ChiSnpRespDataMessage),
+                (
+                    ChiSnpRespMessage,
+                    ChiSnpRespDataMessage,
+                    ChiSnpRespFwdedMessage,
+                ),
             ):
                 if packet.source_id not in self.snoopee_node_ids:
                     return self._fault(
@@ -4503,6 +4745,7 @@ class ChiCoherenceSession(
                         packet.source_id != pending.requester_id
                         or key
                         in state.expected_coherent_read_completions
+                        or key in state.expected_dct_comp_data
                         or (
                             requester_state.pending_transactions.get(
                                 pending.request.transaction_id
@@ -5164,6 +5407,7 @@ class ChiCoherenceSession(
                 expected_coherent_read_completions=(
                     expected_coherent_read_completions
                 ),
+                expected_dct_comp_data=state.expected_dct_comp_data,
                 copyback_phase_ledger=copyback_phase_ledger,
                 expected_retry_acks=expected_retry_acks,
                 expected_pcredit_grants=expected_pcredit_grants,
@@ -5188,6 +5432,7 @@ class ChiCoherenceSession(
             (
                 ChiSnpCleanInvalidMessage,
                 ChiSnpMakeInvalidMessage,
+                ChiSnpSharedFwdMessage,
                 ChiSnpSharedMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
@@ -5241,29 +5486,11 @@ class ChiCoherenceSession(
             )
             deliveries = state.expected_snoop_deliveries
             responses = state.expected_snoop_responses
+            dct_comp_data = state.expected_dct_comp_data
             if (
                 transition.fault is None
                 and transition.blocked is None
             ):
-                if (
-                    len(transition.emissions) != 1
-                    or not isinstance(
-                        transition.emissions[0].message,
-                        _COHERENCE_SNOOP_RESPONSE_TYPES,
-                    )
-                    or transition.emissions[0].source_id
-                    != packet.target_id
-                    or transition.emissions[0].target_id
-                    != self.home.node_id
-                    or transition.emissions[0].message.transaction_id
-                    != message.transaction_id
-                ):
-                    return self._fault(
-                        state,
-                        "snoop_response_emission",
-                        "RN Snoop acceptance must emit one exactly "
-                        "correlated RSP or DAT packet",
-                    )
                 updated_deliveries = dict(
                     state.expected_snoop_deliveries
                 )
@@ -5278,7 +5505,124 @@ class ChiCoherenceSession(
                         "Snoopee already has an expected response for "
                         "this Snoop identity",
                     )
-                updated_responses[snoop_key] = transition.emissions[0]
+                if isinstance(message, ChiSnpSharedFwdMessage):
+                    forwarded_data = tuple(
+                        emission
+                        for emission in transition.emissions
+                        if isinstance(
+                            emission.message,
+                            ChiCompDataMessage,
+                        )
+                    )
+                    forwarded_responses = tuple(
+                        emission
+                        for emission in transition.emissions
+                        if isinstance(
+                            emission.message,
+                            ChiSnpRespFwdedMessage,
+                        )
+                    )
+                    pending = matches[0]
+                    if (
+                        len(transition.emissions) != 2
+                        or len(forwarded_data) != 1
+                        or len(forwarded_responses) != 1
+                        or pending.forwarding_peer_id
+                        != packet.target_id
+                        or pending.requester_id
+                        != message.forward_node_id
+                        or pending.request.transaction_id
+                        != message.forward_transaction_id
+                    ):
+                        return self._fault(
+                            state,
+                            "dct_snoop_emission_shape",
+                            "SnpSharedFwd acceptance must emit one peer "
+                            "CompData and one forwarded Snoop response for "
+                            "the retained Home reservation",
+                        )
+                    data_packet = forwarded_data[0]
+                    data_message = data_packet.message
+                    response_packet = forwarded_responses[0]
+                    response_message = response_packet.message
+                    assert isinstance(
+                        data_message,
+                        ChiCompDataMessage,
+                    )
+                    assert isinstance(
+                        response_message,
+                        ChiSnpRespFwdedMessage,
+                    )
+                    data_key = (
+                        message.forward_node_id,
+                        message.forward_transaction_id,
+                    )
+                    if (
+                        data_packet.source_id != packet.target_id
+                        or data_packet.target_id
+                        != message.forward_node_id
+                        or data_packet.target_id
+                        not in self.requester_node_ids
+                        or data_message.transaction_id
+                        != message.forward_transaction_id
+                        or data_message.home_node_id
+                        != self.home.node_id
+                        or data_message.data_buffer_id
+                        != message.transaction_id
+                        or data_message.response is not ChiRespCode.SC
+                        or response_packet.source_id
+                        != packet.target_id
+                        or response_packet.target_id
+                        != self.home.node_id
+                        or response_message.transaction_id
+                        != message.transaction_id
+                        or response_message.response
+                        is not ChiRespCode.SC
+                        or response_message.forward_state
+                        is not ChiRespCode.SC
+                        or data_key in state.expected_dct_comp_data
+                    ):
+                        return self._fault(
+                            state,
+                            "dct_snoop_emission_correlation",
+                            "clean DCT outputs do not preserve the "
+                            "Requester TxnID, Home Snoop/DBID, peer source, "
+                            "or SC forwarding result",
+                        )
+                    updated_dct_comp_data = dict(
+                        state.expected_dct_comp_data
+                    )
+                    updated_dct_comp_data[data_key] = data_packet
+                    dct_comp_data = updated_dct_comp_data
+                    updated_responses[snoop_key] = response_packet
+                else:
+                    if (
+                        len(transition.emissions) != 1
+                        or not isinstance(
+                            transition.emissions[0].message,
+                            (
+                                ChiSnpRespMessage,
+                                ChiSnpRespDataMessage,
+                            ),
+                        )
+                        or transition.emissions[0].source_id
+                        != packet.target_id
+                        or transition.emissions[0].target_id
+                        != self.home.node_id
+                        or transition.emissions[
+                            0
+                        ].message.transaction_id
+                        != message.transaction_id
+                    ):
+                        return self._fault(
+                            state,
+                            "snoop_response_emission",
+                            "RN Snoop acceptance must emit one exactly "
+                            "correlated RSP or DAT packet",
+                        )
+                    updated_responses[snoop_key] = (
+                        transition.emissions[0]
+                    )
                 deliveries = updated_deliveries
                 responses = updated_responses
             states = dict(state.request_nodes)
@@ -5298,6 +5642,7 @@ class ChiCoherenceSession(
                 expected_coherent_read_completions=(
                     state.expected_coherent_read_completions
                 ),
+                expected_dct_comp_data=dct_comp_data,
                 copyback_phase_ledger=state.copyback_phase_ledger,
                 expected_retry_acks=state.expected_retry_acks,
                 expected_pcredit_grants=(
@@ -5530,6 +5875,7 @@ class ChiCoherenceSession(
                     expected_coherent_read_completions=(
                         state.expected_coherent_read_completions
                     ),
+                    expected_dct_comp_data=state.expected_dct_comp_data,
                     copyback_phase_ledger=copyback_phase_ledger,
                     expected_retry_acks=state.expected_retry_acks,
                     expected_pcredit_grants=(
@@ -5630,6 +5976,7 @@ class ChiCoherenceSession(
                     expected_coherent_read_completions=(
                         state.expected_coherent_read_completions
                     ),
+                    expected_dct_comp_data=state.expected_dct_comp_data,
                     copyback_phase_ledger=state.copyback_phase_ledger,
                     expected_retry_acks=state.expected_retry_acks,
                     expected_pcredit_grants=(
@@ -5697,6 +6044,7 @@ class ChiCoherenceSession(
                     expected_coherent_read_completions=(
                         state.expected_coherent_read_completions
                     ),
+                    expected_dct_comp_data=state.expected_dct_comp_data,
                     copyback_phase_ledger=state.copyback_phase_ledger,
                     expected_retry_acks=state.expected_retry_acks,
                     expected_pcredit_grants=(
@@ -5771,6 +6119,7 @@ class ChiCoherenceSession(
                 expected_coherent_read_completions=(
                     state.expected_coherent_read_completions
                 ),
+                expected_dct_comp_data=state.expected_dct_comp_data,
                 copyback_phase_ledger=state.copyback_phase_ledger,
                 expected_retry_acks=state.expected_retry_acks,
                 expected_pcredit_grants=(
@@ -5795,6 +6144,81 @@ class ChiCoherenceSession(
             pending_request = state.request_nodes[
                 packet.target_id
             ].pending_transactions.get(message.transaction_id)
+            completion_key = (
+                packet.target_id,
+                message.transaction_id,
+            )
+            dct_expected = state.expected_dct_comp_data.get(
+                completion_key
+            )
+            if dct_expected is not None:
+                if (
+                    CHI_FEATURE_CLEAN_READ_SHARED_DCT
+                    not in self.enabled_features
+                    or packet.source_id
+                    != self.forwarding_snoopee_node_id
+                    or not isinstance(
+                        pending_request,
+                        ChiReadSharedMessage,
+                    )
+                    or dct_expected != packet
+                ):
+                    return self._fault(
+                        state,
+                        "dct_completion_correlation",
+                        "CompData does not exactly match the selected "
+                        "forwarding peer, Requester/original TxnID, "
+                        "HomeNID, DBID, and SC payload",
+                    )
+                transition = node.step(
+                    state.request_nodes[packet.target_id],
+                    ChiRnAcceptDctCompData(packet),
+                )
+                states = dict(state.request_nodes)
+                states[packet.target_id] = transition.state
+                dct_completions = dict(
+                    state.expected_dct_comp_data
+                )
+                if (
+                    transition.fault is None
+                    and transition.blocked is None
+                ):
+                    del dct_completions[completion_key]
+                candidate = ChiCoherenceState(
+                    home=state.home,
+                    request_nodes=states,
+                    expected_evict_completions=(
+                        state.expected_evict_completions
+                    ),
+                    expected_clean_unique_completions=(
+                        state.expected_clean_unique_completions
+                    ),
+                    expected_make_unique_completions=(
+                        state.expected_make_unique_completions
+                    ),
+                    expected_coherent_read_completions=(
+                        state.expected_coherent_read_completions
+                    ),
+                    expected_dct_comp_data=dct_completions,
+                    copyback_phase_ledger=(
+                        state.copyback_phase_ledger
+                    ),
+                    expected_retry_acks=state.expected_retry_acks,
+                    expected_pcredit_grants=(
+                        state.expected_pcredit_grants
+                    ),
+                    expected_snoop_deliveries=(
+                        state.expected_snoop_deliveries
+                    ),
+                    expected_snoop_responses=(
+                        state.expected_snoop_responses
+                    ),
+                )
+                return self._finish(
+                    candidate,
+                    transition,
+                    original=state,
+                )
             if isinstance(pending_request, ChiMakeUniqueMessage):
                 return self._fault(
                     state,
@@ -5869,6 +6293,7 @@ class ChiCoherenceSession(
                     state.expected_make_unique_completions
                 ),
                 expected_coherent_read_completions=completions,
+                expected_dct_comp_data=state.expected_dct_comp_data,
                 copyback_phase_ledger=state.copyback_phase_ledger,
                 expected_retry_acks=state.expected_retry_acks,
                 expected_pcredit_grants=(
@@ -6110,6 +6535,7 @@ class ChiCoherenceSession(
                 expected_coherent_read_completions=(
                     state.expected_coherent_read_completions
                 ),
+                expected_dct_comp_data=state.expected_dct_comp_data,
                 copyback_phase_ledger=copyback_phase_ledger,
                 expected_retry_acks=expected_retry_acks,
                 expected_pcredit_grants=expected_pcredit_grants,
@@ -6161,6 +6587,58 @@ class ChiCoherenceSession(
         if isinstance(request, ChiReadNotSharedDirtyMessage):
             return CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY
         return CHI_FEATURE_CLEAN_READ_SHARED
+
+    def _clean_dct_forwarding_peer(
+        self,
+        state: ChiCoherenceState,
+        requester_node_id: int,
+        request: (
+            ChiReadSharedMessage
+            | ChiReadNotSharedDirtyMessage
+            | ChiReadUniqueMessage
+        ),
+    ) -> int | None:
+        """Select the resolved peer only for the first stable clean DCT case."""
+
+        peer_id = self.forwarding_snoopee_node_id
+        if (
+            CHI_FEATURE_CLEAN_READ_SHARED_DCT
+            not in self.enabled_features
+            or peer_id is None
+            or not isinstance(request, ChiReadSharedMessage)
+        ):
+            return None
+        entry = state.home.directory.get(request.address)
+        requester_state = state.request_nodes[requester_node_id]
+        requester_line = requester_state.line_at(request.address)
+        peer_state = state.request_nodes[peer_id]
+        peer_line = peer_state.line_at(request.address)
+        backing_line = state.home.backing.line_at(request.address)
+        if (
+            requester_state.pending_transactions.get(
+                request.transaction_id
+            )
+            != request
+            or (
+                requester_line is not None
+                and (
+                    requester_line.state is not ChiCacheState.I
+                    or requester_line.data is not None
+                )
+            )
+            or entry is None
+            or entry.unique_owner != peer_id
+            or entry.sharers
+            or entry.shared_dirty_owner is not None
+            or peer_line is None
+            or peer_line.state is not ChiCacheState.UC
+            or peer_line.data is None
+            or peer_line.copy_at_home
+            or backing_line is None
+            or peer_line.data != backing_line.data
+        ):
+            return None
+        return peer_id
 
     @staticmethod
     def _retry_feature(request: object) -> ChiFeatureKey | None:
@@ -6224,6 +6702,7 @@ class ChiCoherenceSession(
         snoop: (
             ChiSnpCleanInvalidMessage
             | ChiSnpMakeInvalidMessage
+            | ChiSnpSharedFwdMessage
             | ChiSnpSharedMessage
             | ChiSnpNotSharedDirtyMessage
             | ChiSnpUniqueMessage
@@ -6237,6 +6716,8 @@ class ChiCoherenceSession(
             return CHI_FEATURE_CLEAN_READ_UNIQUE
         if isinstance(snoop, ChiSnpNotSharedDirtyMessage):
             return CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY
+        if isinstance(snoop, ChiSnpSharedFwdMessage):
+            return CHI_FEATURE_CLEAN_READ_SHARED_DCT
         return CHI_FEATURE_CLEAN_READ_SHARED
 
     def _replace_request_node(
@@ -6262,6 +6743,7 @@ class ChiCoherenceSession(
             expected_coherent_read_completions=(
                 state.expected_coherent_read_completions
             ),
+            expected_dct_comp_data=state.expected_dct_comp_data,
             copyback_phase_ledger=state.copyback_phase_ledger,
             expected_retry_acks=state.expected_retry_acks,
             expected_pcredit_grants=state.expected_pcredit_grants,

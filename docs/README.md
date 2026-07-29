@@ -1,21 +1,21 @@
 # Protocol Model 文档
 
 这套文档同时服务三类需求：第一次认识工程、实现或审查某个架构对象、确认当前代码究竟覆盖了什么。
-它们使用不同入口，避免让初次读者先面对完整源码目录和状态表。
+入口按读者任务分层：初次阅读采用渐进路线，架构工作进入 canonical 专题，实现核对进入状态页。
 
 [![Protocol Model 三视图架构地图](architecture/technical-route/overview.svg)](architecture/technical-route/overview.svg)
 
-这张图与当前架构文档同步；Showcase 中的发布图是演示快照，不作为架构定义来源。
+这张图与当前架构文档同步；Showcase 中的发布图用于演示，canonical 文档负责架构定义。
 
 ## 第一次阅读
 
 建议先看到一笔完整通信，再学习各对象的边界：
 
-1. 从根目录的[快速体验](../README.md#快速体验-axi4-示例)运行或浏览一个 AXI4 场景；
+1. 从根目录的[快速开始](../README.md#快速开始)运行或浏览一个 AXI4 场景；
 2. 阅读[一次 APB 寄存器读取](architecture/technical-route/07-apb-read-walkthrough.md)，理解请求怎样经过接口、
    attachment、VirtualDut 和 SystemProtocol；
 3. 回到[架构地图](architecture/technical-route/README.md)，用“五个问题”定位每个对象；
-4. 按当前任务进入下面的专题，不需要顺序读完所有架构文档；
+4. 按当前任务选择下面的一条专题路径；
 5. 最后查看[实现状态](architecture/implementation-status.md)，区分架构设计与当前可执行范围。
 
 遇到不熟悉的词，使用[术语表](architecture/terminology.md)；API、架构合同和实现状态均从本目录的
@@ -71,5 +71,5 @@ canonical 入口继续阅读。
 - [项目 Roadmap](../ROADMAP.md)记录长期研究和工程方向；
 - [Release archive](releases/README.md)保留已发布 tag 当时的术语和边界。
 
-普通运行和维护侧验证写入调用方选择的临时目录。只有具名发布脚本可以重建其拥有的
-`showcase/generated/` 子树；普通运行和文档阅读不会隐式改写发布材料。
+普通运行和维护侧验证写入调用方选择的临时目录。具名发布脚本负责重建其拥有的
+`showcase/generated/` 子树。

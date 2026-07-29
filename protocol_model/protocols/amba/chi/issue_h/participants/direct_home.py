@@ -120,6 +120,7 @@ class ChiDirectHomeNode(
         if (
             request.order != 0
             or request.expect_completion_ack
+            or request.exclusive
             or not request.allow_retry
             or request.protocol_credit_type != 0
         ):

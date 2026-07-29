@@ -13,7 +13,7 @@ from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 
 _PUBLIC_ANCHORS = {

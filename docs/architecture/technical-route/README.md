@@ -1,9 +1,9 @@
 # Protocol Model 架构地图
 
 这套阅读序列从三张视图解释项目：对象怎样构造、规则需要多大判定范围，以及通信采用什么表示与运输资源。
-它不是协议栈层级、Python 包名或工具清单，也不假设读者已经熟悉 AXI、形式语义、状态机或片上网络。概念所有权由
-[架构文档索引](../README.md)统一声明；为避免复制定义，其中基础语义、Pattern/InterfaceProtocol 和 Integration
-页面既位于渐进路线中，也直接承担对应概念的 canonical 说明，其余页面主要负责导读和实例。
+这条路线面向初次接触 AXI、形式语义、状态机或片上网络的读者，并把构造关系、判定范围和表示/运输并排
+呈现。概念所有权由[架构文档索引](../README.md)统一声明；基础语义、Pattern/InterfaceProtocol 和
+Integration 页面同时承担 canonical 说明，其余页面负责导读和实例。
 
 ## 从五个问题开始
 
@@ -18,8 +18,8 @@
 | 多个模块接起来后整体是否合法？ | `SystemProtocol` | 检查端口连接、路由、请求归属、返回路径，以及以后要加入的容量和等待关系 |
 
 InterfaceProtocol 和 VirtualDut 行为分别由共享语义构造，在 attachment/binding 处汇合；typed translation
-表达跨端口语义变化；SystemProtocol 扩大判定范围，但不会反向读取各 attachment 的私有状态。CHI 的
-transaction/message/packet/flit 属于另一张表示/运输视图，不按这条构造路径排成“更高或更低”的工程层。
+表达跨端口语义变化；SystemProtocol 扩大判定范围，并通过 boundary projection 消费 module 公开事实。CHI 的
+transaction/message/packet/flit 位于表示/运输视图，与构造路径共同组成三维模型。
 
 三张视图的 canonical 定义见[通信建模的三张视图](../communication-scope-and-transport.md)。
 
@@ -29,7 +29,7 @@ transaction/message/packet/flit 属于另一张表示/运输视图，不按这�
 
 这张图把构造依赖、判定作用域和表示/运输并排展开，并把 AXI、TileLink、CHI 显示为跨视图的协议族。
 建议点击图片打开独立 SVG，再点击其中的色块。部分 Markdown 平台会把嵌入式 SVG 当作不可交互的静态图片，
-因此下面同时保留普通链接。Showcase 图像属于发布材料快照，不作为本页架构定义的来源。
+因此下面同时保留普通链接。Showcase 图像是发布材料快照；本页与 canonical 文档提供架构定义。
 
 ## 主题说明
 
@@ -44,7 +44,7 @@ transaction/message/packet/flit 属于另一张表示/运输视图，不按这�
 | SystemProtocol | 点到点连接、bridge 和微型网络怎样使用同一个组合模型？ | [SystemProtocol：从连接到组网](05-system-protocol.md) |
 | 观察、执行与证据 | pin 波形如何变成协议事件，失败如何留下可解释证据？ | [观察、执行与产物](06-observation-execution-evidence.md) |
 | 完整事务 | 一次 APB 寄存器读取具体经过哪些对象？ | [端到端示例：一次 APB 读取](07-apb-read-walkthrough.md) |
-| 后续路线 | 为什么下一步不是继续堆协议，而是 capability、bridge 和 wait-for？ | [实施路线与阶段边界](08-roadmap.md) |
+| 后续路线 | capability、bridge 和 wait-for 如何形成下一阶段闭环？ | [实施路线与阶段边界](08-roadmap.md) |
 
 遇到不熟悉的词，可随时查看 [术语表](../terminology.md)。
 

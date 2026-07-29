@@ -16,11 +16,18 @@ from typing import Mapping
 from urllib.parse import quote
 
 from ..participants.capability import (
+    CHI_ATOMIC_LOAD_ADD_HOME_CAPABILITIES,
+    CHI_ATOMIC_LOAD_ADD_REQUESTER_CAPABILITIES,
+    CHI_ATOMIC_SWAP_HOME_CAPABILITIES,
+    CHI_ATOMIC_SWAP_REQUESTER_CAPABILITIES,
     CHI_CLEAN_EVICT_HOME_CAPABILITIES,
     CHI_CLEAN_EVICT_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_HOME_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_SHARED_SNOOPEE_CAPABILITIES,
+    CHI_CLEAN_READ_SHARED_DCT_HOME_CAPABILITIES,
+    CHI_CLEAN_READ_SHARED_DCT_REQUESTER_CAPABILITIES,
+    CHI_CLEAN_READ_SHARED_DCT_SNOOPEE_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_HOME_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_REQUESTER_CAPABILITIES,
     CHI_CLEAN_READ_UNIQUE_SNOOPEE_CAPABILITIES,
@@ -34,6 +41,10 @@ from ..participants.capability import (
     CHI_DIRTY_UNIQUE_SNOOPEE_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_HOME_CAPABILITIES,
     CHI_DIRTY_WRITEBACK_REQUESTER_CAPABILITIES,
+    CHI_WRITE_NO_SNP_FULL_HOME_CAPABILITIES,
+    CHI_WRITE_NO_SNP_FULL_REQUESTER_CAPABILITIES,
+    CHI_WRITE_NO_SNP_PTL_HOME_CAPABILITIES,
+    CHI_WRITE_NO_SNP_PTL_REQUESTER_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_COPY_AT_HOME_HOME_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_COPY_AT_HOME_REQUESTER_CAPABILITIES,
     CHI_WRITE_EVICT_FULL_HOME_CAPABILITIES,
@@ -46,6 +57,8 @@ from ..participants.capability import (
     CHI_MESI_READ_NOT_SHARED_DIRTY_HOME_CAPABILITIES,
     CHI_MESI_READ_NOT_SHARED_DIRTY_REQUESTER_CAPABILITIES,
     CHI_MESI_READ_NOT_SHARED_DIRTY_SNOOPEE_CAPABILITIES,
+    CHI_NON_SNOOP_EXCLUSIVE_PTL_HOME_CAPABILITIES,
+    CHI_NON_SNOOP_EXCLUSIVE_PTL_REQUESTER_CAPABILITIES,
     CHI_HOME_READ_NO_SNP_NDERR_PRODUCE,
     CHI_HOME_COMP_DATA_PRODUCE,
     CHI_HOME_PCREDIT_GRANT,
@@ -89,8 +102,26 @@ CHI_FEATURE_READ_NO_SNP_NDERR = ChiFeatureKey(
     "chi.feature.read_no_snp.nderr"
 )
 CHI_FEATURE_REQUEST_RETRY = ChiFeatureKey("chi.feature.request_retry")
+CHI_FEATURE_WRITE_NO_SNP_FULL = ChiFeatureKey(
+    "chi.feature.write_no_snp_full"
+)
+CHI_FEATURE_WRITE_NO_SNP_PTL = ChiFeatureKey(
+    "chi.feature.write_no_snp_ptl"
+)
+CHI_FEATURE_ATOMIC_SWAP = ChiFeatureKey(
+    "chi.feature.atomic_swap_nc"
+)
+CHI_FEATURE_ATOMIC_LOAD_ADD = ChiFeatureKey(
+    "chi.feature.atomic_load_add_nc"
+)
+CHI_FEATURE_NON_SNOOP_EXCLUSIVE_PTL = ChiFeatureKey(
+    "chi.feature.non_snoop_exclusive_ptl"
+)
 CHI_FEATURE_CLEAN_READ_SHARED = ChiFeatureKey(
     "chi.feature.clean_read_shared"
+)
+CHI_FEATURE_CLEAN_READ_SHARED_DCT = ChiFeatureKey(
+    "chi.feature.clean_read_shared.dct"
 )
 CHI_FEATURE_CLEAN_READ_UNIQUE = ChiFeatureKey(
     "chi.feature.clean_read_unique"
@@ -145,6 +176,7 @@ CHI_PATH_TYPED_PROTOCOL = ChiCapabilityKey("chi.path.typed_protocol")
 CHI_PATH_ROUTING_IDENTITY_PRESERVED = ChiCapabilityKey(
     "chi.path.routing_identity_preserved"
 )
+CHI_PATH_DAT_512 = ChiCapabilityKey("chi.path.dat.512_bit")
 CHI_BASE_PATH_CAPABILITIES = frozenset(
     (
         CHI_PATH_TYPED_PROTOCOL,
@@ -153,6 +185,9 @@ CHI_BASE_PATH_CAPABILITIES = frozenset(
 )
 CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE = ChiCapabilityKey(
     "chi.system.clean_read_shared.lifecycle"
+)
+CHI_SYSTEM_CLEAN_READ_SHARED_DCT_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.clean_read_shared.dct.lifecycle"
 )
 CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE = ChiCapabilityKey(
     "chi.system.clean_read_unique.lifecycle"
@@ -195,6 +230,21 @@ CHI_SYSTEM_CLEAN_EVICT_RETRY_LIFECYCLE = ChiCapabilityKey(
 )
 CHI_SYSTEM_MESI_READ_NOT_SHARED_DIRTY_LIFECYCLE = ChiCapabilityKey(
     "chi.system.mesi_read_not_shared_dirty.lifecycle"
+)
+CHI_SYSTEM_WRITE_NO_SNP_FULL_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.write_no_snp_full.lifecycle"
+)
+CHI_SYSTEM_WRITE_NO_SNP_PTL_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.write_no_snp_ptl.lifecycle"
+)
+CHI_SYSTEM_ATOMIC_SWAP_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.atomic_swap_nc.lifecycle"
+)
+CHI_SYSTEM_ATOMIC_LOAD_ADD_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.atomic_load_add_nc.lifecycle"
+)
+CHI_SYSTEM_NON_SNOOP_EXCLUSIVE_PTL_LIFECYCLE = ChiCapabilityKey(
+    "chi.system.non_snoop_exclusive_ptl.lifecycle"
 )
 
 
@@ -504,6 +554,229 @@ CHI_READ_NO_SNP_NDERR_DEFINITION = ChiFeatureDefinition(
     ),
 )
 
+CHI_WRITE_NO_SNP_FULL_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_WRITE_NO_SNP_FULL,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_WRITE_NO_SNP_FULL_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_WRITE_NO_SNP_FULL_HOME_CAPABILITIES,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "write_no_snp_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "write_no_snp_completion",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "write_no_snp_data",
+            "requester",
+            "home",
+            ChiChannelKind.DAT,
+            CHI_BASE_PATH_CAPABILITIES | frozenset((CHI_PATH_DAT_512,)),
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_WRITE_NO_SNP_FULL_LIFECYCLE,)
+    ),
+)
+
+CHI_WRITE_NO_SNP_PTL_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_WRITE_NO_SNP_PTL,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_WRITE_NO_SNP_PTL_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_WRITE_NO_SNP_PTL_HOME_CAPABILITIES,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "write_no_snp_ptl_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "write_no_snp_ptl_completion",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "write_no_snp_ptl_data",
+            "requester",
+            "home",
+            ChiChannelKind.DAT,
+            CHI_BASE_PATH_CAPABILITIES | frozenset((CHI_PATH_DAT_512,)),
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_WRITE_NO_SNP_PTL_LIFECYCLE,)
+    ),
+)
+
+CHI_ATOMIC_SWAP_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_ATOMIC_SWAP,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_ATOMIC_SWAP_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_ATOMIC_SWAP_HOME_CAPABILITIES,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "atomic_swap_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "atomic_swap_data_buffer_grant",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "atomic_swap_operand_data",
+            "requester",
+            "home",
+            ChiChannelKind.DAT,
+            CHI_BASE_PATH_CAPABILITIES
+            | frozenset((CHI_PATH_DAT_512,)),
+        ),
+        ChiFlowRequirement(
+            "atomic_swap_completion_data",
+            "home",
+            "requester",
+            ChiChannelKind.DAT,
+            CHI_BASE_PATH_CAPABILITIES
+            | frozenset((CHI_PATH_DAT_512,)),
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_ATOMIC_SWAP_LIFECYCLE,)
+    ),
+)
+
+CHI_ATOMIC_LOAD_ADD_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_ATOMIC_LOAD_ADD,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_ATOMIC_LOAD_ADD_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_ATOMIC_LOAD_ADD_HOME_CAPABILITIES,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "atomic_load_add_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "atomic_load_add_data_buffer_grant",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "atomic_load_add_operand_data",
+            "requester",
+            "home",
+            ChiChannelKind.DAT,
+            CHI_BASE_PATH_CAPABILITIES
+            | frozenset((CHI_PATH_DAT_512,)),
+        ),
+        ChiFlowRequirement(
+            "atomic_load_add_completion_data",
+            "home",
+            "requester",
+            ChiChannelKind.DAT,
+            CHI_BASE_PATH_CAPABILITIES
+            | frozenset((CHI_PATH_DAT_512,)),
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_ATOMIC_LOAD_ADD_LIFECYCLE,)
+    ),
+)
+
+CHI_NON_SNOOP_EXCLUSIVE_PTL_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_NON_SNOOP_EXCLUSIVE_PTL,
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_NON_SNOOP_EXCLUSIVE_PTL_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_NON_SNOOP_EXCLUSIVE_PTL_HOME_CAPABILITIES,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "exclusive_read_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "exclusive_read_completion_data",
+            "home",
+            "requester",
+            ChiChannelKind.DAT,
+            CHI_BASE_PATH_CAPABILITIES
+            | frozenset((CHI_PATH_DAT_512,)),
+        ),
+        ChiFlowRequirement(
+            "exclusive_write_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "exclusive_write_completion",
+            "home",
+            "requester",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "exclusive_write_data",
+            "requester",
+            "home",
+            ChiChannelKind.DAT,
+            CHI_BASE_PATH_CAPABILITIES
+            | frozenset((CHI_PATH_DAT_512,)),
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_NON_SNOOP_EXCLUSIVE_PTL_LIFECYCLE,)
+    ),
+)
+
 CHI_REQUEST_RETRY_DEFINITION = ChiFeatureDefinition(
     CHI_FEATURE_REQUEST_RETRY,
     dependencies=frozenset((CHI_FEATURE_READ_NO_SNP,)),
@@ -593,6 +866,61 @@ CHI_CLEAN_READ_SHARED_DEFINITION = ChiFeatureDefinition(
     system_capabilities=frozenset(
         (CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE,)
     ),
+)
+
+CHI_CLEAN_READ_SHARED_DCT_DEFINITION = ChiFeatureDefinition(
+    CHI_FEATURE_CLEAN_READ_SHARED_DCT,
+    dependencies=frozenset((CHI_FEATURE_CLEAN_READ_SHARED,)),
+    roles=(
+        ChiRoleRequirement(
+            "requester",
+            CHI_CLEAN_READ_SHARED_DCT_REQUESTER_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "home",
+            CHI_CLEAN_READ_SHARED_DCT_HOME_CAPABILITIES,
+        ),
+        ChiRoleRequirement(
+            "forwarding_snoopee",
+            CHI_CLEAN_READ_SHARED_DCT_SNOOPEE_CAPABILITIES,
+        ),
+    ),
+    flows=(
+        ChiFlowRequirement(
+            "dct_request",
+            "requester",
+            "home",
+            ChiChannelKind.REQ,
+        ),
+        ChiFlowRequirement(
+            "dct_forwarding_snoop",
+            "home",
+            "forwarding_snoopee",
+            ChiChannelKind.SNP,
+        ),
+        ChiFlowRequirement(
+            "dct_peer_completion_data",
+            "forwarding_snoopee",
+            "requester",
+            ChiChannelKind.DAT,
+        ),
+        ChiFlowRequirement(
+            "dct_forwarded_snoop_response",
+            "forwarding_snoopee",
+            "home",
+            ChiChannelKind.RSP,
+        ),
+        ChiFlowRequirement(
+            "dct_completion_ack",
+            "requester",
+            "home",
+            ChiChannelKind.RSP,
+        ),
+    ),
+    system_capabilities=frozenset(
+        (CHI_SYSTEM_CLEAN_READ_SHARED_DCT_LIFECYCLE,)
+    ),
+    requires_coherence_domain=True,
 )
 
 CHI_CLEAN_READ_UNIQUE_DEFINITION = ChiFeatureDefinition(
@@ -1182,8 +1510,18 @@ CHI_BUILTIN_FEATURE_CATALOG = ChiFeatureCatalog(
     {
         CHI_FEATURE_READ_NO_SNP: CHI_READ_NO_SNP_DEFINITION,
         CHI_FEATURE_READ_NO_SNP_NDERR: CHI_READ_NO_SNP_NDERR_DEFINITION,
+        CHI_FEATURE_WRITE_NO_SNP_FULL: CHI_WRITE_NO_SNP_FULL_DEFINITION,
+        CHI_FEATURE_WRITE_NO_SNP_PTL: CHI_WRITE_NO_SNP_PTL_DEFINITION,
+        CHI_FEATURE_ATOMIC_SWAP: CHI_ATOMIC_SWAP_DEFINITION,
+        CHI_FEATURE_ATOMIC_LOAD_ADD: CHI_ATOMIC_LOAD_ADD_DEFINITION,
+        CHI_FEATURE_NON_SNOOP_EXCLUSIVE_PTL: (
+            CHI_NON_SNOOP_EXCLUSIVE_PTL_DEFINITION
+        ),
         CHI_FEATURE_REQUEST_RETRY: CHI_REQUEST_RETRY_DEFINITION,
         CHI_FEATURE_CLEAN_READ_SHARED: CHI_CLEAN_READ_SHARED_DEFINITION,
+        CHI_FEATURE_CLEAN_READ_SHARED_DCT: (
+            CHI_CLEAN_READ_SHARED_DCT_DEFINITION
+        ),
         CHI_FEATURE_CLEAN_READ_UNIQUE: CHI_CLEAN_READ_UNIQUE_DEFINITION,
         CHI_FEATURE_CLEAN_READ_UNIQUE_NDERR: (
             CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION
@@ -1812,11 +2150,14 @@ def resolve_chi_capabilities(
 
 
 __all__ = [
+    "CHI_ATOMIC_LOAD_ADD_DEFINITION",
+    "CHI_ATOMIC_SWAP_DEFINITION",
     "CHI_BASE_PATH_CAPABILITIES",
     "CHI_BUILTIN_FEATURE_CATALOG",
     "CHI_CLEAN_EVICT_DEFINITION",
     "CHI_CLEAN_EVICT_RETRY_DEFINITION",
     "CHI_CLEAN_READ_SHARED_DEFINITION",
+    "CHI_CLEAN_READ_SHARED_DCT_DEFINITION",
     "CHI_CLEAN_READ_UNIQUE_DEFINITION",
     "CHI_CLEAN_READ_UNIQUE_NDERR_DEFINITION",
     "CHI_CLEAN_READ_UNIQUE_RETRY_DEFINITION",
@@ -1824,13 +2165,17 @@ __all__ = [
     "CHI_CLEAN_UNIQUE_SHARED_DIRTY_PEER_DEFINITION",
     "CHI_DIRTY_UNIQUE_TRANSFER_DEFINITION",
     "CHI_DIRTY_WRITEBACK_DEFINITION",
+    "CHI_WRITE_NO_SNP_FULL_DEFINITION",
+    "CHI_WRITE_NO_SNP_PTL_DEFINITION",
     "CHI_WRITE_EVICT_FULL_COPY_AT_HOME_DEFINITION",
     "CHI_WRITE_EVICT_FULL_DEFINITION",
     "CHI_WRITE_EVICT_OR_EVICT_DEFINITION",
     "CHI_MAKE_UNIQUE_DEFINITION",
     "CHI_MESI_READ_NOT_SHARED_DIRTY_DEFINITION",
+    "CHI_NON_SNOOP_EXCLUSIVE_PTL_DEFINITION",
     "CHI_FEATURE_READ_NO_SNP_NDERR",
     "CHI_FEATURE_CLEAN_READ_SHARED",
+    "CHI_FEATURE_CLEAN_READ_SHARED_DCT",
     "CHI_FEATURE_CLEAN_EVICT",
     "CHI_FEATURE_CLEAN_EVICT_RETRY",
     "CHI_FEATURE_CLEAN_READ_UNIQUE",
@@ -1840,6 +2185,11 @@ __all__ = [
     "CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER",
     "CHI_FEATURE_DIRTY_UNIQUE_TRANSFER",
     "CHI_FEATURE_DIRTY_WRITEBACK",
+    "CHI_FEATURE_WRITE_NO_SNP_FULL",
+    "CHI_FEATURE_WRITE_NO_SNP_PTL",
+    "CHI_FEATURE_ATOMIC_LOAD_ADD",
+    "CHI_FEATURE_ATOMIC_SWAP",
+    "CHI_FEATURE_NON_SNOOP_EXCLUSIVE_PTL",
     "CHI_FEATURE_WRITE_EVICT_FULL_COPY_AT_HOME",
     "CHI_FEATURE_WRITE_EVICT_FULL",
     "CHI_FEATURE_WRITE_EVICT_OR_EVICT",
@@ -1848,12 +2198,14 @@ __all__ = [
     "CHI_MESI_NO_SD_REQUIRED_FEATURES",
     "CHI_FEATURE_READ_NO_SNP",
     "CHI_FEATURE_REQUEST_RETRY",
+    "CHI_PATH_DAT_512",
     "CHI_PATH_ROUTING_IDENTITY_PRESERVED",
     "CHI_PATH_TYPED_PROTOCOL",
     "CHI_READ_NO_SNP_DEFINITION",
     "CHI_READ_NO_SNP_NDERR_DEFINITION",
     "CHI_REQUEST_RETRY_DEFINITION",
     "CHI_SYSTEM_CLEAN_READ_SHARED_LIFECYCLE",
+    "CHI_SYSTEM_CLEAN_READ_SHARED_DCT_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_EVICT_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_EVICT_RETRY_LIFECYCLE",
     "CHI_SYSTEM_CLEAN_READ_UNIQUE_LIFECYCLE",
@@ -1863,6 +2215,11 @@ __all__ = [
     "CHI_SYSTEM_CLEAN_UNIQUE_SHARED_DIRTY_PEER_LIFECYCLE",
     "CHI_SYSTEM_DIRTY_UNIQUE_TRANSFER_LIFECYCLE",
     "CHI_SYSTEM_DIRTY_WRITEBACK_LIFECYCLE",
+    "CHI_SYSTEM_WRITE_NO_SNP_FULL_LIFECYCLE",
+    "CHI_SYSTEM_WRITE_NO_SNP_PTL_LIFECYCLE",
+    "CHI_SYSTEM_ATOMIC_LOAD_ADD_LIFECYCLE",
+    "CHI_SYSTEM_ATOMIC_SWAP_LIFECYCLE",
+    "CHI_SYSTEM_NON_SNOOP_EXCLUSIVE_PTL_LIFECYCLE",
     "CHI_SYSTEM_WRITE_EVICT_FULL_COPY_AT_HOME_LIFECYCLE",
     "CHI_SYSTEM_WRITE_EVICT_FULL_LIFECYCLE",
     "CHI_SYSTEM_WRITE_EVICT_OR_EVICT_LIFECYCLE",

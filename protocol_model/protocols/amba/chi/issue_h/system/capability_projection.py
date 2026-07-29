@@ -5,7 +5,8 @@ automatically an executable CHI path.  This projector deliberately consumes a
 constructed :class:`ChiTransportNetworkSession`: every hop has therefore
 passed its CHI profile and shared-Link runtime checks.  It additionally
 closes endpoint channel declarations, target-NodeID router decisions, NodeID
-field widths, and end-to-end reachability before emitting ``ChiFlowCapability``.
+field widths, per-hop DAT-width facts, and end-to-end reachability before
+emitting ``ChiFlowCapability``.
 
 Participant behavior remains an explicit offer supplied separately to
 ``resolve_chi_capabilities``.  Network structure cannot prove that an RN
@@ -28,7 +29,9 @@ from ..participants import (
 )
 from ..representation import ChiChannelKind
 from .capability import (
+    CHI_BASE_PATH_CAPABILITIES,
     CHI_BUILTIN_FEATURE_CATALOG,
+    CHI_PATH_DAT_512,
     ChiCapabilityKey,
     ChiFeatureCatalog,
     ChiFeatureContract,
@@ -263,6 +266,11 @@ def project_chi_flow_capabilities(
                     source.name,
                     target.name,
                     requirement.channel,
+                    provides=_path_capabilities(
+                        network,
+                        requirement.channel,
+                        connections,
+                    ),
                     connections=connections,
                 )
                 flow_by_key[key] = flow
@@ -529,6 +537,27 @@ def _path_node_id_width(channel, profile) -> int:
     assert channel is ChiChannelKind.SNP
     assert profile.snoop is not None
     return profile.snoop.representation.node_id_width
+
+
+def _path_capabilities(
+    network: ChiTransportNetworkSession,
+    channel: ChiChannelKind,
+    connections: tuple[str, ...],
+) -> frozenset[ChiCapabilityKey]:
+    """Derive representation facts shared by every hop in one path."""
+
+    capabilities = set(CHI_BASE_PATH_CAPABILITIES)
+    if channel is ChiChannelKind.DAT and connections:
+        for name in connections:
+            data_profile = network.paths[name].link.profile.data
+            if (
+                data_profile is None
+                or data_profile.representation.data_width != 512
+            ):
+                break
+        else:
+            capabilities.add(CHI_PATH_DAT_512)
+    return frozenset(capabilities)
 
 
 __all__ = [

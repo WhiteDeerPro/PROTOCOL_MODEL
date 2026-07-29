@@ -15,7 +15,7 @@ ready-valid observation
 ```
 
 AXI4-Lite 是 memory-mapped 协议的受限 variant；AXI4-Stream 是独立的单向数据流协议。后者共享
-ready-valid observation，但不继承 address、response、outstanding transaction 或 exclusive 语义。
+ready-valid observation，并以 stream、packet、byte qualifier 与 interleave 形成自己的合同。
 
 ## AXI4-Lite
 
@@ -26,9 +26,9 @@ ready-valid observation，但不继承 address、response、outstanding transact
 - B：`resp`；
 - R：`data, resp`。
 
-缺失字段不是“生成时暂不填写”，而是具有固定含义：burst length 为 1、transfer size 为 data bus
-width、LOCK/CACHE 为零、LAST 为真、所有事务使用一个固定 ID。`Axi4LiteToAxi4` 显式补入这些含义，
-使 Lite trace 可以进入 AXI4 InterfaceSession；它不是 adapter 兼容旧 API。
+Lite schema 省略的 AXI4 字段映射到固定含义：burst length 为 1、transfer size 为 data bus width、
+LOCK/CACHE 为零、LAST 为真、所有事务使用一个固定 ID。`Axi4LiteToAxi4` 显式补入这些含义，使 Lite trace
+可以进入 AXI4 InterfaceSession；这个 typed embedding 定义两种合同在当前模型中的关系。
 
 当前可执行语义包括：
 
@@ -43,7 +43,7 @@ width、LOCK/CACHE 为零、LAST 为真、所有事务使用一个固定 ID。`A
 - `with_resource_capacities()` 可按具体 profile 收紧 outstanding 资源。
 
 后续若需要 full AXI master 到 Lite subordinate 的 burst 拆分、ID reflection 和 response combine，应建成
-bridge `VirtualDut`。它们改变 transaction 数量并持有转换状态，不属于 Lite 单 interface 的事件 embedding。
+bridge `VirtualDut`。这些转换改变 transaction 数量并持有跨端口状态，由 translation plan/executor 统一拥有。
 
 ## AXI4-Stream
 
@@ -61,9 +61,9 @@ TSTRB、TLAST、TID、TDEST 和 TUSER 对应字段。
 - accepted transfer 的全局顺序进入 causal edges；
 - packet generator 与单 lane AtomicFrame ready-valid/reset observation。
 
-`build_axi4_stream_continuous_profile()` 是基础 Stream 的单调收窄：禁止 packet interleave，不支持
-TSTRB position byte，非 final transfer 的 TKEEP 必须全一，final transfer 的 null byte 只能形成高位
-suffix。这一 profile 对应规范的 `Continuous_Packets` 属性，不替所有 Stream 接口选择该行为。
+`build_axi4_stream_continuous_profile()` 是基础 Stream 的单调收窄：packet 按顺序连续发送，TSTRB 只接受
+data-byte 位置，非 final transfer 的 TKEEP 必须全一，final transfer 的 null byte 形成高位 suffix。这一
+profile 对应规范的 `Continuous_Packets` 属性；其他 Stream 接口继续选择适用自身的 profile。
 
 当前实现范围尚未包含 TDATA 缺失接口、width converter/packer、TUSER 每 byte 位置保持以及 AXI5-Stream
 wakeup/parity。前两项需要先定义输入输出 stream 间的转换关系，后两项分别涉及 sideband layout 和

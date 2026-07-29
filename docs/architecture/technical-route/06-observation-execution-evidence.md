@@ -2,8 +2,8 @@
 
 [返回架构地图](README.md) · [SystemProtocol](05-system-protocol.md) · [术语表](../terminology.md)
 
-当前 runtime 有两条入口。它们共享 CanonicalEvent 和协议语义，但尚未由一个统一 boundary runtime 自动
-连接：
+当前 runtime 提供两条入口。它们共享 CanonicalEvent 和协议语义；后续统一 boundary runtime 将负责自动
+连接两条路径：
 
 ```text
 外部观察路径
@@ -26,9 +26,9 @@ scenario/controller → SystemAction → SystemSession → per-connection Interf
 
 `RandomTrafficController` 位于 scenario 层：它按端口 role 过滤当前 `EventOffer`，用调用方提供的 seed/RNG
 补全协议合法事件，并持续观察对端事件以保持 InterfaceSession 状态同步。它产生的是可复现的 canonical-event
-流量，不是 raw RTL pin、VALID/READY 周期或 VCD。
+流量。raw RTL pin、VALID/READY 周期或 VCD 由 observation/driver adapter 负责转换。
 
-Observation 表示读取已有信号或 trace，不等于模型在驱动 DUT。
+Observation 消费已有信号或 trace；driver/generator 承担 DUT 激励。
 
 <a id="atomic-frame"></a>
 ## 2. AtomicFrame：保住同一采样边界
@@ -44,8 +44,8 @@ lanes = {
 }
 ```
 
-“Atomic”表示这些观察不会在 lowering 前被随意拆散，不表示整个事务、整个系统或多个 clock domain 在
-同一时刻原子发生。tick 也是本地采样编号，不是默认全系统时间。
+“Atomic”表示这些观察在 lowering 前保持同一采样边界。事务原子性由协议 monitor 定义，系统级提交由
+SystemSession 定义，各 clock domain 保留各自的时间坐标。tick 是本地采样编号。
 
 实现见 [`observation/frame.py`](../../../protocol_model/observation/frame.py)。
 
@@ -61,7 +61,7 @@ Observer 负责协议编码知识：
 
 同一 AXI AtomicFrame 中的事件按协议本地 lowering order `B, R, W, AW, AR` 交给
 `InterfaceSession.step_batch()`。Batch 全部接受才提交；某一事件 fault 时回滚整批 interface state。固定顺序用于
-表达同一采样沿的可见性，不表示五个 channel 天然可交换。
+表达同一采样沿的可见性；channel 交换性由 AXI monitor 的协议规则决定。
 
 现有说明见 [Observation 层](../observation-layer.md)。
 
@@ -71,8 +71,8 @@ Observer 负责协议编码知识：
 InterfaceSession 执行 schema、transaction monitors、causal predecessor 和有界 resource 检查。它保存每条
 具体 interface connection 独立的状态，并能给出当前允许生成的 EventOffers。
 
-单 event 的 fault 不提交候选状态；step_batch 的 fault 回滚这一批。它不负责把事件送到另一个模块，那是
-SystemSession 的任务。
+单 event 的 fault 保留原状态；step_batch 的 fault 回滚这一批。SystemSession 负责把已接纳事件送到另一个
+module。
 
 实现见 [`interface/session.py`](../../../protocol_model/interface/session.py)。
 
@@ -86,13 +86,15 @@ SystemSession 路由 canonical events，执行目标 backend，并处理所有�
 VirtualDut 的新状态，并把 advance 产生的 PortEmission 送回正常 connection 路由。当前 queued address responder
 用它表达“又获得一次服务机会”；advance step 没有预设时间单位，也不会在后台自行发生。
 
-当前边界：
+当前执行合同与后续扩展点：
 
-- 没有 autonomous wakeup、定时队列或后台 emission 调度；
-- 没有 latency、timeout 或多 clock；
-- 两个独立 origin 的“同刻动作”没有统一 system batch；
-- `max_internal_steps` 是防止零时间自激的护栏，不是 livelock/deadlock 证明器；
-- 后续 fault 不会把整个多跳 cascade 全局回滚。
+| 主题 | 当前合同 | 后续 owner |
+|---|---|---|
+| 推进 | scenario 显式提交 `DutAdvanceAction` | autonomous wakeup 与定时队列进入 scheduler |
+| 时间 | advance 表示 service opportunity | latency、timeout 与多 clock 进入 time/domain profile |
+| 并发 | 每个 `SystemAction` 独立提交 | 多 origin system batch 需要显式 batch contract |
+| 内部步数 | `max_internal_steps` 限制零时间自激 | livelock/deadlock 由 progress analyzer 判定 |
+| fault | 多跳 cascade 采用逐 hop 提交 | 全局回滚需要独立 system transaction contract |
 
 实现见 [`system/session.py`](../../../protocol_model/system/session.py)。
 
@@ -105,8 +107,8 @@ VirtualDut 的新状态，并把 advance 产生的 PortEmission 送回正常 con
 | `PASS` | 输入处理结束、无 fault，相关 monitor/backend 已 quiescent |
 | `INCONCLUSIVE` | 尚未看到违规，但有限 trace 结束时仍有 pending/obligation |
 
-所以 blackhole sink 通常把请求留成 INCONCLUSIVE，而不是立即 FAIL。是否要求环境最终回应，需要 progress
-assumption、时间边界或更强的 scenario property。
+blackhole sink 接受请求后保留 pending obligation，因此有限运行通常得到 INCONCLUSIVE。progress assumption、
+时间边界或更强的 scenario property 可以把“环境最终回应”提升为可判定要求。
 
 <a id="evidence"></a>
 ## 7. 从运行状态到可阅读证据
@@ -123,14 +125,14 @@ caller-selected run root / manifest.json
 docs/ 或 showcase/generated/
 ```
 
-- 图是语义结果的投影，不参与协议判定；
-- deterministic executor 或 scenario 生成的是一条 execution witness。外部 RTL conformance 通常应先由
-  observer 检查 pin-local 规则，再按 identity、operation/effect 和必要偏序比较；它不默认要求 raw cycle
-  与该 witness 相等；
-- 尽量同时保存可检查的图源和 SVG，不让证据只剩图片；
-- manifest 是一次运行的目录和元数据索引；当前不使用内容哈希；
-- 原子写入用于避免半写文件，不等于防篡改；
-- 测试和普通运行不隐式改写发布树；长期示例由具名脚本显式发布。
+- 图是语义结果的只读投影；协议判定在 monitor/backend/runtime 完成；
+- deterministic executor 或 scenario 生成一条 execution witness。外部 RTL conformance 先由 observer 检查
+  pin-local 规则，再按 identity、operation/effect 和必要偏序比较；raw-cycle 等价需要单独声明
+  `PIN_CYCLE` profile；
+- 图源与 SVG 一起保存，支持检查和重新渲染；
+- manifest 索引一次运行的目录与元数据；内容认证可在后续 hash/signature profile 中加入；
+- 原子写入防止半写文件，来源认证由版本控制或签名机制提供；
+- 测试和普通运行写入临时或调用方指定目录；具名脚本负责发布长期示例。
 
 实现见 [`artifacts/`](../../../protocol_model/artifacts/) 与
 [`visualization/`](../../../protocol_model/visualization/)。
@@ -140,10 +142,11 @@ docs/ 或 showcase/generated/
 证据层从语义对象做只读 projection；图形覆盖范围和发布规则统一由
 [运行产物管理](../run-output-management.md)维护，未实现的分析见[实现状态](../implementation-status.md)。新增
 wait-for、resource occupancy 或 address reachability 视图时，应先定义对应语义对象，再增加 renderer，
-不让运行时迁就显示格式。
+运行时结构继续由语义合同驱动。
 
-当前尚未把外部 observation 与 bridge contract 接成通用 stutter-insensitive/partial-order checker。
-`INTERFACE_TRANSACTION_ORDER` 和 `PIN_CYCLE` 仍是声明边界，不是已经生成的证明证据。详细边界见
+通用 stutter-insensitive/partial-order checker 将连接外部 observation 与 bridge contract。当前
+`INTERFACE_TRANSACTION_ORDER` 和 `PIN_CYCLE` 定义 comparison profile；实际证明证据需要对应 checker
+执行后产生。详细边界见
 [Bridge 与类型化事务转译](../typed-transaction-translation.md#63-contractexecution-profilewitness-与-rtl-conformance)。
 
 下一步阅读：[端到端 APB 示例](07-apb-read-walkthrough.md) 或 [实施路线](08-roadmap.md)。

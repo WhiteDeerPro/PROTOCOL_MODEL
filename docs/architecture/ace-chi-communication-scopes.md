@@ -1,21 +1,21 @@
 # ACE 接口与 CHI 多视图建模边界
 
-ACE 和 CHI 都属于 AMBA 标准族，但不因此成为同形、同作用域的工程对象。ACE 的当前实现自然表现为
-AXI 风格 InterfaceProtocol profile；CHI 同时具有 Protocol、Network、Link 表示/运输分层，还需要
-ProtocolParticipant、VirtualDut 和 SystemProtocol 承载不同范围的状态。
+ACE 和 CHI 同属 AMBA 标准族，对应两种工程形态。ACE 的当前实现表现为 AXI 风格
+`InterfaceProtocol` profile；CHI 同时展开 Protocol、Network、Link 表示/运输分层，并由
+`ProtocolParticipant`、`VirtualDut` 和 `SystemProtocol` 分别承载各自范围的状态。
 
-工程使用 `InterfaceProtocol` 表示接口局部合同。这里的接口作用域不等同于 CHI Link layer：CHI
-Protocol/Network/Link 是 transaction relation、message/packet 与 flit transport 的规范分层。三张视图的
-canonical 决策见[通信建模的三张视图](communication-scope-and-transport.md)。
+工程使用 `InterfaceProtocol` 表示接口局部合同。CHI Link layer 表示 flit transport；CHI Protocol 和
+Network 分别表示 transaction relation 与 message/packet。三张视图的 canonical 决策见
+[通信建模的三张视图](communication-scope-and-transport.md)。
 
-本文解释 ACE/CHI 事实应落在哪个架构对象，不维护易变的功能矩阵。当前可导入实现和未完成项集中在
+本文解释 ACE/CHI 事实落在哪个架构对象。当前可导入实现和阶段缺口集中在
 [实现状态](implementation-status.md)，CHI 源码切面见
 [`protocol_model/protocols/amba/chi/README.md`](../../protocol_model/protocols/amba/chi/README.md)。
 
 ## ACE-Lite ordinary-data profile
 
 `build_ace_lite_data_interface()` 建立原生 ACE-Lite address schema，同时复用 AXI4 已有的 burst、ID、
-read interleave、AW/W FIFO join 和 B/R completion monitor。它不是 AXI4-Lite：事务仍可 multibeat，也可有
+read interleave、AW/W FIFO join 和 B/R completion monitor。该 profile 保留 multibeat transaction 和
 multiple outstanding IDs。
 
 AR/AW 在 AXI4 字段之外增加：
@@ -25,9 +25,8 @@ AR/AW 在 AXI4 字段之外增加：
 - `bar`：2-bit AxBAR。
 
 当前 profile 支持 ReadNoSnoop/ReadOnce、WriteNoSnoop/WriteUnique/WriteLineUnique 对应的编码/
-domain 组合，拒绝 `AxBAR[0]=1`，并拒绝 cacheable + System domain。公开名字包含 `data`，因为
-直接复用 `Axi4WriteMonitor` 会把每个 AW 都与 W burst 绑定，而 ACE barrier 的 write 部分没有 W。
-要去掉这个后缀，至少需要：
+domain 组合，拒绝 `AxBAR[0]=1`，并拒绝 cacheable + System domain。公开名字包含 `data`，表示当前
+`Axi4WriteMonitor` 将每个 AW 与 W burst 绑定。ACE barrier 的 write 路径进入该 profile 前还需要：
 
 1. AR/AW barrier pair monitor；
 2. AW-without-W 的 B completion 路径；
@@ -39,16 +38,16 @@ line 则属于系统组合。
 
 ## CHI RN-I 的两个可执行边界
 
-CHI 不只是 REQ/RSP/SNP/DAT 四个固定 schema。实施时需要区分两个都可单独运行的边界：
+CHI 实施包含两个可单独运行的边界：
 
 - **accepted-message interface**：从已经解码的 CHI message/event 开始，执行 RN-I channel profile、
   TxnID/DBID、Retry/P-Credit 和 completion correlation；
 - **representation/transport slice**：检查 message→packet→flit 的 lineage，以及方向化 hop、L-Credit、
   Resource Plane 和 activation。
 
-前者可以用于事务流例子，不必等完整 packet/flit codec；后者可以用最小 typed flit fixture 独立检查
-credit epoch。当前 direct-Home read 与 sibling retry profile 已把这两个边界组合成受限纵向见证；这些 profile
-固定单 Requester/Home 等条件，不据此扩张成完整 RN-I。
+accepted-message interface 可先用于事务流例子；representation/transport slice 使用最小 typed flit fixture
+独立检查 credit epoch。当前 direct-Home read 与 sibling retry profile 把二者组合成受限纵向见证，并显式
+声明单 Requester/Home 等适用条件。
 
 这两个边界分别需要：
 
@@ -57,14 +56,14 @@ credit epoch。当前 direct-Home read 与 sibling retry profile 已把这两个
 3. **transport credit epoch**：L-Credit 按方向、channel 和 Resource Plane 管理，本周期收到的 credit
    不在同一周期被消耗；
 4. **typed capability negotiation**：端点 properties 有相等条件，也有兼容矩阵；
-5. **transaction/retry ledger**：Protocol Credit 与 Link Credit 不同，PCrdGrant 可先于 RetryAck，重发可换
-   TxnID，但需保持其他关键字段。
+5. **transaction/retry ledger**：Protocol Credit 管理 retry permission，Link Credit 管理 flit slot；
+   PCrdGrant 可先于 RetryAck，重发可换 TxnID，同时保持其他关键字段。
 
-Transaction 在这里是关联请求、消息、完成与状态变化的 lifecycle，不是强制包裹 message 的编码盒。当前
+Transaction 在这里表示关联请求、消息、完成与状态变化的 lifecycle；message/packet/flit 由表示与运输对象承载。当前
 direct-read/retry ledger 已执行 `(Requester NodeID, TxnID)` correlation、RetryAck 与 transaction-independent
 P-Credit pooling；transport session 分别执行 REQ/RSP/DAT 的 link-wide activation 与 L-Credit。family network
-session 可在调用方声明的 directed topology 上执行有限 store-and-forward route；它尚未提供
-NodeID/address-home authority closure 或系统缓存一致性，也不把无 monitor 的字段壳计为已实现协议。
+session 可在调用方声明的 directed topology 上执行有限 store-and-forward route；`SystemProtocol` 继续闭合
+NodeID/address-home authority 和系统缓存一致性。实现状态按带有 monitor 与 witness 的行为切片记录。
 
 完整 RN-I 仍可沿下列目标入口收敛：
 
@@ -80,10 +79,10 @@ build_chi_issue_h_rn_i_basic_interface(
 )
 ```
 
-它应先覆盖 RN-I 的 TXREQ/TXRSP/TXDAT 与 RXRSP/RXDAT，不含 SNP，并使用 interface protocol ledger 表达
-TxnID/DBID 与 Retry/P-Credit。representation codec 和 transport monitor 是与该入口组合的独立对象，负责
-message/packet/flit 与 L-Credit；这里是后续目标入口。当前源码公开的是较小的 direct ledger、participant、
-REQ/RSP/DAT transport session 和受限 retry composite session，便于分别验证职责边界。
+目标入口先覆盖 RN-I 的 TXREQ/TXRSP/TXDAT 与 RXRSP/RXDAT；SNP 进入后续 profile。interface protocol ledger
+表达 TxnID/DBID 与 Retry/P-Credit，独立的 representation codec 和 transport monitor 负责
+message/packet/flit 与 L-Credit。当前源码公开较小的 direct ledger、participant、REQ/RSP/DAT transport
+session 和受限 retry composite session，便于分别验证职责边界。
 
 ## 三张视图中的 CHI 事实
 

@@ -24,10 +24,12 @@ A 先提交 `interrupt_id=40, priority=7`，B 后提交
 证据发布到 scratch 目录。
 
 图中的横向“波形”是模型步骤视图：一列表示一次完成的 `SystemSession` action
-或 service opportunity。它不表示时钟、物理延迟、RTL pin 或 cycle-exact
-中断时序。
+或 service opportunity。时钟、物理延迟、RTL pin 和 cycle-exact 中断时序需要相应
+pin/timing observation。
 
 两个 notifier 在这个演示中是由 scenario 驱动的 `CaptureBackend` 边界，用于提供
-真实 InterfaceProtocol 输入并接收 completion；它们不是已经实现的传感器中断源。
-controller 与 explicit-EOI target 是 constructed `VirtualDut`。本例也不声称
-实现 GIC、PLIC、APIC、CSR 地址接口、level interrupt、mask、affinity 或抢占。
+真实 InterfaceProtocol 输入并接收 completion。controller 与 explicit-EOI target 是 constructed
+`VirtualDut`。
+
+本例覆盖 edge notification、priority selection、delivery 和 explicit EOI。GIC、PLIC、APIC、CSR 地址接口、
+level interrupt、mask、affinity 与抢占进入各自的后续 profile。

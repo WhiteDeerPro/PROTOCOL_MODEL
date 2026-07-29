@@ -194,6 +194,11 @@ class ChiReadNoSnpDirectLedger(
             reasons.append("direct profile requires Order=00")
         if request.expect_completion_ack:
             reasons.append("direct profile requires ExpCompAck=0")
+        if request.exclusive:
+            reasons.append(
+                "the direct ReadNoSnp profile requires Excl=0 until a "
+                "System monitor supplies Exclusive semantics"
+            )
         if not request.allow_retry:
             reasons.append("an initial ReadNoSnp must set AllowRetry")
         if request.protocol_credit_type != 0:

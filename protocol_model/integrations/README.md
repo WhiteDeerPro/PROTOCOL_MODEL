@@ -1,41 +1,37 @@
-# Protocol integration source layout
+# Integration 源码导航
 
-`integrations` is a dependency meeting point, not an additional protocol
-semantic layer.  It contains code that must understand both a concrete
-`InterfaceProtocol` family asset and a VirtualDut operation or construction contract.
+`integrations` 汇合具体 `InterfaceProtocol` 资产与 VirtualDut operation/构造合同。这里的代码同时理解线上协议
+和 module 行为，并按产物角色形成单向依赖。
 
-The integration source separates four artifact roles:
+## 四类构件
 
-- `attachments/`: single-port event/operation translation and its interface-facing
-  state;
-- [`translations/`](translations/README.md): reusable protocol-bound typed
-  stages and plan fragments;
-- `backends/`: protocol-bound execution state machines that may correlate or
-  route across several ports;
-- `recipes/`: composition roots that bind attachments to ports and backends,
-  producing concrete `VirtualDut` modules.
+| 构件 | 核心职责 | 产物与使用者 |
+|---|---|---|
+| `attachments/` | 单端口 event ↔ operation 转换及接口侧状态 | binding 与 attachment-aware backend |
+| [`translations/`](translations/README.md) | 可复用的 protocol-bound typed stage 与 plan fragment | bridge plan 和 recipe |
+| [`backends/`](backends/README.md) | 受协议 channel、ID、ordering 约束的跨端口执行状态 | concrete VirtualDut realization |
+| [`recipes/`](recipes/README.md) | 选择 port、binding、profile、translation 与 backend | 可直接构造的 `VirtualDut` |
 
-Concrete-protocol cross-port execution is a third internal artifact role.  It
-is needed when AXI ID/channel ordering or another protocol law directly shapes
-the VirtualDut state machine and therefore cannot move into the
-protocol-neutral `virtual_dut/backend` package. Such implementations live in
-the integration-owned [`backends/`](backends/README.md) package. AXI4
-address-space, read-fabric, and write-fabric execution have been moved there;
-their recipes remain responsible only for selecting ports, bindings, profiles,
-and the backend that realizes the module.
+```text
+protocols/<family> + virtual_dut contracts
+              │
+              ├── attachments ───────┐
+              ├── translations ──────┼──> backends ──┐
+              │                      └───────────────┼──> recipes
+              └──────────────────────────────────────┘
+```
 
-The [`recipes/` catalog](recipes/README.md) is the user-facing inventory of
-currently constructible modules. It indexes protocol-neutral foundations and
-protocol-bound products without storing network-specific instances.
+AXI ID/channel ordering 等协议规则会直接塑造跨端口 controller。对应实现位于
+[`backends/amba/axi/axi4/`](backends/amba/axi/axi4/)，recipe 负责选择并装配这些实现。可由协议无关
+operation、fabric 或 translation backend 表达的行为继续复用 `virtual_dut/`。
 
-Within recipes, `endpoints/`, `fabrics/`, and `bridges/` group products by
-module role. Bridges contain relational products whose behavior is primarily
-transform, route, correlation, and completion return.
-Protocol-neutral execution cores remain under `virtual_dut/`; protocol laws
-remain under `protocols/`.
+## 选择放置位置
 
-An AMBA recipe means that the constructed module has AMBA-bound ports.  AMBA
-is not a VirtualDut base class or device identity.  A cross-family product,
-such as a future AXI-to-TileLink bridge, should live in a cross-family recipe
-scope while reusing the same protocol-neutral operators where their behavior
-fits.
+1. 单个端口的协议解释和局部状态进入 `attachments/`。
+2. 多个 plan 复用的 typed lower/lift 进入 `translations/`。
+3. 具体协议直接决定跨端口 FIFO、owner、route lock 或 transaction lifecycle 时，进入 `backends/`。
+4. 最终构造函数进入 `recipes/`，并由其绑定 concrete ports 与 profiles。
+
+`recipes/` 按 endpoint、fabric、bridge 和 control module 分类公共构造入口。网络中的具名实例由 system、
+scenario 或调用方 project 持有。AMBA qualifier 描述端口绑定范围；module identity 仍由具体
+`VirtualDut` 的系统角色决定。跨 family 产品放在相应的 cross-family recipe scope，并复用语义一致的通用构件。

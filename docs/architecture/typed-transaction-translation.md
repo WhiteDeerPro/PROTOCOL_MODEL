@@ -2,36 +2,36 @@
 
 [返回架构索引](README.md) · [构造方法的跨领域启示](bridge-construction-insights.md) ·
 [Integration 与 binding](technical-route/04-integration-and-binding.md) ·
-[SystemProtocol 组网](network-construction.md) · [当前状态](implementation-status.md)
+[SystemProtocol 组网](network-construction.md) ·
+[实施状态与后续](translation-implementation.md)
 
-Bridge 是一个具体、具名、多端口的 `VirtualDut`。它在两侧 InterfaceProtocol 之间保存一笔通信的业务含义，
-同时改变线上编码、事务粒度、属性表示或执行顺序。类型化事务转译是构造这种 VirtualDut 的方法，不是
-位于 VirtualDut 与 SystemProtocol 之间的新语义层。
+Bridge 是一个具体、具名、多端口的 `VirtualDut`。它在两个协议边界之间保存 operation 的业务含义，并按明确
+policy 改变线上编码、事务粒度、属性表示或执行顺序。类型化事务转译提供构造这种 VirtualDut 的共同方法。
 
-本文是 bridge/Transform 的 canonical 架构说明。当前代码接入状态和验收边界单独记录在
-[事务转译 V1 实施状态与后续](translation-implementation.md)。
+本文维护 bridge/Transform 的 canonical 合同。源码接入范围、阶段限制、延期项和定向见证由
+[事务转译实施状态](translation-implementation.md)与
+[实现状态总表](implementation-status.md)维护。
 
-| 状态 | 本文中的含义 |
-|---|---|
-| AMBA serial bridge | `build_amba_serial_bridge_vdut()` 按 ingress operation form 选择 single-access 或 AXI4 burst 路径；AXI4、AXI4-Lite、AHB、APB 的 4×4 address-family 组合不需要协议对 backend |
-| 已实现的公共内核 | `OperationSignature`、`TranslationProfile`、typed unary/fanout stage、双向 plan closure、fanout ledger、capacity lease、serial executor 与 attachment-aware operation backend |
-| 已接入的 address 路径 | `AddressAccess`/`AddressBurst` route、shape、protection、burst fanout，以及 AXI4/APB/AHB/AXI4-Lite 两侧 codec |
-| Later | blocked/deferred demand、pin-level backpressure、并行 child、width merge、crossbar executor 和自动多跳搜索 |
+主线分为四段：
 
-公共 executor 位于 `protocol_model.virtual_dut.translation`，接收已经 decode 的 operation，不直接接收
-`CanonicalEvent`。Attachment-aware backend 保存两侧 codec 状态并把 event decode/encode 与 executor
-候选状态作为一次原子 transition 提交；integration recipe 再把它们装配成具体 bridge VirtualDut。
+```text
+输入合同
+  → 构造期闭合
+  → 生命周期执行
+  → bridge VirtualDut / SystemProtocol handoff
+```
 
-## 1. Bridge 的语义位置
+## 1. 主线对象与语义位置
 
-一条 bridge 路径包含两种不同方向的工作：request 向下游翻译，completion 向原请求方折返。
+一条 bridge path 在 request 方向执行 decode、lower 和 child issue，在 completion 方向执行 decode、
+lift/fold 和 parent encode：
 
 ```text
 source InterfaceProtocol
         │ canonical events
         ▼
 ingress attachment / codec
-        │ typed parent operation
+        │ DecodedOperation + reply context
         ▼
 TranslationPlan + executor
         │ typed child operation
@@ -41,172 +41,160 @@ egress attachment / codec
         ▼
 target InterfaceProtocol
 
-completion 沿相反方向 decode、lift/fold、encode
+completion: target → decode → reverse lift/fold → encode → source
 ```
 
-各对象的职责如下：
+| 对象 | 接收 | 产出与权威事实 | 相邻交接 |
+|---|---|---|---|
+| `InterfaceProtocol` / `InterfaceSession` | 一个完整接口上的 canonical events | event language、局部 correlation 与 verdict | attachment 消费已接纳 event |
+| attachment / codec | 单端口 event 或 operation completion | event↔operation 编码、wire reply context 和接口侧状态 | 将 `DecodedOperation` 交给 executor |
+| operation form / `OperationSignature` | 协议中立的工作含义 | typed request/result 与 semantic domain | stage 以 form 为类型边界 |
+| `TranslationProfile` | source/target capability 与调用方 policy | applicability、effect、ordering、equivalence、failure/reset 合同 | plan compiler 执行闭合 |
+| `TranslationStage` | 一个 typed parent operation 或 child result | lower、lift/fold、`SemanticEffect` 和 lineage rule | plan 按显式顺序组合 |
+| `TranslationPlan` | profile、codecs 与 ordered stages | 双向 closure、effects、provenance 和 compiler witness | executor 读取 immutable plan |
+| executor / bridge backend | plan、decoded parent、child completion 与资源 profile | queue、lease、owner、continuation、fold 和 emission candidate | attachment 编解码，VirtualDut 持有 backend |
+| integration recipe | ports、attachments、plan、executor 与 capability policy | executable composition contract 和 constructed `VirtualDut` | System construction 注册 module |
+| `SystemProtocol` | bridge boundary、connections 与系统合同 | topology、全局 authority、resolution、runtime 与 analysis | 执行已固定的 module graph |
 
-| 对象 | 描述的事实 | 不负责 |
-|---|---|---|
-| `InterfaceProtocol` | 一个 interface connection 上允许出现的 event、角色和先后关系 | 跨端口事务转换 |
-| attachment/codec | 单端口 event 与 operation 之间的编码 | 跨端口调度、共享 owner |
-| operation form | 一笔协议无关工作的类型和数据 | 何时发行、占多少容量 |
-| `TranslationStage` | 两种 operation form 间的 lower/lift 关系 | parent 队列和调度算法 |
-| `TranslationProfile` | 本次转换承诺的适用范围、语义效果、ordering、等价层级和失败政策 | 保存运行中的 owner/queue |
-| `TranslationPlan` | 已闭合的 stage、双向能力、语义效果和 provenance | 调度/容量选择与具体运行状态 |
-| executable binding | plan、executor profile、两侧 codec/port binding 的一次构造选择 | 定义协议本身或隐藏 topology |
-| plan executor/backend | 执行 plan，保存队列、lease、owner 和 continuation | 定义两侧 InterfaceProtocol |
-| integration recipe | 选择端口、attachment、plan 和 backend 并装配 VirtualDut | 创造另一套运行语义 |
-| `SystemProtocol` | 把 bridge 端口接入 topology，检查端到端闭合 | 反射 backend 私有状态 |
+装配产物属于 `VirtualDut`；协议依赖在 `integrations` 的 composition root 汇合。运行时身份与源码装配位置由这
+两个事实分别描述。
 
-这个分法保留了一个重要事实：装配完成的产物是 VirtualDut，而协议相关依赖的汇合位置是 integration。
-“产物属于哪一层”和“装配代码放在哪个包”因而可以有不同答案。
+### 1.1 端口路径与事务方向
 
-从协议角色看，Bridge 更接近一个两侧 gateway：它终结 ingress InterfaceSession，在 egress 侧以另一角色发起
-新的 InterfaceSession。两侧 attachment 解码为相同 operation 时，可以使用 Identity semantic translation；operation 粒度、属性或
-completion 关系变化时，才需要 semantic stage。若原协议作为 opaque payload 被成对封装/解封装，则更接近
-tunnel endpoint 和 SystemProtocol recipe，不应与单个 Bridge 混称。
+典型 address bridge 在 ingress 侧作为 subordinate/completer 接受 parent，在 egress 侧作为
+manager/requester 发出 child。两个 `InterfacePort` 是对等的 module boundaries，request 与 completion 则沿
+相反方向流动。结构图以实线标 request、虚线标 completion，并保留真实的角色和 owner。
 
-### 1.1 两个协议边界与一条请求方向
+一个端口路径的 `1 ingress → 1 egress` 描述结构形状；单个 parent 仍可通过 `1→N` stage 产生多个 child。
+例如 AXI burst→APB bridge 可以具有两个 ports，同时在内部展开 256 个 address accesses。
 
-Bridge 图中的两个 InterfacePort 是对等的模块边界对象，但它们承担的事务角色并不对称。典型 address bridge
-在 ingress 侧作为 subordinate/completer 接受请求，在 egress 侧作为 manager/requester 发起 child；completion
-沿 owner table 保存的反向路径返回。因此，结构图应把两侧都画成“port + attachment + operation boundary”，
-同时用实线 request 和虚线 completion 保留真实方向，不能为了版面对称补出一条不存在的反向请求路径。
+A、B 两侧都能主动开启 transaction 时，duplex recipe 组合两条 translation pipelines。每条 pipeline 分别
+声明 ingress correlation、parent/child ownership、capacity 和 completion return；共享仲裁或存储由同一
+VirtualDut backend 持有。
 
-如果 A、B 两侧都能主动开启事务，它在执行上是两条 translation pipeline：各自需要 ingress correlation、
-parent/child ownership、capacity 和 completion return。二者可以位于同一个 VirtualDut 并共享仲裁或存储，但
-应由显式 duplex recipe 组合；它不是把单向 `A→B` plan 的箭头改成双向即可得到的能力。
+Opaque protocol payload 的成对封装/解封装采用 tunnel endpoint 与 system recipe；typed bridge path 则以
+operation form 和 semantic effects 描述可观察语义。
 
-### 1.2 三张相互关联的图
+### 1.2 三张图
 
-Bridge 构造和执行需要区分三种关系：
+Bridge construction 与 execution 同时产生三类关系：
 
 | 图 | 时间 | 回答的问题 | 主要对象 |
 |---|---|---|---|
-| 构造期约束图 | elaboration | 两端能力、stage 顺序和转换政策能否闭合 | port offer/requirement、codec、stage contract、plan |
-| 运行期语义转译图 | 每笔事务 | parent 怎样产生 child，completion 怎样 lift/fold | operation、envelope、lineage、semantic effect |
-| 运行期等待图 | 每个执行状态 | token 持有什么、等待什么，哪里可能阻塞 | executor、owner、queue、lease、demand |
+| 构造期约束图 | elaboration | 两端能力、stage 顺序和转换 policy 怎样闭合 | port offer/requirement、codec、stage contract、plan |
+| 运行期语义转译图 | 每笔 transaction | parent 怎样产生 child，completion 怎样 lift/fold | operation、envelope、lineage、semantic effect |
+| 运行期等待图 | 每个执行状态 | token 持有什么、等待什么，资源何时释放 | executor、owner、queue、lease、demand |
 
-三者可以互相投影，但不能合并为一份计数。例如 burst 的 child count 位于语义转译图，serial executor 的
-active slot 位于等待图；构造期只验证两者的资源政策相容。相关领域依据和不适用边界见
-[Bridge 构造的跨领域启示](bridge-construction-insights.md)。
+Burst child count 属于语义转译图，active scheduling window 属于等待图，构造期约束图验证两者的 profile
+相容性。三类图通过 token、lineage、resource projection 相互关联，并保持独立权威。
 
-## 2. 显式事务转译的必要性
+## 2. 输入合同
 
-### 2.1 控制协议数量带来的组合增长
+### 2.1 Operation form 与 reply context
 
-若每一对协议都拥有独立 backend，`N` 种协议可能诱导出接近 `N²` 个实现。很多实现会重复 burst 拆分、
-地址重映射、属性投影、串行调度和错误聚合。
-
-类型化转译把变化拆成两类：
-
-- 每种协议提供到少量 operation form 的 codec；
-- 每种真实语义差异提供可复用 stage。
-
-新增一个能够编码 `AddressAccess` 的协议时，可以复用已有 address stage 和 executor。只有出现 atomic、
-coherence、message ordering 等新的语义差异时，才需要增加新的 form 或 stage。常用协议对仍可保留具名
-preset，但 preset 只是审计过的装配方案，不拥有另一套执行核心。
-
-### 2.2 让 request 与 completion 保持成对
-
-事务转换不是单向字段映射。AXI burst 拆成多个 APB transfer 后，还必须知道：
-
-- 每个 child 属于哪个 parent；
-- child 失败怎样映射为 parent response；
-- read data 怎样恢复 beat 位置；
-- 何时可以释放 parent context；
-- reset/cancel 时哪些 obligation 仍未解除。
-
-这些关系要求 stage 同时声明正向 lower 和反向 lift/fold。只有 `map(event)` 的 callback 可以产生输出，却
-无法单独证明完成关系闭合。
-
-### 2.3 把语义变化和执行策略分开
-
-“一个 burst 包含 256 个 child”是事务基数；“同时允许几个 child 运行”是调度策略；“为它们保存多少
-descriptor/result”是存储策略。混在一个 backend profile 中，会让功能正确性、性能选择和容量故障难以
-分别解释。
-
-分开以后，同一个 `BurstToAccess` stage 可以使用 serial、window-K 或其他 scheduler，而不改变 burst 的
-业务含义。SystemProtocol 也能从显式 lease/demand 派生 wait-for 关系，而不是从协议对类名猜测资源。
-
-### 2.4 让构造失败可解释
-
-一份 plan 应记录每个属性是 preserve、default、remap、reject 还是 emulate，并记录选择这些策略的来源。
-当两侧能力不能闭合时，elaboration 可以指出具体的 operation form、stage 或 capability mismatch，而不是
-只报告“没有 AXI4→X recipe”。
-
-## 3. Operation form：被转译的类型化语义
-
-Operation form 描述模块实际处理的工作，不复刻某种协议的全部 wire fields。一个 form 至少包含 request
-类型和稳定的语义名称；有 request/completion 生命周期的 family 还声明 completion 类型，单向 stream 可用
-`Unit`/无 completion signature 表示。这个边界可用 `OperationSignature` 表示。
+Operation form 描述 module 实际处理的工作。`OperationSignature` 为它提供稳定的类型边界：
 
 ```text
 OperationSignature
-├── request form
-├── completion form
-└── semantic domain / version
+├── semantic domain / name / version
+├── request runtime types
+└── completion runtime types
 ```
 
-Attachment decode 的产物还需要保留协议返回所需的 opaque context。它不属于 operation form，而由 executor
-连同内部 token 一起装入 parent envelope：
+有 request/completion 生命周期的 domain 同时声明两侧类型；单向 stream 使用对应的无 completion signature。
+协议 wire identity、descriptor provenance 和返回编码上下文由 attachment 解码后存入 parent envelope：
 
 ```text
 DecodedOperation                 ParentEnvelope
-├── operation ───────────────┐   ├── parent token（executor 分配）
+├── semantic operation ──────┐   ├── executor parent token
 └── reply context（opaque）──┴──►├── semantic operation
-                                 └── reply context / ingress binding
+                                 ├── reply context
+                                 └── ingress binding
 ```
 
-Stage 只读取 semantic operation；reply context 原样保存，parent result 形成后再交回 ingress attachment。
-AXI 的 ARID/AWID、读写方向和 descriptor provenance 因而可以参与 R/B 编码，却不会污染通用 address form。
-Parent token 由 executor 为每次接纳分配，不能直接复用 AXI ID；同一个 AXI ID 可以先后对应多笔
-outstanding parent。
+Stage 读取 semantic operation。Executor 保存 reply context，并在 parent result 形成后交回 ingress
+attachment。AXI ARID/AWID、读写方向和 descriptor provenance 可以据此参与 R/B 编码；通用 address form 保持
+协议字段中立。
 
-当前最重要的 form 是：
+Parent token 由 executor 为每次接纳分配。Wire ID 继续服务接口 correlation，同一 wire ID 可以对应多笔
+outstanding parents；内部 token 为每笔 bridge lifecycle 提供唯一 owner key。
 
-| Form | 含义 | 典型使用者 |
+常见 form 包括：
+
+| Form | 含义 | 典型边界 |
 |---|---|---|
-| `AddressBurst` | 一笔有 beat geometry、属性和有序结果关系的地址 burst | full AXI ingress、后续可选 AHB burst codec |
-| `AddressAccess` / `AccessResult` | 一次原子 byte-range read/write 及其结果 | APB、AXI4-Lite、AHB accepted beat、single-beat AXI |
-| `StreamTransfer` | 一次带 lane mask、packet boundary、ID/destination 的流 beat | AXI4-Stream |
+| `AddressBurst` | 带 beat geometry、attributes 和有序 result relation 的地址访问集合 | burst-aware ingress 或 egress |
+| `AddressAccess` / `AccessResult` | 一次 byte-range read/write 及结果 | APB、AXI4-Lite、AHB accepted beat、single-beat AXI |
+| `StreamTransfer` | 带 lane mask、packet boundary、ID/destination 的 stream beat | AXI4-Stream receiver/transmitter |
 
-`AddressBurst` 表示有序的地址访问集合，不宣称整个 burst 是一个原子内存操作。它保存 count、geometry、
-attributes 和必要的 beat-local payload；AXI ID 等 wire identity 留在 parent envelope 的 ingress reply context，
-不进入通用 form。
+`AddressBurst` 保存 count、geometry、attributes 和必要的 beat-local payload；每个 beat 的 memory effect 继续按
+协议与 backend policy 判定。Atomic、coherent message、cache maintenance 和 stream-to-memory 等语义使用各自
+domain，显式 stage 或具名 VirtualDut 连接这些 domain。
 
-并非所有协议都应该压成 `AddressAccess`。TileLink atomic、CHI coherent message 或 cache maintenance 可能需要
-新的 semantic domain。Stream 与 AddressAccess 之间也没有默认路径；DMA 是一个具名、状态化 VirtualDut，
-不能由 planner 根据两个端口类型自行猜出。
+### 2.2 `TranslationProfile`
 
-当前 AMBA attachment 与目标 form 的关系如下：
+`TranslationProfile` 是调用方选择的 semantic contract，至少声明：
 
-| 端口 profile | 接收协议时 decode 成 | 驱动协议时 encode 自 | 架构方向 |
-|---|---|---|---|
-| AXI4 subordinate | `AddressBurst` | — | attachment 保留 AW/W assembly 与 reply context，burst form 进入公共 executor |
-| AXI4 serialized manager | — | 单笔 `AddressAccess` | V1 保持 single-beat egress |
-| AXI4-Lite subordinate/manager | `AddressAccess` | `AddressAccess` | 复用 address leaf stages |
-| AHB subordinate/manager | 每个 accepted beat 为 `AddressAccess` | `AddressAccess`（SINGLE） | 复用 address leaf stages |
-| APB completer/requester | `AddressAccess` | `AddressAccess` | 严格串行 address leaf |
-| AXI4-Stream receiver/transmitter | `StreamTransfer` | `StreamTransfer` | 独立 stream domain |
+- source 与 target `OperationSignature`；
+- source offer、target requirement 和适用 capability；
+- operation-level applicability 与 unsupported policy；
+- preserve、recompute、split、aggregate、rebind、default、weaken、reject 等 `SemanticEffect`；
+- request/completion correlation、cardinality 和 completion origin mapping；
+- 必须保持的 happens-before、允许的 reorder 和 access mode；
+- backpressure/admission policy、reset/cancel policy 与故障投影；
+- conformance equivalence level；
+- rule、policy 和规范裁决的 provenance。
 
-## 4. TranslationStage：类型之间的双向关系
+Profile 描述允许的边界行为集合。Stage 与 codec 证明一条具体语义路径，execution profile 再选择 serial、
+window、reorder、capacity、storage 和 service policy。
 
-Operation form 是名词，`TranslationStage` 是带类型的箭头。Stage family 的共同元数据包括：
+### 2.3 Executable composition contract
 
-- source request/completion signature；
-- target request/completion signature；
-- `1→1`、`0/1` 或 `1→N` 等基数；
-- request 的 lower/split/rewrite；
-- child completion 的 lift 或增量 fold；
-- 请求方向的 offer projection 与 completion 方向的 requirement projection；
-- 静态 precondition/postcondition 和逐 operation applicability；
-- 属性 preserve/recompute/split/aggregate/rebind/default/weaken/reject 等 `SemanticEffect`；
-- completion/error mapping、origin 和 preservation obligation；
-- parent→child lineage、本地完成条件和 rule provenance。
+一个可执行 bridge 的 composition contract 由以下构造输入共同形成：
 
-V1 根据基数提供两种执行形状。单值 stage 适合 1→1 或 0/1 leaf 变换：
+| 构造输入 | 合同内容 |
+|---|---|
+| ingress/egress port offers | protocol family、role、capability 和 event shape |
+| attachment codecs | event↔operation relation、reply context 与接口侧 state owner |
+| `TranslationProfile` + compiled plan | operation/result relation、effects、ordering 与双向 closure |
+| executor profile | admission、capacity、scheduling、storage 和 service policy |
+| boundary policy | reset/cancel、backpressure、error response 与 completion origin projection |
+| recipe provenance | intent→codec→stage→policy→module 的选择依据 |
+
+这些输入在 construction 阶段闭合并冻结。Runtime 只执行已选择的 plan、executor 和 bindings。
+
+### 2.4 显式转译的复用单位
+
+协议数量增长时，协议对 backend 容易重复 burst split、address remap、attribute projection、schedule 和 error
+fold。类型化转译把变化拆成两个复用单位：
+
+- 每种协议提供到少量 operation forms 的 codec；
+- 每种真实语义差异提供可组合的 stage。
+
+新增一个能够编码 `AddressAccess` 的协议时，可以复用 address stages 和 executor。Atomic、coherence、
+message ordering 等新语义压力则引入新的 form、stage 或 protocol-bound backend。具名协议对 builder 作为
+审计过的 preset，复用共同执行核心。
+
+具有 request/completion lifecycle 的 form 成对描述两侧。以 burst fanout 为例，合同同时记录
+child→parent lineage、result fold、read beat placement、error mapping、parent release 和
+reset/cancel obligation。
+
+## 3. 构造期闭合
+
+### 3.1 Typed `TranslationStage`
+
+Operation form 是类型化语义节点，`TranslationStage` 是节点之间的双向关系。共同元数据包括：
+
+- source/target request 与 completion signatures；
+- `1→1`、`0/1`、`1→N` 等 cardinality；
+- request lower/split/rewrite；
+- child completion lift 或 incremental fold；
+- request offer 的 forward projection 与 completion requirement 的 backward projection；
+- static precondition/postcondition 和 per-operation applicability；
+- `StageContract`、`SemanticEffect`、completion rule 和 preservation obligations；
+- parent→child lineage、本地完成条件和 provenance。
+
+单值 stage 可以使用以下形状：
 
 ```python
 class UnaryTranslationStage[ParentReq, ParentResult, ChildReq, ChildResult]:
@@ -220,7 +208,7 @@ class UnaryTranslationStage[ParentReq, ParentResult, ChildReq, ChildResult]:
     def lift(self, context: object, child_result: ChildResult) -> ParentResult: ...
 ```
 
-1→N stage 使用索引式 child 生成和增量 fold，避免接口强制预先物化全部 child/result：
+Fanout stage 使用 indexed child generation 与 incremental fold：
 
 ```python
 class FanoutTranslationStage[ParentReq, ParentResult, ChildReq, ChildResult]:
@@ -242,212 +230,93 @@ class FanoutTranslationStage[ParentReq, ParentResult, ChildReq, ChildResult]:
     def finish(self, context: object, fold_state: object) -> ParentResult: ...
 ```
 
-`FanoutStart` 保存 child count、stage context 和初始 fold state。`FanoutLedger` 决定何时允许调用
-`finish()`，stage 不再维护另一份 issued/completed 计数。AXI write 可以用 O(1) status accumulator；V1 的
-AXI read 仍可保存有序 beat results，逐 child 向上游流式返回属于后续 executor profile。
+`FanoutStart` 保存 child count、stage context 和 initial fold state。`FanoutLedger` 持有 issued、completed 和
+inflight lifecycle 账目；stage contract 持有 immutable conversion relation；executor 持有跨 transaction
+mutable state。
 
-`UnaryLowering` 与 `FanoutStart` 分别使用适合自身基数的 DTO，但都需要表达以下三类语义结果：
+Lowering 产生三类 semantic outcome：
 
-| 结果 | 含义 | 示例 |
+| Outcome | 含义 | 例子 |
 |---|---|---|
-| child expansion | 产生可向下游发行的 child | burst 生成多个 `AddressAccess` |
-| local completion | 不访问下游即可形成正常结果 | route miss 映射为 `DECODE_ERROR` |
-| rejection | 当前 conversion policy 无法表达 | 目标协议无法保留且策略未允许丢弃的属性 |
+| child expansion | 产生一个或多个下游 child | burst→`AddressAccess[N]` |
+| local completion | 在 bridge 内形成正常 parent result | route miss→`DECODE_ERROR` |
+| rejection | 当前 conversion policy 拒绝这笔 operation | target shape/attribute 超出 profile |
 
-容量不足不属于 stage 的语义转换结果。它由 executor 的 admission/resource policy 判定；这样更换
-scheduler 不会改变 stage 对一笔事务“应该变成什么”的定义。
+Executor 的 resource admission 另行产生 `BLOCK`、deferred error completion 或 fault projection，使
+conversion semantics 与临时容量状态保持分离。
 
-V1 沿用当前同步 runtime 的边界：typed pool 先产生 `CapacityFailure`，operation executor 再把它保留为
-translation fault detail，并投影成带 pool、usage 和 owner 信息的 VirtualDut-scope fault。完整端口
-`VirtualDutBackend` 的 fault/READY 映射属于 attachment-aware 外壳。
-等非立即 emission 进入运行时后，同一份资源状态再产生 typed `ResourceDemand`/blocked 状态；READY/
-backpressure 的 pin-level 投影还需要 observation/runtime 闭合。这里把资源 DTO 设计成可投影，是为了保留
-后续演进路径，并不把异步阻塞塞进 V1。
+### 3.2 Capability relation 与 `SemanticEffect`
 
-### 4.1 首批 address stages
-
-| Stage | Request 方向 | Completion 方向 |
-|---|---|---|
-| `BurstToAccess` | `AddressBurst → AddressAccess[N]` | N 个 `AccessResult` 形成 burst result |
-| `AddressWindow` | route check 与地址 remap | response 原样返回；miss 可 local-complete |
-| `AttributePolicy` | preserve/default/project/reject attributes | 必要时恢复 parent-facing 表达 |
-| `TransferShapeGuard` | 检查 width、alignment、byte enable | response 原样返回 |
-| `Identity` | 1→1 保持 operation | 1→1 保持 result |
-| `WidthSplit/Merge` | 后续按 byte/lane 拆分 | 重组 read data 与错误状态 |
-
-### 4.2 Stage contract 与双向能力关系
-
-类型相连只是必要条件。一个 stage 还必须回答“在什么条件下能用”和“转换后哪些性质仍成立”。建议的
-`StageContract` 由以下关系组成：
+类型相连提供 signature compatibility；`StageContract` 继续闭合 capability 与语义：
 
 ```text
 source offer ──forward projection──► target offer
 source requirement ◄──backward projection── target requirement
 
-source operation ──applicability──► accepted / local result / rejected
+source operation ──applicability──► child / local result / rejection
 source property  ──SemanticEffect─► target property + completion rule
 ```
 
-静态关系用于 plan construction，例如 source/target width、ordering capability 和 backpressure 能力；逐笔
-`applicability` 用于 burst kind、alignment、attribute value 等运行期才知道的条件。后者仍是已声明的转换政策，
-不等同于 executor 容量临时不足。
-
-`SemanticEffect` 至少区分：
-
-| Effect | 含义 |
+| Effect | 合同含义 |
 |---|---|
 | preserve | 两侧表达同一性质 |
-| recompute | 按目标 shape 重新计算 |
-| split/aggregate | 请求拆分或 completion 聚合 |
-| rebind | identity/metadata 转由 reply context 或 owner 保存 |
-| synthesize/default | 按显式 policy 产生缺省信息 |
-| weaken/drop | 保证或信息变弱，并在 report 中显露 |
-| reject | 当前 profile 不接纳该 operation |
+| recompute | 按 target shape 重新计算 |
+| split / aggregate | request fanout 或 completion fold |
+| rebind | identity/metadata 由 reply context、owner 或新 namespace 保存 |
+| synthesize / default | 按显式 policy 产生 target 所需信息 |
+| weaken / drop | 保证或信息变弱，并进入 construction report |
+| reject | profile 为超出适用范围的 operation 选择 rejection |
 
-`CapabilityRelation` 负责判断完整 plan 是否闭合；`SemanticEffect` 负责说明闭合过程中发生了什么。Planner
-不能因为最终 signature 相同就省略中间的 loss、ordering 或 completion 政策。
+`CapabilityRelation` 判断完整 path 的 offer/requirement closure，`SemanticEffect` 记录闭合过程的变化。
+Signature 相同时，planner 仍保留中间的 loss、ordering、identity 和 completion policies。
 
-### 4.3 与其他“变换”概念的区别
+常见 address stages 可组合为：
 
-本工程已有多种转换，但它们解决的不是同一个问题：
-
-| 机制 | 作用域 | 作用 |
+| Stage | Request 方向 | Completion 方向 |
 |---|---|---|
-| `compose_fragments()` | 同一语义域 | 合取多个规则 fragment |
-| `InterfaceProtocol.refine()` | 同一 interface language | 单调收窄合法行为 |
-| protocol embedding/variant | 协议 schema/event | 补默认字段或构造协议变体 |
-| observation lowering | pin/sample → interface event | pin/frame 解释成 `CanonicalEvent` |
-| attachment codec | interface event ↔ operation | 单端口协议编码 |
-| transaction translation | operation ↔ operation | 跨端口 split/rewrite/fold |
-| representation codec | message ↔ packet/flit | 保持声明 projection 的 pack/unpack、split/merge 与 lineage |
-| transport scheduling | packet/flit → hop/resource usage | 选择 route、VC/RP、buffer 和 arbitration lease |
-| artifact renderer | model/trace → 文档格式 | 展示与存储投影 |
+| `BurstToAccess` | `AddressBurst → AddressAccess[N]` | N 个 `AccessResult` fold 为 burst result |
+| `AddressWindow` | route check 与 address remap | result 保持；miss 可 local-complete |
+| `AttributePolicy` | preserve/default/project/reject attributes | 恢复 parent-facing 表达 |
+| `TransferShapeGuard` | width、alignment 与 byte-enable applicability | result 保持 |
+| `Identity` | 1→1 operation relation | 1→1 result relation |
+| `WidthSplit/Merge` | 按 byte/lane 拆分 | 重组 data、byte enable 与 error |
 
-项目现有 bottom-up 方法擅长从小规则构造更具体的同域协议。类型化转译补充的是横向的 `A→B` 关系，
-并不取代 bottom-up 思维；复杂 plan 仍由较小 stage 组合而来。
+具体已实现 stages 与 profile 范围由
+[事务转译实施状态](translation-implementation.md)维护。
 
-## 5. 事务生命周期与容量
+### 3.3 `TranslationPlan`
 
-Bridge 执行时需要把四种量分别记录：
-
-| 概念 | 回答的问题 | 典型状态 |
-|---|---|---|
-| transaction token | 这是谁的一笔工作 | executor 内部唯一的 parent token；不等同于 wire ID |
-| work obligation | 还欠多少 child/completion | total、issued、completed |
-| capacity lease | 当前谁占用了有限资源 | pool、amount、owner |
-| stored state | 为以后继续实际保存什么 | descriptor、cursor、payload、result fold |
-
-它们的作用域也不同：
-
-| 对象 | 作用域 | 责任 |
-|---|---|---|
-| `ParentEnvelope` | bridge VirtualDut runtime | 关联内部 token、semantic operation、reply context 与 ingress binding |
-| `CardinalityToken` | InterfaceProtocol monitor | 检查本接口声明的 beat/completion 数量 |
-| `FanoutLedger` | bridge VirtualDut runtime | 驱动 parent→child 的 issued/completed/inflight 生命周期 |
-| `ResourceDecl` | 声明与分析投影 | 表达某资源对外可见的种类和边界 |
-| `CapacityPool/Lease` | VirtualDut 执行状态 | 表示一次运行中具体的占用者和数量 |
-
-Concrete pool/profile 应派生 `ResourceDecl` 投影，避免分别维护两份容量事实。Link monitor 可以与
-VirtualDut ledger 共享 token/obligation 词汇，但不承担 bridge 调度。
-
-“stored state”还需要按用途和寿命细分，避免只用“有状态/无状态”描述整个 Bridge：
-
-| 状态类 | 例子 | 释放或恢复边界 |
-|---|---|---|
-| static configuration | route、attribute policy | module/plan replacement |
-| transport assembly | AW/W join、partial request | decode complete、cancel 或 reset |
-| shared binding | ID remap、return owner table | 最后相关 transaction 完成 |
-| per-parent semantic | fanout ledger、fold accumulator | parent completion 或 cancel |
-| capacity | queue slot、egress lease | completion 或 cancel |
-| performance-only | optional buffer/cache | eviction 或 reset；不得改变业务结果 |
-| diagnostic | lineage、fault provenance | evidence retention policy |
-
-每个 concrete state 应声明 owner、key、lifetime、release、reset/cancel 后果，以及能否从其他事实重建。
-completion 同时保存 wire-visible result 和内部 origin；`DOWNSTREAM`、`LOCAL_POLICY`、
-`LOCAL_RESOURCE_FAULT`、`RESET_OR_CANCEL` 等来源不能仅因最后映射成同一 response code 而丢失。
-
-### 5.1 256-beat burst 的账目
-
-以 AXI4 burst 经严格串行 APB bridge 为例：
-
-| 量 | 数量 | 原因 |
-|---|---:|---|
-| parent transaction identity | 1 | 一笔 AXI parent burst |
-| bridge parent slot 峰值 | 1 | 所有 child 完成前保留 context |
-| child work obligations | 256 | 需要执行 256 笔 APB transfer |
-| APB active lease 峰值 | 1 | serial scheduler 每次只发行一个 child |
-| child lease 累计借还 | 256 次 | 同一个执行 slot 反复使用 |
-| semantic parent result | 1 | executor 把 child results fold 成一个 burst result |
-| AXI read interface completion | 256 个 R event | ingress attachment 把一个 read burst result 编码成逐 beat R |
-| AXI write interface completion | 1 个 B event | ingress attachment 把聚合 write result 编码成 B |
-
-这里不是“一份 credit 变成 256 份同种 credit”。一个 parent token 打开了 256 个 work obligation；并发
-容量由调度窗口和下游能力决定：
-
-```text
-peak child lease = min(child count, scheduling window, downstream capacity)
-```
-
-若实现预先物化全部 child，还会占用相应 child-buffer entries。采用 descriptor + cursor 的 lazy expansion
-可以降低 child 描述存储。V1 的存储边界是：
-
-| Parent | Request storage | Result storage |
-|---|---|---|
-| AXI read burst | descriptor/cursor 可保持 O(1) | 暂缓逐 child 返回，因此有序 read data 为 O(N) |
-| AXI write burst | 已接纳的 W payload 本身为 O(N) | response status 可增量聚合为 O(1) |
-
-这些是 storage/fold policy，不改变 1→N 的事务语义，也不把整个 burst translation 笼统宣称为 O(1)。
-
-### 5.2 资源与 deadlock 的联系
-
-Wait-for 分析关心“某 token 持有什么 lease，同时等待什么 demand”。V1 严格串行路径发行 child 后持有
-egress lease，等待的是该 child completion；queued parent 等待前序 parent 结束，并不会在当前 profile 中
-形成一个尚未取得的共享 egress-slot demand。未来 window/shared-pool/crossbar profile 才会出现“持有某些
-lease、等待另一个 slot”的动态 demand。Fanout 数量只表示总工作量，本身不能证明 deadlock。
-
-V1 先建立 lease、obligation 和可诊断的 admission failure；后续引入非立即 emission 时，再把未满足的
-admission 或执行条件转成动态 demand，供 SystemProtocol 组合多个节点的等待边。
-
-CHI L-Credit 由 transport-hop contract/session 维护；P-Credit 与 Retry lifecycle 由 CHI protocol contract
-维护。二者以后都可以投影到系统资源图，但不与本地 FIFO slot 共用一套运行规则，也不能因为作用域局部
-就归入 InterfaceProtocol。
-
-## 6. TranslationPlan 与执行 backend
-
-`TranslationPlan` 是构造期校验并由 compiler witness 封住的无运行状态结果。它会冻结 closure/report 并在
-执行前核对 stage metadata；stage 实现本身仍须遵守无跨事务可变状态合同。V1 的有序 stage 结构允许
-fanout 前后的 1→1 转换，但至多包含一个 fanout：
+`TranslationPlan` 是 compiler 生成并封住的 construction result。它冻结：
 
 ```text
 TranslationPlan
 ├── source / target OperationSignature
 ├── TranslationProfile / equivalence level
-├── zero or more 1→1 prefix stages
-├── zero or one 1→N expansion
-├── zero or more 0/1 or 1→1 suffix stages
-├── bidirectional capability closure / semantic effects
-└── provenance and rejection diagnostics
+├── explicit stage topology and ordering
+├── bidirectional capability closure
+├── accumulated SemanticEffects
+├── completion/error mapping
+├── provenance and rejection diagnostics
+└── compiler witness
 ```
 
-调度、容量与端口绑定不是 semantic plan 的字段。当前 `SerialExecutorProfile` 单独选择 parent capacity 和
-serial egress slot；integration recipe 使用两侧 `InterfaceAttachmentBinding` 和
-`AddressOperationTranslationBridgeBackend` 完成 executable binding。完整、独立 DTO 形式的 construction
-report 尚未落地，但 plan、profile、attachment 与 port 选择已经是显式构造输入。这样同一个语义 plan 可以
-更换 scheduler，而不会让 plan 报告它尚未证明的运行资源性质。
-
-Plan compiler 同时闭合正向和反向类型。执行顺序为：
+每条 request path 按 stage order lower，每条 completion path 逆序 lift/fold。常见 fanout path 的顺序为：
 
 ```text
 request:    prefix.lower → expansion.child_at → suffix.lower → egress
 completion: egress → suffix.lift → expansion.fold_one/finish → prefix.lift → ingress
 ```
 
-因此 suffix 改写后的 child result 必须先 lift 回 expansion 的 target result，prefix context 则保留到整个
-parent 完成后再逆序 lift。这个反向闭合是 plan 校验的一部分，不由 recipe 临时拼 callback。
+Suffix child result 先 lift 回 expansion target，prefix contexts 保留到 parent 完成后逆序 lift。Compiler 同时
+检查正向 request types 与反向 completion types。
 
-### 6.1 构造期闭合与 stage 顺序
+Canonical plan 是有限、显式的 typed structure。具体 compiler profile 声明其支持的 topology；每个 branch、
+fanout 和 merge 都提供 lineage、completion rule 和 owner。实施所支持的线性、fanout 或 graph 范围记录在
+实施状态页。
 
-Plan construction 按下面的逻辑进行：
+### 3.4 Compiler closure 与 diagnostics
+
+构造期按以下顺序闭合：
 
 ```text
 source/target port offers + requested TranslationProfile
@@ -457,104 +326,328 @@ source/target port offers + requested TranslationProfile
     → validate ordered stage pre/postconditions
     → accumulate SemanticEffects and unsupported policies
     → choose executor/storage/resource profile
-    → freeze plan + construction report
+    → freeze plan + executable composition report
 ```
 
-线性 V1 可以用一次有序的正向与反向校验完成；未来 nexus 或可选 stage graph 才可能需要更一般的约束求解。
-Stage 列表不是任意可交换集合。fragment、width、attribute、ID/order repair 之间的先后由各自 pre/postcondition
-决定，plan validator 应报告第一个不闭合的中间不变量，而不是只报告“没有协议对 recipe”。
+Stage order 由 fragment、width、attribute、identity、ordering repair 的 pre/postconditions 决定。Validator
+定位第一个未闭合的 intermediate invariant，并报告：
 
-Plan 还声明保持的等价层级：operation/effect trace、interface transaction/order 或 pin/cycle。Buffer、register
-slice 或 CDC lowering 通常属于运输实现；只有在相应 stallability、reset 和等价条件闭合后才能加入，不能由
-semantic stage 隐式产生。
+- source/target signature mismatch；
+- missing offer 或 unsatisfied requirement；
+- stage order/precondition failure；
+- unsupported attribute、shape、cardinality 或 ordering；
+- semantic weakening 所需的调用方授权；
+- completion mapping、reset/cancel 或 backpressure policy 缺口；
+- provenance chain。
 
-### 6.2 Executor 的运行状态
+Plan 声明 operation/effect、interface transaction/order 或 pin/cycle 等 equivalence level。Buffer、register
+slice 与 CDC lowering 在自身 stallability、reset 和 timing equivalence contract 闭合后进入 composition。
 
-Plan 本身不保存运行状态。已实现的 operation executor 保存：
+## 4. 生命周期执行
 
-- pending parent queue；
-- 每个 parent 的 translation frame、`FanoutLedger` 和 continuation；
-- active child 与 egress owner；
-- 已获取的 resource leases；
-- result fold state。
+### 4.1 Runtime state ownership
 
-已经实现的 attachment-aware backend 另外保存两侧接口关联状态和 emission 编码候选，并把 attachment 与
-executor 的候选状态作为一个整体提交。二者没有在公共 executor 中混成万能协议 payload 接口。
-
-等待原因也应结构化为 `input_empty`、`output_full`、`await_completion`、`ordering_barrier` 等类别。V1 同步
-runtime 仍可把无法接纳表示为 fault；这些分类为后续 blocked/deferred transition 和 SystemProtocol wait-for
-投影保留稳定语义。
-
-Translation frame 保存语义数据，例如 expansion cursor、stage context 和 result accumulator；`FanoutLedger`
-只保存 total/issued/completed/inflight 等生命周期账目。Scheduler 消费 ledger 与 pool 状态，不再复制一份
-completion count。
-
-一次 bridge 执行中的状态所有权如下：
+Plan 冻结构造事实，executor 与 attachments 持有运行状态：
 
 | 状态或资源 | Runtime owner | 释放或转移边界 |
 |---|---|---|
-| pending AW、pre-AW W、partial W | ingress attachment state | 完整 parent operation 形成时释放或显式移交 payload |
-| parent envelope、queue、continuation | executor | parent result 连同 reply context 被 ingress attachment 编码完成 |
-| payload beat storage | attachment 或 translation frame 中的唯一 owner | child 消费、cancel/reset 或 parent 完成 |
+| partial request、AW/W join、wire reply context | ingress attachment | 完整 parent 形成、cancel 或 reset |
+| parent envelope、queue 与 continuation | executor | parent result 成功交给 ingress encode |
+| payload storage | attachment 或 translation frame 中的唯一 owner | child 消费、cancel/reset 或 parent 完成 |
 | child scheduling window | executor capacity pool | child completion/cancel |
-| APB sole pending 等单端口接口关联状态 | egress attachment state | 该协议 completion 被 decode |
+| 单端口 pending/completion context | egress attachment | protocol completion decode |
 | child→parent lineage | executor `FanoutLedger` | child obligation 解除 |
-| result tuple/fold accumulator | translation frame | parent result 形成 |
-| interface outstanding | 各自 `InterfaceSession` | 对应 interface completion 被接受 |
+| result tuple/fold accumulator | translation frame | semantic parent result 形成 |
+| interface outstanding/cardinality | 各侧 `InterfaceSession` | 对应 interface completion 被接受 |
 
-同一个 runtime 资源只由一个 owner 更新；`ResourceDecl`、boundary capability 和可视化 usage 从该 owner
-投影，不再维护另一份可修改计数。
+`ResourceDecl`、boundary capability、wait-for input 和 visualization usage 从唯一 runtime owner 投影。Protocol
+monitor 继续持有自己的 verdict ledger，并通过 canonical events 与 execution state 对照。
 
-一个严格串行 executor 的生命周期是：
+Attachment-aware backend 将 decode、executor 和 encode candidates 组成一次原子 transition：
+
+```text
+ingress decode candidate
+    → plan/executor candidate
+    → egress issue or local result
+    → ingress/egress encode candidates
+    → admission succeeds
+    → commit all candidate state and emissions
+```
+
+候选被阻塞或拒绝时，已提交状态保持在上一个稳定点；诊断携带 producer、resource、operation token 和 policy。
+
+### 4.2 Parent lifecycle
+
+一个 fanout parent 的通用生命周期为：
 
 ```text
 accept request fragments
-  → ingress attachment owns partial transaction state
+  → ingress attachment owns partial transaction
 
 form complete parent
-  → attachment returns DecodedOperation
-  → executor assigns token and owns ParentEnvelope
+  → attachment emits DecodedOperation
+  → executor assigns parent token and owns ParentEnvelope
   → acquire parent lease
-  → create fanout obligation(total=N)
+  → create work obligation(total=N)
 
 issue child[i]
-  → acquire one egress execution lease
-  → record parent/child correlation
+  → acquire egress execution lease
+  → save parent/child lineage
 
 complete child[i]
-  → fold result
+  → lift/fold result
   → release egress lease
-  → advance ledger
+  → retire one child obligation
 
-all children complete
-  → form one semantic parent result
-  → ingress attachment uses reply context to encode interface completion event(s)
-  → successful encoding releases parent lease and envelope
+all child obligations retire
+  → form semantic parent result
+  → ingress attachment encodes interface completion event(s)
+  → release parent envelope and lease
 ```
 
-Route miss 等 local completion 直接推进 ledger，不获取 egress lease。Normal completion 与模型故障保持
-分离，便于 bridge 正确表达目标地址不存在、只读写入等设备结果。
+Local completion 直接形成 parent result，并保留 `LOCAL_POLICY` 等 origin。下游 decode miss、只读写入等正常
+device results 沿 completion mapping 返回；模型合同破坏进入独立 fault path。
 
-AXI read 中，bridge 的一个 semantic parent result 与 AXI interface 上的多个 R event 是两个作用域。Parent envelope
-在 codec 成功形成全部 emissions 后释放；`InterfaceSession` 的 AR→R cardinality obligation 随各个 R event 被接受
-而逐项解除，不与 `FanoutLedger` 共用 remaining count。V1 parent scheduler 按“完整 parent operation 形成顺序”
-严格 FIFO；它能保持同 ID 返回顺序，也会对不同 ID 施加比 AXI 基础规则更强的串行限制。
+一个 semantic parent result 可以编码为多个 interface events。AXI read burst result 可形成逐 beat R events；
+`FanoutLedger` 负责 child obligations，`InterfaceSession` 负责 AR→R cardinality，两份账本在各自作用域退休。
+
+### 4.3 Token、obligation、lease 与 storage
+
+Bridge runtime 分别记录四种量：
+
+| 概念 | 回答的问题 | 典型状态 |
+|---|---|---|
+| transaction token | 这是谁的一笔工作 | executor-unique parent token |
+| work obligation | 还欠多少 child/completion | total、issued、completed、inflight |
+| capacity lease | 当前谁占用有限资源 | pool、amount、owner、acquire/release |
+| stored state | 为继续执行保存什么 | descriptor、cursor、payload、fold accumulator |
+
+`FanoutLedger` 表达工作量，`CapacityPool/Lease` 表达并发资源，`ResourceDecl` 提供声明与分析投影。Concrete pool
+是 capacity authority，其他视图从它派生 usage。
+
+状态按用途声明 owner、key、lifetime、release、reset/cancel effect 与 reconstruction policy：
+
+| 状态类 | 例子 | 生命周期 |
+|---|---|---|
+| static configuration | route、attribute policy | module/plan replacement |
+| transport assembly | AW/W join、partial request | decode complete、cancel/reset |
+| shared binding | ID remap、return owner table | 最后相关 transaction 完成 |
+| per-parent semantic | fanout ledger、fold accumulator | parent completion/cancel |
+| capacity | queue slot、egress lease | completion/cancel |
+| performance policy | optional buffer/cache | eviction/reset，保持业务 contract |
+| diagnostic evidence | lineage、fault/completion provenance | evidence retention policy |
+
+### 4.4 Fanout 的资源账目
+
+以 256-beat parent 经 strict-serial target 为例：
+
+| 量 | 数量 | 原因 |
+|---|---:|---|
+| parent transaction identity | 1 | 一笔 parent operation |
+| parent slot peak | 1 | completion 前保存 context |
+| child work obligations | 256 | 需要执行 256 笔 child operations |
+| active child lease peak | 1 | serial scheduler 每次发行一个 child |
+| child lease acquire/release | 256 次 | 同一个 execution slot 循环复用 |
+| semantic parent result | 1 | child results fold 为一个 result |
+| interface completion events | 由 ingress codec 决定 | 例如 read 的逐 beat result 或 write 的单 response |
+
+并发资源上界为：
+
+```text
+peak child lease = min(child count, scheduling window, downstream capacity)
+```
+
+Lazy descriptor+cursor 可以让 request expansion 保持 O(1) descriptor storage。Aggregate read result 可以选择
+O(N) ordered storage，streaming fold 可以把 storage 约束到 configured window；write status 在可增量 fold 的
+profile 中可以保持 O(1)。这些 storage policies 保持相同的 cardinality 和 completion contract。
+
+### 4.5 Admission、backpressure 与 completion origin
+
+语义转换和运行资源分别产生结果：
+
+| 结果 | Producer | 状态与边界语义 |
+|---|---|---|
+| child / local completion / rejection | stage + translation policy | 描述一笔 operation 的语义结果 |
+| admitted | executor/backend | ownership 与 lease 原子转移，candidate state 提交 |
+| `BLOCK` / `ResourceDemand` | capacity/admission policy | 保存原 owner，等待 resource 或 service opportunity |
+| ordered error completion | boundary policy | 预留 ordering position，形成协议可表达的 completion |
+| `FAULT` | model contract/runtime | 记录 invariant、owner 和 provenance 诊断 |
+
+Backpressure-capable boundary 将 `BLOCK` 投影为协议 admission 信号；event-level runtime 通过 blocked transition 与
+scenario retry 表达同一事实。Pin/cycle projection 由 observation/driver adapter 负责，并保持 payload stability、
+reset 和 handshake 合同。
+
+Completion 同时保存 wire-visible result 和内部 origin。常用 origin 包括：
+
+- `DOWNSTREAM`：target device 或下游协议 completion；
+- `LOCAL_POLICY`：route miss、shape policy 或本地正常结果；
+- `LOCAL_RESOURCE_FAULT`：资源 policy 选择的错误完成；
+- `RESET_OR_CANCEL`：lifecycle 被边界 control 终止。
+
+多个 origin 可以映射为同一个 protocol response code；origin 继续用于 provenance、debug、system evidence 与
+conformance。
+
+### 4.6 Ordering 与 correlation
+
+`TranslationProfile` 声明业务必需的 partial order，例如：
+
+- fragments→complete parent；
+- parent→child；
+- 一个 burst 内的 beat order；
+- same-ID completion order；
+- request→response；
+- side effect→successful completion。
+
+Execution profile 可以选择更强的 total order。Strict-serial executor 是 contract 的一个合法 linearization；
+window/reorder executor 通过 stable wire identity、reply context 和 parent/child lineage 恢复 correlation。
+匹配以这些 identity 为准。
+
+吞吐、最大等待、公平性和 QoS 由 system/scenario properties 声明。Execution 选择的额外串行化进入 witness 和
+performance analysis，semantic contract 保持必要 ordering edges。
+
+### 4.7 Resource projection 与 wait-for
+
+Wait-for analysis 消费“token 持有的 leases”和“尚待满足的 demands”：
+
+```text
+token
+├── holds: parent slot, child slot, owner entry
+└── waits: downstream completion, output capacity, ordering release
+```
+
+Fanout count 表达总工作量，动态 wait-for edge 来自 held lease 与 pending demand。Window、shared pool、
+crossbar 和多 bridge chain 可以把 owner/resource projection 交给 `SystemProtocol` analysis，形成跨 module
+wait-for graph。
+
+协议专用 credit 保留自身 scope：CHI L-Credit 由 transport-hop session 管理，P-Credit/Retry 由 CHI protocol
+transaction contract 管理，本地 bridge FIFO slot 由 VirtualDut backend 管理。共同 resource vocabulary 支持
+统一投影，各 owner 继续执行自己的 acquire/release rules。
+
+## 5. Bridge VirtualDut 与 System handoff
+
+### 5.1 Integration composition root
+
+Integration recipe 可以同时依赖具体协议 attachment、通用或 protocol-bound stages、executor 和 VirtualDut
+boundary：
+
+```text
+ingress InterfacePort + attachment
+                     │
+                     ├─ validated TranslationPlan
+                     │
+egress InterfacePort  + attachment
+                     ▼
+       executor / translation backend
+                     ▼
+             bridge VirtualDut
+```
+
+Recipe 完成：
+
+- ingress/egress protocol 与 role 选择；
+- attachment bindings 和 reply-context ownership；
+- `TranslationProfile`、ordered stages 与 compiler invocation；
+- executor/storage/resource profile；
+- completion/error origin、reset/cancel 和 backpressure policy；
+- ports、capabilities、route 与 boundary projection；
+- construction provenance。
+
+具名 builders 可以收窄 profile 并提供易读入口；共同 stages、executor 和 owner lifecycle 保持单一实现来源。
+
+### 5.2 Bridge、crossbar 与 interconnect owner
+
+Bridge 的内部 fanout 与 crossbar 的多入口共享是两种关系：
+
+| 判断或状态 | Owner |
+|---|---|
+| 单 interface schema、channel order 与 event legality | `InterfaceProtocol` / `InterfaceSession` |
+| 单端口 fragment join 与 wire reply context | attachment |
+| parent→child translation 与 result fold | stage + bridge executor |
+| 单 bridge queue、lease 与 child owner | bridge VirtualDut backend |
+| 多入口 admission/arbitration、shared egress lease 与 return owner | crossbar/fabric VirtualDut backend |
+| module reachability、global address/capability 与 end-to-end return | `SystemProtocol` |
+| 跨 module held/waited resources 与 deadlock property | SystemProtocol analysis |
+
+Crossbar 可以复用 codecs、route stages、storage、correlation 和 completion mapping。多个 ingresses 共享 egress
+时，一个 fabric backend 统一持有 arbitration grant lifetime、ID namespace/remap、response owner 和 ordering。
+
+保持 native burst、多 ID concurrency 或 channel timing 的 interconnect 可以选择 `AddressBurst` egress codec 或
+channel-preserving protocol-bound backend。Operation lowering 的目标由验证范围与 profile 决定。
+
+### 5.3 System construction
+
+Construction lowering 将 bridge materialize 为显式 module、ports 和 connections：
+
+```text
+source
+  ─ source InterfaceConnection
+  ─ bridge VirtualDut
+  ─ target InterfaceConnection
+  ─ target
+```
+
+随后 core SystemProtocol elaboration 执行：
+
+- module/port/connection ownership；
+- capability compatibility；
+- global address、identity 和 route authority；
+- generated boundary projection 与 system contract 核对；
+- end-to-end return closure；
+- resolved runtime 与 monitor plan。
+
+Bridge backend 的 queue、lease、owner 和 fold state 保持 module-private；SystemProtocol 读取 typed boundary/
+resource projections。具名 interconnect 默认作为一个多端口 VirtualDut；验证目标需要观察内部 module、
+connection 或 hop 时，construction 可以展开一个内部 SystemProtocol。
+
+Generated fabric 从 system contract 派生或核对 route。External/opaque RTL bridge 通过 boundary contract 声明
+其本地 decode、capability 和 return properties，由 system construction 闭合。
+
+## 6. Conformance profile 与证据
+
+### 6.1 Equivalence level
+
+Profile 选择观察层级：
+
+| Level | 参与比较的投影 | Profile 可声明的自由度 | 所需证据 |
+|---|---|---|---|
+| `OPERATION_EFFECT` | typed request/result 与 externally visible effect | profile 声明的 child scheduling、stutter、boundary reorder | operation correlation 与 effect oracle |
+| `INTERFACE_TRANSACTION_ORDER` | accepted canonical events、correlation 与 partial order | profile 声明的 buffering、allowed reorder、variable latency | protocol observation 与 event identity |
+| `PIN_CYCLE` | normalized pin/`AtomicFrame`、clock/reset 与 handshake | declared don’t-care、retiming、latency tolerance | pin adapter、clock/reset 和 stability checks |
+
+细粒度 evidence 可以投影到较粗粒度的 comparison level；反向提升需要补充相应 observation。每项 timing、
+stallability 和 reset claim 由选择它的 profile 与 evidence 闭合。
+
+### 6.2 Event projection、stutter 与 partial order
+
+RTL 样本先经过协议 observer，再进入 bridge comparison：
+
+```text
+pin frames
+  → handshake / stability / reset checks
+  → accepted CanonicalEvents
+  → attachment codec
+  → operation/effect trace
+```
+
+Operation/effect 或 variable-latency profile 可以折叠两个相关 transfers 之间的无关 sampling frames。
+Timeout、progress、latency window、non-backpressurable boundary、reset 和 sample-time sideband 在折叠前作为
+cycle-visible properties 检查。
+
+Contract 保存真正必要的 happens-before edges，并把其他 pairs 标为 concurrent 或 allowed reorder。RTL trace
+只要是该 partial order 的合法 linearization，并满足 identity、cardinality 和 effect relation，就属于允许行为。
+Reference executor 的更强 ordering 形成其中一个 witness。
 
 ### 6.3 Contract、execution profile、witness 与 RTL conformance
 
-可执行 reference model 会产生一条具体轨迹，bridge contract 描述的则是一组允许的边界行为。两者需要分开，
-否则 executor 为方便实现而选择的严格 FIFO、单 child 调度和 service 时机，会被误当成协议义务，进而否决
-具有合法 buffering、pipeline 或跨 ID 重排的 RTL。
+Bridge contract 描述允许行为集合；execution profile 选择其中一种 reference implementation：
 
-| 对象 | 说明 | 支持的结论 |
+| 对象 | 内容 | 支持的结论 |
 |---|---|---|
-| bridge contract / `TranslationProfile` | operation/result relation、effect、correlation、必须保持的偏序、允许弱化和可选时间约束 | 哪些边界行为属于所选 profile |
-| `TranslationPlan` | 证明 codec/stage 能双向闭合 contract；不保存调度状态 | 这条语义转换路径可以构造 |
-| execution profile | 选择 serial/window/reorder、capacity、storage 和 service policy | reference VirtualDut 怎样执行其中一种实现 |
-| execution witness | plan、execution profile 与 scenario 形成的一条有限轨迹 | 至少有一条行为可执行，可用于示例和定向回归 |
-| RTL conformance | 将两侧 RTL observation 投影后检查 relation、identity、偏序和可选时间约束 | 被观察行为是否落在 contract 允许集合内 |
-
-关系可以写成：
+| bridge contract / `TranslationProfile` | operation/result relation、effect、correlation、partial order、semantic weakening 与 optional timing | 哪些边界行为属于所选 profile |
+| `TranslationPlan` | codec/stage 的双向 closure 与 compiler witness | semantic path 可以构造 |
+| execution profile | scheduler、capacity、storage、service 和 backpressure policy | reference VirtualDut 怎样执行一种合法实现 |
+| execution witness | plan、execution profile 与 scenario 形成的有限 trace | 至少一条行为可执行 |
+| RTL conformance profile | observation projection、identity、partial order、stutter、effect 与 timing policy | 被观察行为是否属于 contract |
 
 ```text
 Bridge contract C ──compile──► TranslationPlan
@@ -567,190 +660,27 @@ RTL pins ─► protocol observation ─► projected behavior r
        └──────────────────── conformance: r ∈ Behaviors(C)
 ```
 
-普通 conformance 判断使用 `r ∈ Behaviors(C)`，不要求 `r == w`。只有 contract 明确选择精确调度或
-`PIN_CYCLE` 约束时，reference schedule 的相应部分才可能成为逐周期判定依据。
+Conformance 使用 membership `r ∈ Behaviors(C)`。当 contract 明确选择 exact schedule 或 `PIN_CYCLE`
+constraints 时，对应 reference timing 才进入 exact comparison。Execution witness 支持 existential claim；
+完整 profile coverage 继续需要 requirement catalog、positive/negative evidence 和 conformance checks。
 
-#### Event projection 与 stutter
+## 7. Canonical 与实施资料分工
 
-RTL 样本先由协议 observer 检查 handshake、stall stability、reset 和其他 pin-local 规则，再投影为 accepted
-`CanonicalEvent`、typed operation 和 externally visible effect。对 operation/effect 或允许变延迟的
-interface-transaction profile，两个相关 transfer/effect 之间的无关采样帧可以在语义比较时折叠：
-
-```text
-pin frames ──protocol checks──► accepted events ──codec──► operation/effect trace
-```
-
-stutter-insensitive 不表示所有空周期都能忽略。timeout、progress、latency window、不可回压边界、reset 和
-采样期 sideband 会让周期本身成为可观察事实；这些 property 必须在折叠前检查。没有声明 latency upper bound
-只表示当前 contract 不据此判错，不表示实现必须零延迟。
-
-#### Partial order 与 allowed reorder
-
-Serial executor 会把事件排成 total order。Contract 只应保留真正必要的 happens-before edge，例如 fragment
-形成完整 request、parent→child、同一 burst 的 beat 顺序、同 ID completion 顺序和 request→response。
-没有依赖的事件可以由 profile 声明为可重排。
-
-RTL trace 若是该偏序的合法线性展开，并满足 correlation/cardinality，就不应仅因列表位置与 serial witness
-不同而失败。匹配依靠 wire ID、reply context、owner/lineage 等稳定 identity，而不是 reference 数组下标。
-实现选择更强的顺序通常仍可符合较弱 contract；吞吐、最大等待和公平性由另外声明的 property 判断。
-
-#### Equivalence level 的当前边界
-
-| level | 参与比较的投影 | 通常可忽略或允许 | 还需要的证据 |
-|---|---|---|---|
-| `OPERATION_EFFECT` | typed request/result 与 externally visible effect | 内部 child 调度、无关 stutter、未约束的 boundary ordering | interface event 顺序、transport 与 pin timing |
-| `INTERFACE_TRANSACTION_ORDER` | accepted canonical event、correlation 与 contract partial order | 已声明的 stutter、buffering 和 allowed reorder | 未接受的 pin toggle 与 cycle-exact waveform |
-| `PIN_CYCLE` | normalized pin/`AtomicFrame`、clock/reset 与 handshake | profile 明确列出的 don't-care、retiming 或 latency tolerance | 不能由 operation plan 自动推出 |
-
-当前 V1 compiler 只接受 `OPERATION_EFFECT`、空 ordering claim 和 sequential access mode。
-`INTERFACE_TRANSACTION_ORDER`、`PIN_CYCLE`、通用 partial-order conformance、stutter projection 与 latency window
-仍未形成 executable checker。现有 `SerialTranslationExecutor` 因而是具体 execution profile 和 witness
-生成器；它能够检查 owner/lifetime/error fold，但不定义外部 RTL 的唯一 golden cycle trace。
-
-## 7. 从 Plan 装配 Bridge VirtualDut
-
-Integration recipe 是 composition root：它可以同时依赖协议 attachment、通用 stage、executor 和
-VirtualDut boundary。装配过程如下：
-
-```text
-ingress InterfacePort + ingress attachment
-                     │
-                     ├─ validated TranslationPlan
-                     │
-egress InterfacePort  + egress attachment
-                     ▼
-          plan executor backend
-                     ▼
-             bridge VirtualDut
-```
-
-`build_amba_serial_bridge_vdut()` 是统一 composition root：full AXI4 ingress 选择 burst assembly/fanout，
-AXI4-Lite、AHB 和 APB ingress 选择 single-access plan；egress attachment 再按目标 family 选择。
-`build_axi4_to_apb_bridge_vdut()` 等具名函数保留为易读、附加限制经过审计的 preset。以 AXI4→APB preset
-为例，它只选择：
-
-- AXI4 ingress codec；
-- `AddressBurst→AddressAccess` 与 address leaf stages；
-- 明确适用范围、ordering、SemanticEffect、unsupported policy 和 equivalence level 的 `TranslationProfile`；
-- serial scheduler、访问/物化方式和 storage profile；
-- APB egress codec；
-- completion/error origin、reset/cancel、两侧端口与 route policy。
-
-这些 preset 不拥有专属的 split/schedule/correlate backend。
-
-目标 `SystemProtocolBuilder` 的 construction lowering 在调用方授权后选择同样的 plan，并把结果展开为：
-
-```text
-source ─ source connection ─ bridge VirtualDut ─ target connection ─ target
-```
-
-展开后的节点和 connections 才交给 core SystemProtocol elaboration 做普通结构闭合检查。目标 construction report
-将保存 intent→codec→stage→policy→module 的 provenance；运行期不会因为遇到协议不匹配而临时插入
-不可见 adapter。
-
-## 8. Bridge、Crossbar 与 SystemProtocol 的边界
-
-Bridge 的 `1→1` 指端口路径形状，不表示每笔事务只能产生一个 child。AXI4→APB bridge 可以是一个 ingress
-port、一个 egress port，同时在内部执行 1→256 fanout。
-
-Crossbar 在事务转译之外增加多入口共享：
-
-- route/decode；
-- admission 与 arbitration；
-- AW→W route ownership；
-- downstream ID namespace/remap；
-- response owner table；
-- 多 parent 并发和 ordering policy。
-
-Crossbar 可以复用 codec 和 leaf stages，但不能默认建成若干彼此独立的 bridge executor。共享出口的选择和
-owner 必须由同一 backend/fabric contract 统一拥有。
-
-| 判断或状态 | 所属位置 |
+| 资料 | 维护内容 |
 |---|---|
-| 单 interface channel/schema/order | `InterfaceProtocol` / `InterfaceSession` |
-| 单端口 fragment join、wire ID context | attachment state |
-| 1→N 转译与 result fold | stage + bridge executor |
-| 单 bridge queue、child owner | bridge VirtualDut backend |
-| 多入口仲裁、共享 egress lease、返回 owner | crossbar/fabric VirtualDut backend |
-| 多节点可达性、端到端 return closure | `SystemProtocol` |
-| 跨节点 held/waited resource 与 deadlock | SystemProtocol analysis |
+| 本文 | operation form、stage、plan、executor、resource、composition 和 conformance 的稳定合同 |
+| [事务转译实施状态](translation-implementation.md) | 当前源码对象、已接入 profiles、V1 限制、阶段验收与延期项 |
+| [实现状态总表](implementation-status.md) | 跨包完成度、当前边界与证据 claim |
+| [实施路线](technical-route/08-roadmap.md) | 当前工作顺序与下一 slice |
+| [Bridge 构造启示](bridge-construction-insights.md) | compiler、network、workflow 等领域方法的适用启示 |
 
-这些局部状态属于 interconnect VirtualDut。SystemProtocol 负责 bridge/crossbar 外部端口接到谁、地址和
-capability 是否端到端闭合，以及多个节点资源是否形成 wait-for 环。只有验证目标需要观察互连内部 module/
-connections/hops 时，才把它展开为内部 SystemProtocol。
+源码入口：
 
-Full AXI→AXI transparent relay/crossbar 也未必适合先降为 `AddressAccess`。如果验证目标要求保持原生 burst、
-多 ID 并发或 channel timing，应使用能够接受 `AddressBurst` 的 egress codec，或采用 channel-preserving 的
-协议相关 backend。协议无关 operation 是优先复用方向，不是有损转换的理由。
-
-## 9. 当前采用的 V1 边界
-
-V1 选择一条受限的线性 plan：
-
-```text
-ingress codec
-    → zero or more 1→1 prefix stages
-    → zero or one 1→N expansion
-    → zero or more 0/1 or 1→1 suffix stages
-    → one serial egress scheduler
-    → egress codec
-```
-
-这个边界由当前真实 bridge pressure 决定。统一 builder 的 family-level 构造矩阵如下；每个格子表示能够
-装配成一个两端口 serial bridge，不表示所有可选 sideband 或性能性质都能保持。
-
-| ingress form / family | AXI4 egress | AXI4-Lite egress | AHB egress | APB egress |
-|---|---|---|---|---|
-| AXI4 `AddressBurst` | burst→ordered single AXI access | burst→ordered Lite access | burst→AHB SINGLE | burst→APB transfer |
-| AXI4-Lite `AddressAccess` | single AXI access | single Lite access | AHB SINGLE | APB transfer |
-| AHB accepted beat | single AXI access | single Lite access | AHB SINGLE | APB transfer |
-| APB transfer | single AXI access | single Lite access | AHB SINGLE | APB transfer |
-
-因此四个 address family 形成 4×4 共 16 种构造组合；AHB-Lite/AHB5 与 APB3/APB4/APB5 通过各自 family
-attachment 复用这张矩阵。当前七个具体 variant 在默认 32-bit profile 下形成 7×7 装配见证；它验证
-composition root 没有按协议对扩张，不等同于 49 个方向的完整执行或规范覆盖。具体 revision/profile 还必须
-满足 attachment 和 stage 的能力边界：
-
-这些 serial trace 证明当前 execution profile 能够装配和执行，不把该 profile 的调度选择定义成所有
-conforming RTL 的唯一轨迹。
-
-- executor 每次只保持一个 active child；下游 AXI 使用一个配置的 wire ID，不提供 ID remap/reorder；
-- full AXI burst 当前拆成有序 single access，不保持下游原生 burst 形态；
-- single-access 路径当前要求两侧数据宽度相等；generic full-AXI burst 路径允许不同总线宽度构造，但不执行
-  beat split/merge，只有每个 beat 都能被目标直接表示时才会发行；
-- AXI4-Lite/APB egress 只接受其隐式整总线宽度，AHB/AXI egress 接受对齐且不超过总线宽度的二次幂访问；
-- AMBA protection 已有 decode/encode；cache、QoS、region、memory attributes、lock/exclusive、RME/User 等
-  扩展尚无通用保持策略，当前 profile 对非默认值拒绝或使用目标默认值；
-- AHB5 Exclusive interface profile 不使用普通 `AddressAccess` attachment，需要专用 exclusive/atomic 语义路径。
-
-这张矩阵描述地址事务构造能力。具名 preset 可以进一步收窄范围，例如要求同宽、PPROT/PSTRB 或
-AHB-Lite revision；它们不是新增一套运行核心。
-
-源码职责、实施阶段和暂缓能力见 [V1 实施状态与后续](translation-implementation.md)。
-
-## 10. 常见误解
-
-### Transform 就是 operation type 吗？
-
-不是。Operation form 描述 token 是什么；TranslationStage 描述 token 如何变成另一种类型，并怎样折返
-completion。
-
-### 一笔 burst 会兑换成多个 credit 吗？
-
-事务会打开多个 child obligation，但 credit/lease 只表示并发资源许可。串行执行 256 个 child 时，egress
-lease 峰值仍可为 1。
-
-### 两种协议都有 address attachment，就一定能自动 bridge 吗？
-
-不一定。宽度、burst、attributes、atomic/exclusive、ordering、错误表达和容量仍需 plan 显式闭合。无法
-无损转换时，需要调用方选择 reject、remap、serialize 或 emulate policy。
-
-### Attachment 是 bridge 吗？
-
-Attachment 只翻译一个端口。Bridge 需要同时拥有两侧 attachment、跨端口 stage、调度、资源和 completion
-correlation，因此是完整 VirtualDut。
-
-### Bridge 放在 integration，是否就不属于 VirtualDut？
-
-Integration 是协议依赖汇合和装配位置；装配产物仍是 VirtualDut。源码放置与运行时对象的语义身份不是
-同一个分类问题。
+- 通用 forms、stages、plan、resources 与 executor：
+  [`protocol_model/virtual_dut/translation`](../../protocol_model/virtual_dut/translation/)
+- protocol-bound typed stages：
+  [`protocol_model/integrations/translations`](../../protocol_model/integrations/translations/README.md)
+- protocol attachments：
+  [`protocol_model/integrations/attachments`](../../protocol_model/integrations/attachments/)
+- bridge composition roots：
+  [`protocol_model/integrations/recipes/amba/bridges`](../../protocol_model/integrations/recipes/amba/bridges/README.md)

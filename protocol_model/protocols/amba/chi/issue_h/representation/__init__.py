@@ -18,6 +18,7 @@ from .dat import (
     ChiDatOpcode,
     ChiDatProtocolMessage,
     ChiIssueHDatProfile,
+    ChiNonCopyBackWrDataMessage,
     ChiSnpRespDataMessage,
 )
 from .flit import ChiProtocolFlit
@@ -32,6 +33,8 @@ from .logical_fields import (
 )
 from .packet import ChiNetworkPacket
 from .req import (
+    ChiAtomicLoadAddMessage,
+    ChiAtomicSwapMessage,
     ChiCleanUniqueMessage,
     ChiEvictMessage,
     ChiIssueHReqProfile,
@@ -44,6 +47,8 @@ from .req import (
     ChiWriteBackFullMessage,
     ChiWriteEvictFullMessage,
     ChiWriteEvictOrEvictMessage,
+    ChiWriteNoSnpFullMessage,
+    ChiWriteNoSnpPtlMessage,
     ChiReqChannelItem,
     ChiReqLCrdReturn,
     ChiReqOpcode,
@@ -54,6 +59,7 @@ from .rsp import (
     ChiCompAckMessage,
     ChiCompDBIDRespMessage,
     ChiCompMessage,
+    ChiDBIDRespMessage,
     ChiIssueHRspProfile,
     ChiPCrdGrantMessage,
     ChiRetryAckMessage,
@@ -61,6 +67,7 @@ from .rsp import (
     ChiRspLCrdReturn,
     ChiRspOpcode,
     ChiRspProtocolMessage,
+    ChiSnpRespFwdedMessage,
     ChiSnpRespMessage,
 )
 from .snp import (
@@ -72,6 +79,7 @@ from .snp import (
     ChiSnpNotSharedDirtyMessage,
     ChiSnpOpcode,
     ChiSnpProtocolMessage,
+    ChiSnpSharedFwdMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
 )
@@ -82,11 +90,14 @@ __all__ = [
     "ChiChannelItem",
     "ChiChannelKind",
     "ChiChannelProfile",
+    "ChiAtomicLoadAddMessage",
+    "ChiAtomicSwapMessage",
     "ChiCleanUniqueMessage",
     "ChiEvictMessage",
     "ChiCompAckMessage",
     "ChiCompDBIDRespMessage",
     "ChiCompMessage",
+    "ChiDBIDRespMessage",
     "ChiCompDataMessage",
     "ChiCopyBackWrDataMessage",
     "ChiDatChannelItem",
@@ -102,6 +113,7 @@ __all__ = [
     "ChiIssueHSnpProfile",
     "ChiMakeUniqueMessage",
     "ChiNetworkPacket",
+    "ChiNonCopyBackWrDataMessage",
     "ChiLogicalCodecError",
     "ChiLogicalFieldRecord",
     "ChiLogicalFieldSpec",
@@ -119,6 +131,8 @@ __all__ = [
     "ChiWriteBackFullMessage",
     "ChiWriteEvictFullMessage",
     "ChiWriteEvictOrEvictMessage",
+    "ChiWriteNoSnpFullMessage",
+    "ChiWriteNoSnpPtlMessage",
     "ChiRespCode",
     "ChiRespErr",
     "ChiReqChannelItem",
@@ -137,8 +151,10 @@ __all__ = [
     "ChiSnpNotSharedDirtyMessage",
     "ChiSnpOpcode",
     "ChiSnpProtocolMessage",
+    "ChiSnpRespFwdedMessage",
     "ChiSnpRespMessage",
     "ChiSnpRespDataMessage",
+    "ChiSnpSharedFwdMessage",
     "ChiSnpSharedMessage",
     "ChiSnpUniqueMessage",
 ]

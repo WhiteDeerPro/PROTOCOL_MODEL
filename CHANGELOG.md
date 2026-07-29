@@ -2,13 +2,19 @@
 
 ## Unreleased
 
-- 将回归入口分为 smoke、职责 target、integration、迁移哨兵和 full baseline，增加 suite manifest 自检与
-  Python 3.10/3.13 最小 CI；同时收敛仓库工作约定，并让根 Roadmap 只维护长期依赖和 canonical 施工入口。
-- 扩展 CHI Issue H 模型切片：补齐 canonical cache/Home binding、CleanUnique、Evict、
-  MakeUnique、WriteBackFull、WriteEvictFull/WriteEvictOrEvict、Retry/error 与同地址 Snoop 的受限可执行
-  生命周期，并保持实现范围和完整 CHI profile 的边界可见。
-- 整理公开 Showcase 为可执行 Gallery：保留 2×2 clean-coherence mesh 作为协议语义案例，增加异构
-  ring/star 与 4×4 mesh 的拓扑形态/规模案例，退役浅层 routed-read 和内部宣传素材。
+## 0.4.1 — CHI lifecycle expansion and documentation consolidation (2026-07-30)
+
+- 扩展 CHI Issue H 可执行切片：闭合 canonical cache/Home binding、CleanUnique、MakeUnique、Evict、
+  WriteBackFull、WriteEvictFull/WriteEvictOrEvict、Retry/NDERR 与同地址 Snoop 的受限组合。
+- 增加 `WriteNoSnp{Full,Ptl}` Immediate Write、non-snoop Exclusive Ptl、参数化
+  `AtomicSwap`/`AtomicLoad ADD` 与 clean ReadShared DCT；保留 TxnID/DBID、backing、monitor、
+  forwarding join 和 same-line serialization 的单一状态 owner。
+- 将协议无关 backing prepare/commit contract 与 CHI Home binder/attachment 边界固化，并由
+  capability、address/Home authority、direct/XP flow 和 immutable packet evidence 闭合系统构造。
+- 整理公开 Showcase 为可执行 Gallery：保留 clean-coherence mesh 语义案例，增加异构 ring/star 与
+  4×4 mesh 的拓扑形态/规模案例，并让 flow witness 显式经过 XP。
+- 收敛 canonical 文档、源码导航、实现状态与近期 Roadmap 的职责，区分协议要求、架构边界、当前
+  profile 和后续工作；公开源码不建立对本地测试、review 或协作配置的运行依赖。
 
 ## 0.4.0 — interface scopes, executable fabrics, and CHI network slices (2026-07-27)
 

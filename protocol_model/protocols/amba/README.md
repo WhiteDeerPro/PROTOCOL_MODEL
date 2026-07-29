@@ -1,8 +1,8 @@
 # AMBA protocol-family assets
 
-这个目录按 AMBA 标准族聚合具体资产。AXI、AHB、APB 和当前 ACE-Lite profile 主要表现为一个完整接口内
-的 schema、transaction lifecycle、observation 和生成策略；CHI 则跨越 protocol transaction、network
-representation、transport hop 和 system coherence，不能整体称作一个 `InterfaceProtocol`。
+这个目录按 AMBA 标准族聚合具体资产。AXI、AHB、APB 和当前 ACE-Lite profile 以完整逻辑接口为主要判定
+范围，交付 schema、transaction lifecycle、observation 和生成策略。CHI 分别交付 protocol transaction、
+network representation、transport hop 和 system coherence 切面，再由 family 入口组合这些能力。
 
 ```text
 amba/
@@ -21,10 +21,13 @@ amba/
 ├── ace/
 │   └── ace_lite/      当前 ordinary-data interface profile
 ├── chi/               CHI 的跨视图归属与 Issue H 实施边界
-└── byte_lanes.py      memory-mapped AMBA 共用、但不依赖协议字段名的几何
+└── byte_lanes.py      memory-mapped AMBA 共用的字段中立 byte-lane 几何
 ```
 
-相邻职责的源码落点：
+## 输入与相邻交接
+
+AMBA family 使用 scope-neutral semantics、通用 interface/session 与 observation 构件，并把具体标准对象交给
+以下相邻包：
 
 - `protocol_model.interface`：具体标准复用的接口合同/session 内核；
 - `protocol_model.integrations.attachments.amba`：单端口 AMBA event 与 VirtualDut operation 的转换；
@@ -33,6 +36,6 @@ amba/
 
 当前 ACE-Lite 入口名称中的 `data` 用来明示 barrier/CMO 边界。CHI 已有独立的 Issue H REQ/RSP/DAT
 representation/transport slice，以及受限 direct-Home read/retry lifecycle。它分别公开 representation、
-transport、interface ledger、participant behavior 和 system composition，不建立一个包揽全部职责的 CHI
-interface builder。具体范围见 [`chi/README.md`](chi/README.md) 和
+transport、interface ledger、participant behavior 和 system composition；各入口保持对应判定范围，system
+composition 负责最终组合。具体范围见 [`chi/README.md`](chi/README.md) 和
 [实现状态](../../../docs/architecture/implementation-status.md)。

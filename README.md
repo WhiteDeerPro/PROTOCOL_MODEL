@@ -4,8 +4,8 @@ Protocol Model 是一个面向通信协议与片上网络的可执行建模研�
 `InterfaceProtocol`、具体 `VirtualDut`、事务表示与 `SystemProtocol`，并从同一次执行生成可复查的
 trace、拓扑和诊断证据。
 
-当前项目处于 pre-1.0 technical preview。仓库中的场景证明相应输入和建模边界可执行；它们不等同于完整
-规范覆盖、RTL 仿真结果或芯片实现。
+当前项目处于 pre-1.0 technical preview。仓库中的场景证明相应输入和建模边界可执行；完整规范覆盖、
+RTL 仿真结果和芯片实现各自需要对应的独立证据。
 
 [![Protocol Model 三视图架构地图](docs/architecture/technical-route/overview.svg)](docs/architecture/technical-route/overview.svg)
 
@@ -33,7 +33,7 @@ trace、拓扑和诊断证据。
 
 flow gallery 观察 `ReadUnique`、`CleanUnique`、`MakeUnique`、`Evict` Retry 和
 `WriteBackFull` 同址 Snoop 组合；两个 topology 示例分别关注异构结构和 mesh 长路径/规模。它们回答的问题不同，
-不能用场景数量或节点数量替代协议功能覆盖。
+场景与节点数量描述展示规模，协议功能覆盖按 profile 和行为切片记录。
 
 ## 快速开始
 
@@ -55,7 +55,7 @@ python showcase/demos/axi4/run.py
 ```
 
 生成结果写入 [`showcase/generated/axi4`](showcase/generated/axi4/README.zh-CN.md)。普通运行和临时输出
-不会改写受版本控制的发布树；具名 Showcase 脚本会在显式调用时替换自己拥有的生成子树。
+使用临时目录；具名 Showcase 脚本在显式调用时替换自己拥有的生成子树。
 
 ## 建模边界
 
@@ -66,4 +66,8 @@ python showcase/demos/axi4/run.py
   选择性展开。
 
 准确 profile、明确缺口和阶段边界集中记录在
-[实现状态](docs/architecture/implementation-status.md)，不从示例数量推断规范覆盖率。
+[实现状态](docs/architecture/implementation-status.md)；示例数量只描述公开场景的广度。
+
+## 鸣谢
+
+感谢 [LINUX DO](https://linux.do) 社区的支持。

@@ -1,4 +1,4 @@
-"""Protocol-neutral full-line backing with explicit prepare/commit.
+"""Protocol-neutral line backing with explicit prepare/commit.
 
 The core owns a fixed set of resident lines.  Preparing a write is pure and
 captures only a line-local version; committing applies one patch to the
@@ -107,6 +107,37 @@ class PreparedBackingWrite:
         _require_non_negative_integer("prepared backing data", self.data)
         _require_non_negative_integer(
             "prepared backing version", self.expected_version
+        )
+
+
+@dataclass(frozen=True)
+class PreparedBackingPatch:
+    """A pure byte-masked line patch guarded by a line-local version.
+
+    Bit ``n`` of ``byte_enable`` selects byte lane ``n`` of ``data`` and the
+    resident line.  Lane zero is the least-significant byte.  A zero mask is
+    a valid no-op patch; commit still checks authority, residency, and version
+    before returning the supplied state unchanged.
+    """
+
+    address: int
+    data: int
+    byte_enable: int
+    expected_version: int
+    _authority_token: object = field(repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        _require_non_negative_integer(
+            "prepared backing patch address", self.address
+        )
+        _require_non_negative_integer(
+            "prepared backing patch data", self.data
+        )
+        _require_non_negative_integer(
+            "prepared backing patch byte enable", self.byte_enable
+        )
+        _require_non_negative_integer(
+            "prepared backing patch version", self.expected_version
         )
 
 
@@ -269,6 +300,98 @@ class FullLineBackingCore:
             current,
         )
 
+    def prepare_masked_write(
+        self,
+        state: LineBackingState,
+        address: int,
+        data: int,
+        byte_enable: int,
+    ) -> PreparedBackingPatch:
+        """Validate and describe a byte-masked write without changing state."""
+
+        self._require_state(state)
+        _require_line_address(address, self.line_bytes)
+        self._require_data_width(data, self.line_bytes)
+        self._require_byte_enable_width(byte_enable, self.line_bytes)
+        try:
+            record = state.lines[address]
+        except KeyError as error:
+            raise KeyError(
+                f"full-line backing has no line at {address:#x}"
+            ) from error
+        return PreparedBackingPatch(
+            address,
+            data,
+            byte_enable,
+            record.version,
+            self._authority_token,
+        )
+
+    def commit_masked_write(
+        self,
+        state: LineBackingState,
+        prepared: PreparedBackingPatch,
+    ) -> BackingMutation:
+        """Commit one byte-masked patch or reject a stale line version.
+
+        A non-zero mask records one line write and increments the line-local
+        version, even when the selected bytes already contain the supplied
+        values.  A zero mask is a successful no-op: after the same authority,
+        residency, and version checks, both state identity and version remain
+        unchanged.
+        """
+
+        self._require_state(state)
+        if not isinstance(prepared, PreparedBackingPatch):
+            raise TypeError(
+                "full-line backing masked commit requires "
+                "PreparedBackingPatch"
+            )
+        if prepared._authority_token is not self._authority_token:
+            raise ValueError(
+                "prepared backing patch belongs to another backing core"
+            )
+        _require_line_address(prepared.address, self.line_bytes)
+        self._require_data_width(prepared.data, self.line_bytes)
+        self._require_byte_enable_width(
+            prepared.byte_enable,
+            self.line_bytes,
+        )
+        current = state.lines.get(prepared.address)
+        if current is None:
+            raise BackingCommitConflict(
+                f"prepared backing line {prepared.address:#x} is no longer "
+                "resident"
+            )
+        if current.version != prepared.expected_version:
+            raise BackingCommitConflict(
+                f"prepared backing line {prepared.address:#x} expected "
+                f"version {prepared.expected_version}, found "
+                f"{current.version}"
+            )
+        if prepared.byte_enable == 0:
+            return BackingMutation(state, current)
+
+        selected_bits = sum(
+            0xFF << (lane * 8)
+            for lane in range(self.line_bytes)
+            if prepared.byte_enable & (1 << lane)
+        )
+        merged_data = (
+            (current.data & ~selected_bits)
+            | (prepared.data & selected_bits)
+        )
+        lines = dict(state.lines)
+        lines[prepared.address] = BackingLineRecord(
+            prepared.address,
+            merged_data,
+            current.version + 1,
+        )
+        return BackingMutation(
+            LineBackingState(lines, self._authority_token),
+            current,
+        )
+
     def _require_state(self, state: LineBackingState) -> None:
         if not isinstance(state, LineBackingState):
             raise TypeError(
@@ -285,6 +408,20 @@ class FullLineBackingCore:
         if data >= 1 << (line_bytes * 8):
             raise ValueError("backing-line data does not fit the line")
 
+    @staticmethod
+    def _require_byte_enable_width(
+        byte_enable: int,
+        line_bytes: int,
+    ) -> None:
+        _require_non_negative_integer(
+            "backing-line byte enable",
+            byte_enable,
+        )
+        if byte_enable >= 1 << line_bytes:
+            raise ValueError(
+                "backing-line byte enable does not fit the line"
+            )
+
 
 __all__ = [
     "BackingCommitConflict",
@@ -293,5 +430,6 @@ __all__ = [
     "BackingMutation",
     "FullLineBackingCore",
     "LineBackingState",
+    "PreparedBackingPatch",
     "PreparedBackingWrite",
 ]

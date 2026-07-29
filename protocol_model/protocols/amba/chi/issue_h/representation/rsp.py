@@ -1,9 +1,10 @@
 """Typed forms for the first executable CHI Issue H RSP-channel slice.
 
-The current forms cover Request Retry, non-data Snoop response, completion,
-completion acknowledgement, and the combined completion/data-buffer grant
-used by a CopyBack Write.  Routing NodeIDs are added by the Network packet
-rather than repeated in each message form.
+The current forms cover Request Retry, non-data Snoop response, the first
+clean ``SnpRespFwded`` Direct Cache Transfer result, completion, completion
+acknowledgement, and the combined completion/data-buffer grant used by a
+CopyBack Write.  Routing NodeIDs are added by the Network packet rather than
+repeated in each message form.
 """
 
 from __future__ import annotations
@@ -25,7 +26,9 @@ class ChiRspOpcode(IntEnum):
     RETRY_ACK = 0x03
     COMP = 0x04
     COMP_DBID_RESP = 0x05
+    DBID_RESP = 0x06
     PROTOCOL_CREDIT_GRANT = 0x07
+    SNP_RESP_FWDED = 0x09
 
 
 def _require_uint(name: str, value: int, width: int) -> None:
@@ -122,6 +125,84 @@ class ChiSnpRespMessage:
 
     @property
     def semantic_key(self) -> int:
+        return self.transaction_id
+
+
+@dataclass(frozen=True)
+class ChiSnpRespFwdedMessage:
+    """Non-data response to Home after peer ``CompData`` was forwarded.
+
+    ``response`` is the Snoopee's final state.  ``forward_state`` is the
+    cache-state/PassDirty encoding carried by the peer ``CompData`` sent to
+    the original Requester.  They are distinct protocol facts even in the
+    first clean DCT profile, where both are ``SC``.
+    """
+
+    chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.RSP
+    chi_item_kind: ClassVar[ChiChannelItemKind] = (
+        ChiChannelItemKind.PROTOCOL_MESSAGE
+    )
+
+    transaction_id: int
+    response: ChiRespCode | int
+    forward_state: ChiRespCode | int
+    qos: int = 0
+    response_error: ChiRespErr | int = ChiRespErr.OK
+    completer_busy: int = 0
+    trace_tag: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value, width in (
+            ("transaction_id", self.transaction_id, 12),
+            ("response", self.response, 3),
+            ("forward_state", self.forward_state, 3),
+            ("qos", self.qos, 4),
+            ("response_error", self.response_error, 2),
+            ("completer_busy", self.completer_busy, 3),
+        ):
+            _require_uint(name, value, width)
+        _require_bool("trace_tag", self.trace_tag)
+        object.__setattr__(
+            self,
+            "response_error",
+            ChiRespErr(self.response_error),
+        )
+        try:
+            response = ChiRespCode(self.response)
+        except ValueError as error:
+            raise ValueError(
+                "SnpRespFwded contains a reserved Resp encoding"
+            ) from error
+        if int(response) & 0b100:
+            raise ValueError(
+                "SnpRespFwded cannot pass dirty responsibility without "
+                "data to Home"
+            )
+        try:
+            forward_state = ChiRespCode(self.forward_state)
+        except ValueError as error:
+            raise ValueError(
+                "SnpRespFwded contains a reserved FwdState encoding"
+            ) from error
+        if forward_state in (
+            ChiRespCode.SD,
+            ChiRespCode.I_PD,
+            ChiRespCode.SC_PD,
+        ):
+            raise ValueError(
+                "SnpRespFwded contains a reserved FwdState encoding"
+            )
+        object.__setattr__(self, "response", response)
+        object.__setattr__(self, "forward_state", forward_state)
+
+    @property
+    def opcode(self) -> ChiRspOpcode:
+        return ChiRspOpcode.SNP_RESP_FWDED
+
+    @property
+    def semantic_key(self) -> int:
+        """Return the Home-issued forwarding Snoop TxnID."""
+
         return self.transaction_id
 
 
@@ -272,6 +353,53 @@ class ChiCompDBIDRespMessage:
 
 
 @dataclass(frozen=True)
+class ChiDBIDRespMessage:
+    """Separate data-buffer grant for Atomic and Write transactions.
+
+    ``transaction_id`` echoes the Requester's original REQ TxnID while
+    ``data_buffer_id`` becomes the TxnID of the following WriteData packet.
+    Completion is deliberately absent from this response.
+    """
+
+    chi_channel: ClassVar[ChiChannelKind] = ChiChannelKind.RSP
+    chi_item_kind: ClassVar[ChiChannelItemKind] = (
+        ChiChannelItemKind.PROTOCOL_MESSAGE
+    )
+
+    transaction_id: int
+    data_buffer_id: int
+    qos: int = 0
+    completer_busy: int = 0
+    trace_tag: bool = False
+
+    def __post_init__(self) -> None:
+        for name, value, width in (
+            ("transaction_id", self.transaction_id, 12),
+            ("data_buffer_id", self.data_buffer_id, 12),
+            ("qos", self.qos, 4),
+            ("completer_busy", self.completer_busy, 3),
+        ):
+            _require_uint(name, value, width)
+        _require_bool("trace_tag", self.trace_tag)
+
+    @property
+    def opcode(self) -> ChiRspOpcode:
+        return ChiRspOpcode.DBID_RESP
+
+    @property
+    def response_error(self) -> ChiRespErr:
+        return ChiRespErr.OK
+
+    @property
+    def response(self) -> int:
+        return 0
+
+    @property
+    def semantic_key(self) -> int:
+        return self.transaction_id
+
+
+@dataclass(frozen=True)
 class ChiPCrdGrantMessage:
     """Semantic fields of one transaction-independent ``PCrdGrant``.
 
@@ -327,9 +455,11 @@ class ChiRspLCrdReturn:
 
 ChiRspProtocolMessage: TypeAlias = (
     ChiSnpRespMessage
+    | ChiSnpRespFwdedMessage
     | ChiCompAckMessage
     | ChiCompMessage
     | ChiCompDBIDRespMessage
+    | ChiDBIDRespMessage
     | ChiRetryAckMessage
     | ChiPCrdGrantMessage
 )
@@ -359,15 +489,33 @@ class ChiIssueHRspProfile:
             message,
             (
                 ChiSnpRespMessage,
+                ChiSnpRespFwdedMessage,
                 ChiCompAckMessage,
                 ChiCompMessage,
                 ChiCompDBIDRespMessage,
+                ChiDBIDRespMessage,
                 ChiRetryAckMessage,
                 ChiPCrdGrantMessage,
             ),
         ):
             return ("expected a supported RSP protocol message",)
         reasons: list[str] = []
+        if isinstance(message, ChiSnpRespFwdedMessage):
+            if message.response is not ChiRespCode.SC:
+                reasons.append(
+                    "the current clean DCT profile requires "
+                    "SnpRespFwded Resp=SC"
+                )
+            if message.forward_state is not ChiRespCode.SC:
+                reasons.append(
+                    "the current clean DCT profile requires "
+                    "SnpRespFwded FwdState=SC"
+                )
+            if message.response_error is not ChiRespErr.OK:
+                reasons.append(
+                    "the current clean DCT profile requires "
+                    "SnpRespFwded RespErr=OK"
+                )
         if isinstance(message, ChiCompDBIDRespMessage) and message.response != 0:
             reasons.append(
                 "CompDBIDResp requires Resp=0 for a Write completion",
@@ -399,8 +547,10 @@ __all__ = [
     "ChiCompAckMessage",
     "ChiCompMessage",
     "ChiCompDBIDRespMessage",
+    "ChiDBIDRespMessage",
     "ChiPCrdGrantMessage",
     "ChiRetryAckMessage",
+    "ChiSnpRespFwdedMessage",
     "ChiSnpRespMessage",
     "ChiRspChannelItem",
     "ChiRspLCrdReturn",

@@ -73,12 +73,14 @@ from ..representation.rsp import (
     ChiCompDBIDRespMessage,
     ChiPCrdGrantMessage,
     ChiRetryAckMessage,
+    ChiSnpRespFwdedMessage,
     ChiSnpRespMessage,
 )
 from ..representation.snp import (
     ChiSnpCleanInvalidMessage,
     ChiSnpMakeInvalidMessage,
     ChiSnpNotSharedDirtyMessage,
+    ChiSnpSharedFwdMessage,
     ChiSnpSharedMessage,
     ChiSnpUniqueMessage,
 )
@@ -282,6 +284,7 @@ ChiCoherentSnoopMessage = (
     ChiSnpCleanInvalidMessage
     | ChiSnpMakeInvalidMessage
     | ChiSnpSharedMessage
+    | ChiSnpSharedFwdMessage
     | ChiSnpNotSharedDirtyMessage
     | ChiSnpUniqueMessage
 )
@@ -364,6 +367,7 @@ class ChiRnAcceptSnoop:
                 ChiSnpCleanInvalidMessage,
                 ChiSnpMakeInvalidMessage,
                 ChiSnpSharedMessage,
+                ChiSnpSharedFwdMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
             ),
@@ -395,6 +399,21 @@ class ChiRnAcceptCompData:
             self.packet.message, ChiCompDataMessage
         ):
             raise TypeError("RN completion action requires a CompData packet")
+
+
+@dataclass(frozen=True)
+class ChiRnAcceptDctCompData:
+    """Accept peer ``CompData`` after exact system-level DCT correlation."""
+
+    packet: ChiNetworkPacket
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
+            self.packet.message, ChiCompDataMessage
+        ):
+            raise TypeError(
+                "RN DCT completion action requires a CompData packet"
+            )
 
 
 @dataclass(frozen=True)
@@ -521,6 +540,7 @@ ChiCoherentRnAction = (
     | ChiRnAcceptSnoop
     | ChiRnAcceptComp
     | ChiRnAcceptCompData
+    | ChiRnAcceptDctCompData
     | ChiRnAcceptRetryAck
     | ChiRnAcceptPCrdGrant
     | ChiRnRetryCoherentRequest
@@ -1034,6 +1054,12 @@ class ChiCoherentRnNode(
             return self._accept_comp(state, action.packet)
         if isinstance(action, ChiRnAcceptCompData):
             return self._accept_comp_data(state, action.packet)
+        if isinstance(action, ChiRnAcceptDctCompData):
+            return self._accept_comp_data(
+                state,
+                action.packet,
+                direct_cache_transfer=True,
+            )
         if isinstance(action, ChiRnAcceptRetryAck):
             return self._accept_retry_ack(state, action.packet)
         if isinstance(action, ChiRnAcceptPCrdGrant):
@@ -1778,6 +1804,7 @@ class ChiCoherentRnNode(
                 ChiSnpCleanInvalidMessage,
                 ChiSnpMakeInvalidMessage,
                 ChiSnpSharedMessage,
+                ChiSnpSharedFwdMessage,
                 ChiSnpNotSharedDirtyMessage,
                 ChiSnpUniqueMessage,
             ),
@@ -1787,6 +1814,87 @@ class ChiCoherentRnNode(
                 state,
                 "snoop_shape",
                 "first coherent RN profile requires a line-aligned snoop",
+            )
+        if isinstance(snoop, ChiSnpSharedFwdMessage):
+            if (
+                snoop.return_to_source
+                or snoop.trace_tag
+                or snoop.forward_node_id in (
+                    self.node_id,
+                    self.home_node_id,
+                )
+            ):
+                return self._fault(
+                    state,
+                    "dct_snoop_profile",
+                    "clean SnpSharedFwd requires RetToSrc=0, TraceTag=0, "
+                    "and a distinct Requester destination",
+                )
+            if state.pending_for_address(snoop.address):
+                return SemanticStep(
+                    state,
+                    blocked=ResourceDemand(
+                        chi_line_resource_name(self.name, snoop.address),
+                        ConstraintScope.VIRTUAL_DUT,
+                        available=0,
+                        capacity=1,
+                        reason=(
+                            "clean DCT cannot forward a line reserved by "
+                            "another RN-local transaction"
+                        ),
+                        location=self.name,
+                    ),
+                )
+            line = state.line_at(snoop.address)
+            if (
+                line is None
+                or line.state is not ChiCacheState.UC
+                or line.copy_at_home
+            ):
+                return self._fault(
+                    state,
+                    "dct_forward_permission",
+                    "the first clean DCT profile requires a resident UC "
+                    "line without CopyAtHome authority",
+                )
+            assert line.data is not None
+            permissions = dict(state.permissions)
+            permissions[snoop.address] = ChiCacheState.SC
+            forwarded_data = ChiNetworkPacket.data(
+                ChiCompDataMessage(
+                    transaction_id=snoop.forward_transaction_id,
+                    data=line.data,
+                    home_node_id=packet.source_id,
+                    qos=snoop.qos,
+                    response=ChiRespCode.SC,
+                    data_buffer_id=snoop.transaction_id,
+                ),
+                source_id=self.node_id,
+                target_id=snoop.forward_node_id,
+            )
+            forwarded_response = ChiNetworkPacket.response(
+                ChiSnpRespFwdedMessage(
+                    transaction_id=snoop.transaction_id,
+                    response=ChiRespCode.SC,
+                    forward_state=ChiRespCode.SC,
+                    qos=snoop.qos,
+                ),
+                source_id=self.node_id,
+                target_id=packet.source_id,
+            )
+            copy_at_home_lines = set(state.copy_at_home_lines)
+            copy_at_home_lines.discard(snoop.address)
+            return SemanticStep(
+                ChiCoherentRnState(
+                    state.cache,
+                    permissions,
+                    state.pending_transactions,
+                    state.pending_copybacks,
+                    state.request_retry,
+                    state.make_unique_store_intents,
+                    frozenset(copy_at_home_lines),
+                ),
+                (forwarded_data, forwarded_response),
             )
         same_line = state.pending_for_address(snoop.address)
         read_unique_overlap = (
@@ -2442,6 +2550,8 @@ class ChiCoherentRnNode(
         self,
         state: ChiCoherentRnState,
         packet: ChiNetworkPacket,
+        *,
+        direct_cache_transfer: bool = False,
     ) -> SemanticStep[ChiCoherentRnState, ChiNetworkPacket]:
         if packet.target_id != self.node_id:
             return self._fault(
@@ -2465,14 +2575,37 @@ class ChiCoherentRnNode(
                 "completion_identity",
                 "CompData does not match an outstanding coherent-read TxnID",
             )
-        if (
-            packet.source_id != self.home_node_id
-            or response.home_node_id != self.home_node_id
-        ):
+        if response.home_node_id != self.home_node_id:
             return self._fault(
                 state,
                 "completion_home",
                 "CompData does not identify the configured Home",
+            )
+        if direct_cache_transfer:
+            if (
+                not isinstance(request, ChiReadSharedMessage)
+                or packet.source_id in (
+                    self.node_id,
+                    self.home_node_id,
+                )
+                or response.response_error is not ChiRespErr.OK
+                or response.response != ChiRespCode.SC
+                or response.data_id != 0
+                or response.trace_tag
+                or response.copy_at_home
+            ):
+                return self._fault(
+                    state,
+                    "dct_completion_profile",
+                    "clean DCT requires peer CompData_SC for the pending "
+                    "ReadShared with HomeNID preserved and no error, "
+                    "TraceTag, or CopyAtHome",
+                )
+        elif packet.source_id != self.home_node_id:
+            return self._fault(
+                state,
+                "completion_home",
+                "ordinary CompData does not come from the configured Home",
             )
         if response.response_error is ChiRespErr.NDERR:
             if (
@@ -3217,9 +3350,15 @@ class ChiSnoopResult:
 
     response: ChiRespCode
     data: int | None = None
+    forward_state: ChiRespCode | None = None
 
     def __post_init__(self) -> None:
         response = ChiRespCode(self.response)
+        forward_state = (
+            None
+            if self.forward_state is None
+            else ChiRespCode(self.forward_state)
+        )
         if self.data is not None and (
             not isinstance(self.data, int)
             or isinstance(self.data, bool)
@@ -3231,10 +3370,18 @@ class ChiSnoopResult:
                 "PassDirty snoop result requires the transferred data"
             )
         object.__setattr__(self, "response", response)
+        object.__setattr__(self, "forward_state", forward_state)
 
     @property
     def passes_dirty(self) -> bool:
         return bool(int(self.response) & 0b100)
+
+    @property
+    def forwards_dirty(self) -> bool:
+        return (
+            self.forward_state is not None
+            and bool(int(self.forward_state) & 0b100)
+        )
 
 
 @dataclass(frozen=True)
@@ -3251,6 +3398,9 @@ class ChiCoherentTransactionPending:
     prepared_backing_write: PreparedBackingWrite | None = None
     completion_response_error: ChiRespErr | int = ChiRespErr.OK
     copy_at_home: bool = False
+    forwarding_peer_id: int | None = None
+    dct_forward_response_seen: bool = False
+    dct_comp_ack_seen: bool = False
 
     def __post_init__(self) -> None:
         _require_node_id("pending requester", self.requester_id)
@@ -3325,6 +3475,56 @@ class ChiCoherentTransactionPending:
             raise TypeError("completion_sent must be bool")
         if type(self.copy_at_home) is not bool:
             raise TypeError("pending copy_at_home must be bool")
+        if type(self.dct_forward_response_seen) is not bool:
+            raise TypeError("dct_forward_response_seen must be bool")
+        if type(self.dct_comp_ack_seen) is not bool:
+            raise TypeError("dct_comp_ack_seen must be bool")
+        forwarding_peer_id = self.forwarding_peer_id
+        if forwarding_peer_id is None:
+            if (
+                self.dct_forward_response_seen
+                or self.dct_comp_ack_seen
+                or any(
+                    result.forward_state is not None
+                    for result in results.values()
+                )
+            ):
+                raise ValueError(
+                    "ordinary coherent pending cannot retain DCT join state"
+                )
+        else:
+            _require_node_id("DCT forwarding peer", forwarding_peer_id)
+            expected_results = (
+                {
+                    forwarding_peer_id: ChiSnoopResult(
+                        ChiRespCode.SC,
+                        forward_state=ChiRespCode.SC,
+                    )
+                }
+                if self.dct_forward_response_seen
+                else {}
+            )
+            if (
+                not isinstance(self.request, ChiReadSharedMessage)
+                or forwarding_peer_id == self.requester_id
+                or snoop_transaction_id is None
+                or self.data_buffer_id != snoop_transaction_id
+                or targets != frozenset((forwarding_peer_id,))
+                or results != expected_results
+                or self.completion_sent
+                or completion_response_error is not ChiRespErr.OK
+                or self.copy_at_home
+                or self.prepared_backing_write is not None
+                or (
+                    self.dct_forward_response_seen
+                    and self.dct_comp_ack_seen
+                )
+            ):
+                raise ValueError(
+                    "clean DCT pending requires ReadShared, one distinct "
+                    "forwarding peer, DBID=Snoop TxnID, no Home completion, "
+                    "and at most one observed join input"
+                )
         if self.copy_at_home and (
             not isinstance(self.request, ChiReadUniqueMessage)
             or completion_response_error is not ChiRespErr.OK
@@ -3352,6 +3552,8 @@ class ChiCoherentTransactionPending:
                     "targets, results, or prepared backing write and must "
                     "already have emitted its completion"
                 )
+        elif forwarding_peer_id is not None:
+            pass
         elif snoop_transaction_id is None:
             raise ValueError(
                 "successful coherent pending requires a Snoop identity"
@@ -3637,6 +3839,7 @@ class ChiHomeWriteEvictOrEvictPending:
 @dataclass(frozen=True)
 class ChiHomeAcceptCoherentRead:
     packet: ChiNetworkPacket
+    forwarding_peer_id: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
@@ -3650,6 +3853,22 @@ class ChiHomeAcceptCoherentRead:
             raise TypeError(
                 "Home read action requires a supported coherent Read"
             )
+        if self.forwarding_peer_id is not None:
+            _require_node_id(
+                "DCT forwarding peer",
+                self.forwarding_peer_id,
+            )
+            if (
+                not isinstance(
+                    self.packet.message,
+                    ChiReadSharedMessage,
+                )
+                or self.forwarding_peer_id == self.packet.source_id
+            ):
+                raise ValueError(
+                    "clean DCT evidence requires ReadShared and a distinct "
+                    "forwarding peer"
+                )
 
 
 @dataclass(frozen=True)
@@ -3698,10 +3917,15 @@ class ChiHomeAcceptSnoopResponse:
     def __post_init__(self) -> None:
         if not isinstance(self.packet, ChiNetworkPacket) or not isinstance(
             self.packet.message,
-            (ChiSnpRespMessage, ChiSnpRespDataMessage),
+            (
+                ChiSnpRespMessage,
+                ChiSnpRespDataMessage,
+                ChiSnpRespFwdedMessage,
+            ),
         ):
             raise TypeError(
-                "Home snoop response action requires SnpResp or SnpRespData"
+                "Home snoop response action requires SnpResp, SnpRespData, "
+                "or SnpRespFwded"
             )
 
 
@@ -4323,7 +4547,11 @@ class ChiCoherentHomeNode(
                 "Home capacity",
             )
         if isinstance(action, ChiHomeAcceptCoherentRead):
-            return self._accept_coherence_request(state, action.packet)
+            return self._accept_coherence_request(
+                state,
+                action.packet,
+                forwarding_peer_id=action.forwarding_peer_id,
+            )
         if isinstance(action, ChiHomeAcceptCleanUnique):
             return self._accept_coherence_request(state, action.packet)
         if isinstance(action, ChiHomeAcceptMakeUnique):
@@ -4580,6 +4808,8 @@ class ChiCoherentHomeNode(
         self,
         state: ChiCoherentHomeState,
         packet: ChiNetworkPacket,
+        *,
+        forwarding_peer_id: int | None = None,
     ) -> SemanticStep[ChiCoherentHomeState, ChiNetworkPacket]:
         request = packet.message
         assert isinstance(
@@ -4679,6 +4909,18 @@ class ChiCoherentHomeNode(
                 state,
                 "address_home",
                 "Home has no backing entry for this address",
+            )
+        if forwarding_peer_id is not None and (
+            not isinstance(request, ChiReadSharedMessage)
+            or entry.unique_owner != forwarding_peer_id
+            or entry.sharers
+            or entry.shared_dirty_owner is not None
+        ):
+            return self._fault(
+                state,
+                "dct_forwarding_authority",
+                "clean DCT requires the selected peer to be the sole clean "
+                "Unique directory owner for this ReadShared",
             )
         if (
             isinstance(request, ChiCleanUniqueMessage)
@@ -4870,9 +5112,22 @@ class ChiCoherentHomeNode(
                         "Home clean copy, a successful clean completion, "
                         "and no peer Snoop targets",
                     )
+        allocated_identifiers = set(state.pending) | set(
+            state.pending_copybacks
+        )
+        if forwarding_peer_id is not None:
+            allocated_identifiers.update(
+                item.snoop_transaction_id
+                for item in state.pending.values()
+                if item.snoop_transaction_id is not None
+            )
         data_buffer_id = self._allocate_identifier(
-            state.next_data_buffer_id,
-            set(state.pending) | set(state.pending_copybacks),
+            (
+                state.next_snoop_transaction_id
+                if forwarding_peer_id is not None
+                else state.next_data_buffer_id
+            ),
+            allocated_identifiers,
         )
         if complete_with_nderr:
             pending_item = ChiCoherentTransactionPending(
@@ -4905,32 +5160,54 @@ class ChiCoherentHomeNode(
                 (self._completion_packet(state, pending_item),),
             )
 
-        targets = set(entry.sharers)
-        if entry.unique_owner is not None:
-            targets.add(entry.unique_owner)
-        targets.discard(packet.source_id)
-        snoop_id = self._allocate_identifier(
-            state.next_snoop_transaction_id,
-            {
-                item.snoop_transaction_id
-                for item in state.pending.values()
-                if item.snoop_transaction_id is not None
-            },
-        )
+        if forwarding_peer_id is not None:
+            targets = {forwarding_peer_id}
+            snoop_id = data_buffer_id
+        else:
+            targets = set(entry.sharers)
+            if entry.unique_owner is not None:
+                targets.add(entry.unique_owner)
+            targets.discard(packet.source_id)
+            snoop_id = self._allocate_identifier(
+                state.next_snoop_transaction_id,
+                {
+                    item.snoop_transaction_id
+                    for item in state.pending.values()
+                    if item.snoop_transaction_id is not None
+                },
+            )
         pending_item = ChiCoherentTransactionPending(
             packet.source_id,
             request,
             snoop_id,
             data_buffer_id,
             frozenset(targets),
-            completion_sent=not targets,
+            completion_sent=(
+                not targets and forwarding_peer_id is None
+            ),
             copy_at_home=copy_at_home,
+            forwarding_peer_id=forwarding_peer_id,
         )
         pending = dict(state.pending)
         pending[data_buffer_id] = pending_item
         emissions: tuple[ChiNetworkPacket, ...]
         if targets:
-            if isinstance(request, ChiCleanUniqueMessage):
+            if forwarding_peer_id is not None:
+                assert isinstance(request, ChiReadSharedMessage)
+                snoop: ChiCoherentSnoopMessage = (
+                    ChiSnpSharedFwdMessage(
+                        transaction_id=snoop_id,
+                        address=request.address,
+                        qos=request.qos,
+                        pas=request.pas,
+                        return_to_source=False,
+                        forward_node_id=packet.source_id,
+                        forward_transaction_id=(
+                            request.transaction_id
+                        ),
+                    )
+                )
+            elif isinstance(request, ChiCleanUniqueMessage):
                 snoop: ChiCoherentSnoopMessage = (
                     ChiSnpCleanInvalidMessage(
                         transaction_id=snoop_id,
@@ -5002,7 +5279,11 @@ class ChiCoherentHomeNode(
                 (snoop_id + 1) % _TRANSACTION_ID_LIMIT
             ),
             next_data_buffer_id=(
-                (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT
+                (
+                    state.next_data_buffer_id
+                    if forwarding_peer_id is not None
+                    else (data_buffer_id + 1) % _TRANSACTION_ID_LIMIT
+                )
             ),
             pending_copybacks=state.pending_copybacks,
             request_retry=request_retry,
@@ -5079,7 +5360,11 @@ class ChiCoherentHomeNode(
         response = packet.message
         assert isinstance(
             response,
-            (ChiSnpRespMessage, ChiSnpRespDataMessage),
+            (
+                ChiSnpRespMessage,
+                ChiSnpRespDataMessage,
+                ChiSnpRespFwdedMessage,
+            ),
         )
         matches = tuple(
             item
@@ -5094,6 +5379,71 @@ class ChiCoherentHomeNode(
                 "SnpResp does not select one pending snoop copy",
             )
         pending_item = matches[0]
+        if pending_item.forwarding_peer_id is not None:
+            if (
+                not isinstance(response, ChiSnpRespFwdedMessage)
+                or packet.source_id
+                != pending_item.forwarding_peer_id
+                or pending_item.dct_forward_response_seen
+                or response.response_error is not ChiRespErr.OK
+                or response.response is not ChiRespCode.SC
+                or response.forward_state is not ChiRespCode.SC
+                or response.trace_tag
+            ):
+                return self._fault(
+                    state,
+                    "dct_forward_response",
+                    "clean DCT requires one exact "
+                    "SnpResp_SC_Fwded_SC from the selected forwarding peer",
+                )
+            if pending_item.dct_comp_ack_seen:
+                return self._commit_clean_dct(state, pending_item)
+            results = dict(pending_item.snoop_results)
+            results[packet.source_id] = ChiSnoopResult(
+                response.response,
+                forward_state=response.forward_state,
+            )
+            updated = ChiCoherentTransactionPending(
+                pending_item.requester_id,
+                pending_item.request,
+                pending_item.snoop_transaction_id,
+                pending_item.data_buffer_id,
+                pending_item.snoop_targets,
+                results,
+                completion_sent=False,
+                completion_response_error=(
+                    pending_item.completion_response_error
+                ),
+                prepared_backing_write=(
+                    pending_item.prepared_backing_write
+                ),
+                copy_at_home=pending_item.copy_at_home,
+                forwarding_peer_id=pending_item.forwarding_peer_id,
+                dct_forward_response_seen=True,
+                dct_comp_ack_seen=False,
+            )
+            pending = dict(state.pending)
+            pending[updated.data_buffer_id] = updated
+            return SemanticStep(
+                ChiCoherentHomeState(
+                    directory=state.directory,
+                    backing=state.backing,
+                    pending=pending,
+                    next_snoop_transaction_id=(
+                        state.next_snoop_transaction_id
+                    ),
+                    next_data_buffer_id=state.next_data_buffer_id,
+                    pending_copybacks=state.pending_copybacks,
+                    request_retry=state.request_retry,
+                    clean_residency=state.clean_residency,
+                )
+            )
+        if isinstance(response, ChiSnpRespFwdedMessage):
+            return self._fault(
+                state,
+                "unexpected_forwarded_response",
+                "SnpRespFwded does not match a DCT pending transaction",
+            )
         if pending_item.completion_sent:
             return self._fault(
                 state,
@@ -5270,6 +5620,51 @@ class ChiCoherentHomeNode(
                 clean_residency=state.clean_residency,
             ),
             emissions,
+        )
+
+    def _commit_clean_dct(
+        self,
+        state: ChiCoherentHomeState,
+        pending_item: ChiCoherentTransactionPending,
+    ) -> SemanticStep[ChiCoherentHomeState, ChiNetworkPacket]:
+        """Close the two-input DCT join without a Home-produced completion."""
+
+        forwarding_peer_id = pending_item.forwarding_peer_id
+        assert forwarding_peer_id is not None
+        entry = state.directory[pending_item.request.address]
+        if (
+            entry.unique_owner != forwarding_peer_id
+            or entry.sharers
+            or entry.shared_dirty_owner is not None
+        ):
+            return self._fault(
+                state,
+                "dct_directory_changed",
+                "clean DCT directory authority changed before both "
+                "forwarded-response and CompAck inputs joined",
+            )
+        pending = dict(state.pending)
+        del pending[pending_item.data_buffer_id]
+        directory = dict(state.directory)
+        directory[entry.address] = ChiHomeDirectoryEntry(
+            entry.address,
+            sharers=frozenset(
+                (forwarding_peer_id, pending_item.requester_id)
+            ),
+        )
+        return SemanticStep(
+            ChiCoherentHomeState(
+                directory=directory,
+                backing=state.backing,
+                pending=pending,
+                next_snoop_transaction_id=(
+                    state.next_snoop_transaction_id
+                ),
+                next_data_buffer_id=state.next_data_buffer_id,
+                pending_copybacks=state.pending_copybacks,
+                request_retry=state.request_retry,
+                clean_residency=state.clean_residency,
+            )
         )
 
     def _accept_comp_ack(
@@ -5468,6 +5863,55 @@ class ChiCoherentHomeNode(
                 state,
                 "completion_ack_identity",
                 "CompAck does not match the Home DBID/requester pair",
+            )
+        if pending_item.forwarding_peer_id is not None:
+            if (
+                pending_item.dct_comp_ack_seen
+                or ack.response != 0
+                or ack.trace_tag
+            ):
+                return self._fault(
+                    state,
+                    "dct_completion_ack",
+                    "clean DCT requires one CompAck with Resp=0 and "
+                    "TraceTag=0",
+                )
+            if pending_item.dct_forward_response_seen:
+                return self._commit_clean_dct(state, pending_item)
+            updated = ChiCoherentTransactionPending(
+                pending_item.requester_id,
+                pending_item.request,
+                pending_item.snoop_transaction_id,
+                pending_item.data_buffer_id,
+                pending_item.snoop_targets,
+                pending_item.snoop_results,
+                completion_sent=False,
+                completion_response_error=(
+                    pending_item.completion_response_error
+                ),
+                prepared_backing_write=(
+                    pending_item.prepared_backing_write
+                ),
+                copy_at_home=pending_item.copy_at_home,
+                forwarding_peer_id=pending_item.forwarding_peer_id,
+                dct_forward_response_seen=False,
+                dct_comp_ack_seen=True,
+            )
+            pending = dict(state.pending)
+            pending[updated.data_buffer_id] = updated
+            return SemanticStep(
+                ChiCoherentHomeState(
+                    directory=state.directory,
+                    backing=state.backing,
+                    pending=pending,
+                    next_snoop_transaction_id=(
+                        state.next_snoop_transaction_id
+                    ),
+                    next_data_buffer_id=state.next_data_buffer_id,
+                    pending_copybacks=state.pending_copybacks,
+                    request_retry=state.request_retry,
+                    clean_residency=state.clean_residency,
+                )
             )
         if not pending_item.completion_sent:
             return self._fault(
@@ -6718,6 +7162,7 @@ __all__ = [
     "ChiHomeDirectoryEntry",
     "ChiRnAcceptComp",
     "ChiRnAcceptCompData",
+    "ChiRnAcceptDctCompData",
     "ChiRnAcceptCompDBIDResp",
     "ChiRnAcceptPCrdGrant",
     "ChiRnAcceptRetryAck",

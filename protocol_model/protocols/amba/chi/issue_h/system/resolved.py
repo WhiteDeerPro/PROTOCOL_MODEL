@@ -32,13 +32,19 @@ from ..participants import (
 )
 from .capability import (
     CHI_BUILTIN_FEATURE_CATALOG,
+    CHI_FEATURE_ATOMIC_LOAD_ADD,
+    CHI_FEATURE_ATOMIC_SWAP,
     CHI_FEATURE_CLEAN_READ_SHARED,
+    CHI_FEATURE_CLEAN_READ_SHARED_DCT,
     CHI_FEATURE_CLEAN_READ_UNIQUE,
     CHI_FEATURE_CLEAN_UNIQUE_CLEAN_PEERS,
     CHI_FEATURE_CLEAN_UNIQUE_SHARED_DIRTY_PEER,
     CHI_FEATURE_DIRTY_UNIQUE_TRANSFER,
     CHI_FEATURE_MAKE_UNIQUE,
     CHI_FEATURE_MESI_READ_NOT_SHARED_DIRTY,
+    CHI_FEATURE_NON_SNOOP_EXCLUSIVE_PTL,
+    CHI_FEATURE_WRITE_NO_SNP_FULL,
+    CHI_FEATURE_WRITE_NO_SNP_PTL,
     ChiCapabilityKey,
     ChiFeatureCatalog,
     ChiFeatureContract,
@@ -265,6 +271,55 @@ def resolve_chi_system(
 
     for required in feature_contract.required:
         add_feature(required)
+    immediate_write_features = {
+        CHI_FEATURE_WRITE_NO_SNP_FULL,
+        CHI_FEATURE_WRITE_NO_SNP_PTL,
+    } & feature_closure
+    if immediate_write_features and (
+        len(immediate_write_features) != 1
+        or feature_closure != immediate_write_features
+    ):
+        raise ValueError(
+            "the current WriteNoSnp runtime owns one Immediate-Write Home "
+            "backing state and one typed requester profile; it cannot mix "
+            "Full/Ptl in one session or combine Immediate Write with another "
+            "CHI lifecycle until the corresponding multi-profile owner or "
+            "common Home aggregate exists"
+        )
+    if (
+        CHI_FEATURE_NON_SNOOP_EXCLUSIVE_PTL in feature_closure
+        and feature_closure
+        != {CHI_FEATURE_NON_SNOOP_EXCLUSIVE_PTL}
+    ):
+        raise ValueError(
+            "the current non-snoop Exclusive runtime owns one aggregate Home "
+            "backing/System-monitor/DBID state and cannot combine its feature "
+            "with another CHI lifecycle until a common runtime owner exists"
+        )
+    atomic_features = {
+        CHI_FEATURE_ATOMIC_LOAD_ADD,
+        CHI_FEATURE_ATOMIC_SWAP,
+    } & feature_closure
+    if atomic_features and feature_closure != atomic_features:
+        raise ValueError(
+            "the current returning Atomic runtime owns one Home backing/"
+            "DBID/same-line serialization state and can combine AtomicSwap "
+            "with AtomicLoad ADD, but not another CHI lifecycle until a "
+            "common runtime owner exists"
+        )
+    if (
+        CHI_FEATURE_CLEAN_READ_SHARED_DCT in feature_closure
+        and feature_closure
+        != {
+            CHI_FEATURE_CLEAN_READ_SHARED,
+            CHI_FEATURE_CLEAN_READ_SHARED_DCT,
+        }
+    ):
+        raise ValueError(
+            "the current clean ReadShared DCT runtime composes only with "
+            "its Home-data fallback lifecycle until a common coherence "
+            "runtime owner exists"
+        )
     if (
         CHI_FEATURE_CLEAN_READ_SHARED in feature_closure
         and {
@@ -504,6 +559,31 @@ def _bind_feature_authority(
     if "snoopee" in required_roles:
         assert eligible_snoopees is not None
         role_sets["snoopee"] = frozenset(eligible_snoopees)
+    if CHI_FEATURE_CLEAN_READ_SHARED_DCT in visited:
+        forwarding_members = feature_contract.role_members(
+            "forwarding_snoopee"
+        )
+        if forwarding_members is not None:
+            if feature_contract.role_is_set("forwarding_snoopee"):
+                raise ValueError(
+                    "the current clean DCT profile requires one scalar "
+                    "forwarding_snoopee"
+                )
+            assert len(forwarding_members) == 1
+            forwarder = forwarding_members[0]
+            requester_members = feature_contract.role_members("requester")
+            assert requester_members is not None
+            if forwarder in requester_members:
+                raise ValueError(
+                    "clean DCT forwarding_snoopee must differ from every "
+                    "Requester"
+                )
+            assert eligible_snoopees is not None
+            if forwarder not in eligible_snoopees:
+                raise ValueError(
+                    f"clean DCT forwarding_snoopee {forwarder!r} is not an "
+                    "eligible peer in the resolved coherence domain"
+                )
 
     return ChiFeatureContract(
         roles,

@@ -38,8 +38,8 @@ time │             │                 │                 │
 ```
 
 图中的竖线可按序列图术语理解为 lifeline，但 CHI Time-Space diagram 的信息量更大：它同时承载
-message flow、transaction lifetime、forward-progress blocking 和 coherence state。只有消息箭头的图仍然
-有用，只是不能据此推断节点已经分配资源、发生阻塞或改变 cache state。
+message flow、transaction lifetime、forward-progress blocking 和 coherence state。只有消息箭头的图用于
+说明 flow；allocation、blocking 和 cache state 各自由对应的 lifecycle、resource 与 coherence evidence 补充。
 
 官方约定见 [AMBA CHI Architecture Specification Issue H，Figure 2 和 Figure 3](https://documentation-service.arm.com/static/68d13eb5bd7cab51328bee7a)。
 
@@ -50,12 +50,12 @@ message flow、transaction lifetime、forward-progress blocking 和 coherence st
 加若干横向箭头”通常属于这一图类；参与者数量并不限定为两个。
 
 **Message Sequence Chart（MSC）** 是 ITU-T Z.120 定义的通信 trace 语言，拥有图形和文本语法以及明确的
-trace 解释。它可用于接口说明、需求、仿真、测试和文档。本项目当前没有实现 Z.120 的完整语法与语义，
-因此生成物使用 `transaction time-space view` 或 `sequence view` 名称。将来若输出满足 Z.120 的实例、
-消息、条件、timer 和组合规则，可以额外提供真正的 MSC exporter。
+trace 解释。它可用于接口说明、需求、仿真、测试和文档。本项目当前输出自有的
+`transaction time-space view` 或 `sequence view` IR。覆盖 Z.120 的实例、消息、条件、timer 和组合规则后，
+可以增加符合该标准的 MSC exporter。
 
 CHI Time-Space diagram 可以视为面向 CHI protocol flow 的扩展序列视图。其 allocation、blocked interval
-和 cache state transition 均来自 CHI 事务语义，不能由普通 sequence diagram 的几何位置自动推出。
+和 cache state transition 均来自 CHI 事务语义，普通 sequence diagram 的几何位置只承担布局作用。
 
 MSC 的正式定义见 [ITU-T Z.120](https://www.itu.int/ITU-T/recommendations/rec.aspx?rec=z.120)。Arm 的
 [AMBA Viz 介绍](https://developer.arm.com/community/arm-community-blogs/b/soc-design-and-simulation-blog/posts/introduction-to-amba-viz)
@@ -65,31 +65,31 @@ MSC 的正式定义见 [ITU-T Z.120](https://www.itu.int/ITU-T/recommendations/r
 
 这些视图可以由同一次运行生成，但它们投影的事实不同。
 
-| 视图 | 主要对象 | 时间表达 | 适合回答 | 不能单独证明 |
+| 视图 | 主要对象 | 时间表达 | 适合回答 | 还需配合的证据 |
 |---|---|---|---|---|
-| topology | VirtualDut、port、link、boundary | 无 | 谁与谁相连，端口承担什么 role | 某次运行实际走过的路径、消息先后和等待原因 |
-| waveform | clock、reset、pin、lane、field | 精确到采样 tick/cycle | VALID/READY、电平和 payload 在每个采样点的值 | 多 channel 属于哪个 operation、跨 connection 的完成关系 |
-| transaction time-space | participant、message、operation span、state change | timestamp、tick 或明确标注的逻辑顺序 | 一次 operation 怎样穿过节点，在哪里等待和完成 | 未输入的 pin 细节；图中上下距离也不天然构成因果关系 |
-| causal graph | event 与 typed causal edge | 偏序；可用拓扑序排版 | 哪个事件依赖哪个事件，哪些事件可并发 | 物理 cycle 间隔、完整 topology 和未声明的因果关系 |
-| coherence/state view | line、owner、sharer、permission、state transition | 事件前后或状态 epoch | 一条 cache line 的权限和所有权怎样变化 | 消息实际经过的端口和每个 pin 的握手过程 |
+| topology | VirtualDut、port、link、boundary | 无 | 谁与谁相连，端口承担什么 role | 运行 trace 提供实际路径、消息顺序和等待原因 |
+| waveform | clock、reset、pin、lane、field | 精确到采样 tick/cycle | VALID/READY、电平和 payload 在每个采样点的值 | operation correlation 连接多 channel 与跨 connection completion |
+| transaction time-space | participant、message、operation span、state change | timestamp、tick 或明确标注的逻辑顺序 | 一次 operation 怎样穿过节点，在哪里等待和完成 | waveform 提供 pin 细节；causal edge 解释上下排列的依赖含义 |
+| causal graph | event 与 typed causal edge | 偏序；可用拓扑序排版 | 哪个事件依赖哪个事件，哪些事件可并发 | frame/timestamp 提供物理间隔，topology 提供完整结构 |
+| coherence/state view | line、owner、sharer、permission、state transition | 事件前后或状态 epoch | 一条 cache line 的权限和所有权怎样变化 | time-space 与 waveform 提供消息路径和 pin 握手 |
 
 一个 AXI write 可以在 waveform 中分散为 AW、若干 W 和 B transfer；time-space view 将它们归入同一
 operation；causal graph 再说明 B completion 依赖哪些 accepted transfer。三张图共享 event reference，
 各自保留原本的观察粒度。
 
-### 3.1 时间轴的四种基础
+### 3.1 时间轴基础
 
-每张事务时空图必须声明 `time_basis`：
+每张事务时空图声明 `time_basis`。当前 `TransactionTimeSpaceView` v1 接受：
 
 | `time_basis` | 含义 | 使用条件 |
 |---|---|---|
-| `clock_tick` | 某个 clock domain 内的采样 tick | 消息可追溯到 `AtomicFrame`，且视图只使用一个已知时钟关系的 domain |
-| `timestamp` | 调用方提供的统一时间 | trace source 已完成跨 domain 时间归一化 |
 | `event_index` | `SystemTrace` 接受事件的记录顺序 | 当前构造系统路径的可靠回退方式 |
-| `causal_rank` | causal DAG 的一个分层或拓扑排序 | 用于强调依赖；同层事件表示可能并发，不表示同 cycle |
+| `model_step` | 调用方声明的一次语义执行步骤 | 同一步可包含多个 message/state event；显式 causal edge 可位于同一步 |
 
-`event_index` 是逻辑记录顺序。图例必须直接显示这一点，避免把相邻行误读为相邻 cycle。多个 clock domain
-没有共同时间映射时，视图可以分区或使用 causal rank；渲染器不自行猜测跨时钟对齐。
+共享 `TimeBasis` 词表还预留 `clock_tick`、`timestamp` 和 `causal_rank`。它们分别以 `AtomicFrame` anchor、
+跨 domain 统一时间和 causal DAG 分层为进入条件，待 time-space view 接入对应 typed projection 后启用。
+
+`event_index` 与 `model_step` 都是逻辑顺序，图例直接标明所选基础。跨时钟对齐由 trace source 提供。
 
 ## 4. 本项目视图的数据输入
 
@@ -100,7 +100,7 @@ operation；causal graph 再说明 B completion 依赖哪些 accepted transfer�
 | elaborated system/topology record | VirtualDut、port、link、role、boundary，以及 lifeline 的可选分组 |
 | `AtomicFrame` 与 observer evidence | clock、tick、同一采样边界、offer/stall/accepted transfer |
 | `CanonicalEvent` | event kind、key、payload、source、clock、timestamp、sequence、trace index |
-| `SystemEvent` | 全局 event index、link、channel、source port、destination port |
+| `SystemEvent` | 全局 event index、完整 `InterfaceConnection` 名称、event kind、source port、destination port 与 `CanonicalEvent` |
 | `SystemTrace.causal_edges` | 已由 monitor/backend 声明的 event 依赖 |
 | operation lifecycle projection | operation identity、parent/child lineage、phase、allocation、completion 和 result folding |
 | resource/progress projection | resource lease、blocked reason、unblock event、deallocation |
@@ -108,40 +108,39 @@ operation；causal graph 再说明 B completion 依赖哪些 accepted transfer�
 | run manifest/artifact records | case、源图、SVG、waveform 与 causal graph 的相对路径和 provenance |
 
 elaborated system、`AtomicFrame`、`CanonicalEvent`、`SystemEvent` 和 `SystemTrace.causal_edges` 已经存在于
-当前 runtime；offer/stall 的独立 evidence 仍需补充。operation lifecycle、progress 与 coherence 需要由
+当前 runtime。`SystemEvent.connection` 标识完整接口连接；协议 channel 来自 event kind/payload 或具名
+projection。offer/stall 的独立 evidence 仍需补充。operation lifecycle、progress 与 coherence 需要由
 translation executor、协议 monitor、VirtualDut backend 或后续 system monitor 公开 typed projection。
-可视化层不遍历任意 backend 私有状态，也不根据类名推测含义。
+可视化层只读取这些显式 projection 与稳定 record。
 
-### 4.1 建议的只读视图 IR
+### 4.1 当前 v1 与扩展字段
 
 ```text
 TransactionTimeSpaceView
-  schema
-  title
+  name
   time_basis
+  scope / evidence_basis
   lifelines[]
   messages[]
-  operation_spans[]
-  blocked_intervals[]
   state_changes[]
-  anchors[]
-  provenance
+  causal_edges[]
 
 TimeSpaceMessage
-  message_ref
   event_ref
-  operation_ref?
-  source_lifeline
-  destination_lifeline
-  link / channel / kind
+  operation_ref
+  source / destination
   time
+  label / lane / channel
   display_fields
-  waveform_anchor?
-  causal_anchor?
+  observation_point
 ```
 
-IR 保存语义引用和布局所需的最小字段。颜色、字体、换行和泳道宽度属于 renderer policy，不写回 runtime
-对象。JSON 源文件与 SVG 一起保存，便于复查消息为何出现在图中。
+`to_dict()` 增加 schema 与 `ViewDescriptor`，形成可保存的 JSON source。下一版 typed extension 再加入
+`operation_spans`、`blocked_intervals`、waveform/causal anchors 与更细 provenance；进入条件是对应
+lifecycle/resource projection 已有稳定来源。
+
+IR 保存语义引用和布局所需的最小字段。颜色、字体、换行和泳道宽度属于 renderer policy，runtime
+对象保持上游权威。JSON 源文件与 SVG 一起保存，便于复查消息为何出现在图中。
 
 ## 5. Lifeline 怎样选择
 
@@ -177,7 +176,8 @@ renderer 只消费结果。
 - completion/result fold event；
 - allocation 和 deallocation 所在 participant。
 
-协议字段仍作为 correlation evidence 保存。它们通常不能直接充当全局 `operation_ref`：
+协议字段作为局部 correlation evidence 保存，lifecycle 再分配跨协议、跨复用周期稳定的
+`operation_ref`：
 
 - AXI ID 会重复使用，read 与 write 拥有不同上下文，AW/W/B 还需要 attachment 的 join state；
 - AHB 和 APB 依赖当前 transfer/phase context；
@@ -235,9 +235,13 @@ operation_ref  = <run, case, operation-sequence>
 lifeline_ref   = <system-object, optional-port-or-domain>
 ```
 
-这些是 artifact 内部标识，不要求暴露成本地绝对路径。manifest 记录实际 artifact 路径和 case。
+这些标识在 view source 内保持稳定；当前 manifest 记录 artifact 的相对路径和 case。后续 report/navigation
+层再保存 ref→artifact/anchor 的解析关系。
 
 ### 8.1 跳转关系
+
+下表定义跨视图导航的目标合同。v1 source 已保留 event/operation/lifeline refs；实际双向链接随
+report/HTML navigation 接入。
 
 | 起点 | 目标 | 行为 |
 |---|---|---|
@@ -250,7 +254,7 @@ lifeline_ref   = <system-object, optional-port-or-domain>
 | time-space state change | coherence view | 定位到相同 line、epoch 和 transition evidence |
 
 静态 SVG 可以通过元素 `id` 和 `<a href>` 提供页内或文件间链接；HTML 报告可以在统一 data model 上完成
-双向筛选。源 JSON 始终保存引用，即使当前 renderer 没有交互能力。
+双向筛选。源 JSON 始终保存引用，为当前静态 renderer 和后续交互 renderer 提供共同输入。
 
 ### 8.2 Artifact 布局
 
@@ -269,13 +273,15 @@ lifeline_ref   = <system-object, optional-port-or-domain>
     └── causal.dot
 ```
 
-`transaction-time-space.json` 保存 schema 版本、projection 参数、lifeline policy、time basis 和 provenance。
-具名 publisher 注册 source 与 rendered artifact；普通协议运行不隐式发布到 `docs/` 或 `showcase/generated/`。
+`transaction-time-space.json` 保存 schema、`ViewDescriptor`、name、lifelines、messages、state changes 和
+causal edges。场景特有的 projection 参数、lifeline policy 与 provenance 由组合入口另存为 run
+metadata/provenance artifact；统一 schema 属于后续扩展。具名 publisher 注册 source 与 rendered artifact；
+普通协议运行的输出目录由调用方选择。
 
 ## 9. 表现层约定
 
 - 时间从上向下，空间从左向右；改变方向时在坐标轴和图例中明确说明。
-- message 颜色表示 channel 或 message class，并始终附图例；颜色本身不承担 legality 结论。
+- message 颜色表示 channel 或 message class，并始终附图例；monitor verdict 与 evidence 表达 legality。
 - accepted transfer 使用实线箭头；offer、stall 或 retry 使用本地 marker 或明确的虚线类型。
 - 同一个 operation 使用稳定的描边或标签；协议 channel 颜色与 operation 颜色分开编码。
 - burst 默认允许折叠，标签显示 beat 数量；展开模式保留每个 accepted beat 的 event ref。
@@ -283,26 +289,31 @@ lifeline_ref   = <system-object, optional-port-or-domain>
 - 长 trace 按 operation、时间窗口或 subsystem 分页，分页边界保留 continuation marker。
 - 缺少 allocation、blocked reason 或 state transition evidence 时省略对应符号，并在图例列出当前证据覆盖。
 
-这些约定让图保持解释性，同时避免版式暗示模型尚未证明的事实。
+这些约定让版式保持在现有 evidence coverage 内，并为缺失证据提供明确标记。
 
 ## 10. 当前实现与实施顺序
 
 当前通用可视化已经具备：
 
-- `system_topology_dot()`：VirtualDut、link、role 和 boundary 的 topology 投影；
-- `system_trace_dot()`：located `SystemEvent` 与 causal edge 投影；
-- WaveJSON、DOT 到 SVG 的 renderer；
-- `RunArtifactStore`、manifest 和 source/rendered artifact 注册。
+- `TransactionTimeSpaceView` v1，以及 typed lifeline、message、state change 和 caller-supplied causal edge；
+- `event_index` 与 `model_step` 两种时间基础、稳定 event/operation refs 和可序列化 JSON source IR；
+- `transaction_time_space_dot()`、`transaction_causal_dot()` 与
+  `transaction_semantic_wavejson()` 三种只读 source serializer；
+- `project_chi_transaction_flow()`：从一次 live CHI Issue H runtime 投影 operation correlation、endpoint
+  acceptance、状态提交和显式因果关系；
+- CHI flow gallery 的逐案例 topology、time-space、causal 与 semantic timeline 发布；
+- `system_topology_dot()`、`system_trace_dot()`、`RunArtifactStore`、manifest 和 source/rendered artifact
+  注册。
 
-transaction time-space view 尚未进入源码。建议按以下顺序实现：
+下一阶段按证据来源推进：
 
-1. 定义协议无关 JSON IR、稳定 refs 和 `time_basis`；
-2. 从 `SystemTrace` 生成 message-only 视图，使用 VirtualDut/port lifeline 与 `event_index`；
-3. 接入 observer 的 frame/tick anchor，实现 waveform 双向定位；
-4. 接入 translation/monitor 提供的 operation correlation，支持 bridge parent-child 展开；
-5. 接入 resource/progress projection，绘制 allocation、pending 和 blocked interval；
-6. 接入 coherence projection，绘制 cache state 与 owner/sharer delta；
-7. 在 HTML 报告中增加 topology、time-space、waveform、causal 四视图联动。
+1. 从通用 `SystemTrace` 生成 message-only view，并明确 VirtualDut/port lifeline policy；
+2. 接入 observer 的 frame/tick anchor，实现 waveform 双向定位；
+3. 接入 translation lifecycle 的 bridge parent-child correlation；
+4. 为 allocation/deallocation、pending 和 blocked interval 增加 typed IR，并接入 resource/progress
+   projection；
+5. 接入通用 coherence projection，显示 line state 与 owner/sharer delta；
+6. 在 HTML 报告中增加 topology、time-space、waveform、causal 四视图联动。
 
-第一步和第二步已经能改善 AXI/APB/AHB bridge demo 的阅读体验。blocked interval 和 coherence state
-需要稳定的语义来源，可以在对应 runtime contract 完成后逐项增加。
+现有 v1 覆盖显式 message、state change 和 causal evidence。operation span、blocked interval 与跨视图
+交互以上述 typed projection 为进入条件。

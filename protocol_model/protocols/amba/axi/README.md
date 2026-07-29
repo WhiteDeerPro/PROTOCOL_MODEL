@@ -1,6 +1,6 @@
 # AXI protocol-family assets
 
-本目录按接口语义而不是 Python 继承关系保存三个 AXI variant：
+本目录按各自的接口语义保存三个 AXI variant，并通过显式 embedding 或 adapter 表达 variant 间转换：
 
 ```text
 axi/
@@ -9,12 +9,16 @@ axi/
 └── axi4_stream/   stream packet、byte qualifier、interleave 与 continuous-packet profile
 ```
 
-AXI4-Lite 和 AXI4-Stream 都有自己的 `InterfaceProtocol`。它们可以复用 AXI4 或公共 pattern，但不需要伪装成
-“AXI4 减字段”的运行时对象。跨 variant 的转换应使用显式 embedding 或 bridge/stream adapter，并说明被保留、
-默认、拆分或拒绝的语义。
+AXI4-Lite 和 AXI4-Stream 各自公开 `InterfaceProtocol`。实现可以复用 AXI4 或公共 pattern，同时保留每个
+variant 的原生运行时对象。跨 variant 的 embedding、bridge 或 stream adapter 明确记录语义的保留、默认、
+拆分和拒绝。
 
-本目录只定义接口合同及协议专用 observation/generation。把 AXI event 转成 VirtualDut operation 的代码位于
-[`integrations/attachments/amba/axi`](../../../integrations/attachments/amba/axi/)，完整 endpoint、bridge 和
-fabric 构造位于 [`integrations/recipes/amba`](../../../integrations/recipes/amba/README.md)。
+## 输入、产出与交接
+
+- 通用 event schema、interface/session 和 observation 构件作为输入。
+- 本目录拥有 AXI roles、channels、transaction lifecycle、接口合同和协议专用 observation/generation。
+- AXI event 到 VirtualDut operation 的转换位于
+  [`integrations/attachments/amba/axi`](../../../integrations/attachments/amba/axi/)，完整 endpoint、bridge 和
+  fabric 构造位于 [`integrations/recipes/amba`](../../../integrations/recipes/amba/README.md)。
 
 当前覆盖与缺口统一见[实现状态](../../../../docs/architecture/implementation-status.md)。

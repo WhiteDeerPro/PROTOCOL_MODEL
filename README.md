@@ -67,3 +67,6 @@ python showcase/demos/axi4/run.py
 
 准确 profile、明确缺口和阶段边界集中记录在
 [实现状态](docs/architecture/implementation-status.md)，不从示例数量推断规范覆盖率。
+
+## 鸣谢
+感谢 [LINUX DO](https://linux.do) 社区的支持。
